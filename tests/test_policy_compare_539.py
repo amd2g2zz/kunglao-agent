@@ -91,7 +91,8 @@ def test_underpowered_gate_and_propensity_skip(tmp_path):
          "propensity": 0.8, "reward": 1.0}] * 5)
     rep = pc.compare(small, bootstrap=0)
     assert rep["verdict"] == "underpowered"
-    assert rep["decisions"] == 5
+    assert rep["decisions"] == 0
+    assert rep["skipped_ambiguous_dispatch"] == 5
 
     mixed = _ws(tmp_path / "b", [
         {"claim": f"C-{i:03d}", "family": "alpha-arm", "weights": W2,
@@ -99,6 +100,83 @@ def test_underpowered_gate_and_propensity_skip(tmp_path):
         {"claim": "C-999", "family": "beta-arm", "weights": W2,
          "propensity": None, "reward": 1.0}])
     rep2 = pc.compare(mixed, bootstrap=0)
-    assert rep2["decisions"] == 45
+    assert rep2["decisions"] == 0
     assert rep2["skipped_no_propensity"] == 1
-    assert rep2["verdict"]["best"] in pc.POLICIES
+    assert rep2["skipped_unknown_probability"] == 45
+    assert rep2["verdict"] == "underpowered"
+
+
+def test_snips_keeps_reward_aligned_when_target_weight_is_zero():
+    decisions = [
+        {"family": "alpha-arm", "weights": {"alpha-arm": 0.0, "beta-arm": 1.0},
+         "propensity": 1.0, "reward": 0.0},
+        {"family": "beta-arm", "weights": {"alpha-arm": 0.0, "beta-arm": 1.0},
+         "propensity": 1.0, "reward": 1.0},
+    ]
+    for rows in (decisions, list(reversed(decisions))):
+        result = pc.snips(rows, "thompson")
+        assert result == {"value": 1.0, "ess": 1.0}
+
+
+def test_snips_skips_invalid_contributions_without_misaligning_rewards():
+    valid = {"family": "beta-arm", "weights": {"alpha-arm": 0.0, "beta-arm": 1.0},
+             "propensity": 0.5, "reward": 1.0}
+    bad = [
+        {**valid, "propensity": None, "reward": 0.0},
+        {**valid, "propensity": 0.0, "reward": 0.0},
+        {**valid, "propensity": float("nan"), "reward": 0.0},
+        {**valid, "propensity": float("inf"), "reward": 0.0},
+        {**valid, "propensity": 1.1, "reward": 0.0},
+        {**valid, "weights": {"beta-arm": float("inf")}, "reward": 0.0},
+        {**valid, "reward": float("nan")},
+    ]
+    assert pc.snips(bad + [valid], "thompson") == {"value": 1.0, "ess": 1.0}
+    assert pc.snips(bad, "thompson") == {"value": None, "ess": 0.0}
+
+
+def test_snips_bootstrap_does_not_shift_rewards_after_zero_weights():
+    rows = [
+        {"family": "alpha-arm", "weights": {"alpha-arm": 0.0, "beta-arm": 1.0},
+         "propensity": 1.0, "reward": 0.0},
+        {"family": "beta-arm", "weights": {"alpha-arm": 0.0, "beta-arm": 1.0},
+         "propensity": 1.0, "reward": 1.0},
+    ]
+    assert pc._bootstrap_ci(rows, "thompson", 100, seed=7) == [1.0, 1.0]
+
+
+def test_snips_finite_extreme_rewards_keep_finite_mean_and_bootstrap():
+    rows = [{"family": "a", "weights": {"a": 1.0},
+             "propensity": 1.0, "reward": 1e308}] * 2
+    assert pc.snips(rows, "thompson") == {"value": 1e308, "ess": 2.0}
+    assert pc._bootstrap_ci(rows, "thompson", 50, seed=7) == [1e308, 1e308]
+
+
+def test_snips_finite_extreme_candidate_weights_preserve_distribution():
+    weights = {"a": 1e308, "b": 1e308}
+    rows = [{"family": "a", "weights": weights,
+             "propensity": 0.5, "reward": 1.0},
+            {"family": "b", "weights": weights,
+             "propensity": 0.5, "reward": 0.0}]
+    assert pc._pi("thompson", "a", weights) == 0.5
+    assert pc.snips(rows, "thompson") == {"value": 0.5, "ess": 2.0}
+
+
+def test_bootstrap_with_no_valid_replicate_is_unavailable():
+    valid = {"family": "a", "weights": {"a": 1.0},
+             "propensity": 1.0, "reward": 1.0}
+    invalid = {**valid, "propensity": 0.0, "reward": 0.0}
+    decisions = [valid] + [invalid] * 99
+    assert pc.snips(decisions, "thompson") == {"value": 1.0, "ess": 1.0}
+    assert pc._bootstrap_ci(decisions, "thompson", 1, seed=7) is None
+
+
+def test_compare_does_not_rank_unverified_legacy_bootstrap_data(tmp_path):
+    rows = [{"claim": "C-000", "family": "a", "weights": {"a": 1.0},
+             "propensity": 1.0, "reward": 1.0}]
+    rows += [{"claim": f"C-{i:03}", "family": "a", "weights": {"a": 1.0},
+              "propensity": 0.0, "reward": 0.0} for i in range(1, 100)]
+    result = pc.compare(_ws(tmp_path, rows), bootstrap=1)
+    assert result["decisions"] == 0
+    assert result["skipped_unknown_probability"] == 1
+    assert result["skipped_invalid_probability"] == 99
+    assert result["verdict"] == "underpowered"

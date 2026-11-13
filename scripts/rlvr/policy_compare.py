@@ -47,7 +47,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
+import math
 import random
 import sys
 from pathlib import Path
@@ -67,6 +69,48 @@ MIN_DECISIONS = 40          # below this: underpowered, no verdict
 DEFAULT_BOOTSTRAP = 1000
 EPSILON = 0.1               # the control arm's exploration rate
 POLICIES = ("thompson", "eps-greedy", "uniform")
+
+
+class ControlledOPE:
+    """Caller-supplied experimental design, never constructed from audit data.
+
+    The caller must choose the seed independently before dispatch and keep
+    the decision order and weights fixed before sampling. Replay checks
+    consistency, not the truth of those randomization assumptions.
+    """
+    def __init__(self, *, seed: int, weights: dict, decision_ids: list[str]):
+        if (not decision_ids or len(set(decision_ids)) != len(decision_ids)
+                or not all(isinstance(x, str) and x for x in decision_ids)
+                or not isinstance(weights, dict) or not weights
+                or not all(isinstance(k, str) and k and isinstance(v, (float, int))
+                           and math.isfinite(v) and v > 0 for k, v in weights.items())):
+            raise ValueError("invalid controlled experiment design")
+        self.seed = seed
+        self.weights = dict(weights)
+        self.decision_ids = tuple(decision_ids)
+
+    def receipts(self):
+        rng = random.Random(self.seed)
+        names = sorted(self.weights)
+        scale = max(self.weights.values())
+        scaled = [self.weights[k] / scale for k in names]
+        total = math.fsum(scaled)
+        receipts = {}
+        for decision_id in self.decision_ids:
+            threshold = rng.random() * total
+            cumulative = 0.0
+            chosen = len(names) - 1
+            for i, weight in enumerate(scaled):
+                cumulative += weight
+                if threshold < cumulative:
+                    chosen = i
+                    break
+            receipts[decision_id] = {
+                "family": names[chosen], "weights": dict(self.weights),
+                "propensity": scaled[chosen] / total,
+                "information_set": "fixed_observed_weights",
+                "probability_source": "experiment_owned_rng"}
+        return receipts
 
 
 def _audit_envelopes(ws: Path) -> list[dict]:
@@ -98,14 +142,17 @@ def _audit_envelopes(ws: Path) -> list[dict]:
         fam = str(det.get("method_family") or env.get("family") or "")
         if not fam:
             continue
-        cands = env.get("candidates") or {}
+        cands = env.get("candidates")
+        if not isinstance(cands, dict):
+            cands = {}
         out.append({
             "claim": str(row.get("claim") or ""),
             "family": fam,
-            "weights": {str(k): float(v.get("weight", 0.0))
-                        for k, v in cands.items()
-                        if isinstance(v, dict)},
+            "weights": {str(k): v.get("weight") if isinstance(v, dict) else None
+                        for k, v in cands.items()},
             "propensity": env.get("propensity"),
+            "probability_source": env.get("probability_source"),
+            "information_set": env.get("information_set"),
             "declared": bool(env.get("declared")),
             "sampled_family": env.get("sampled_family"),
             "family_override": env.get("family_override"),
@@ -170,59 +217,126 @@ def _pi(policy: str, family: str, weights: dict[str, float]) -> float:
         return (1.0 - EPSILON) * (1.0 if family == greedy else 0.0) \
             + EPSILON / len(weights)
     if policy == "thompson":
-        total = sum(weights.values())
-        return weights.get(family, 0.0) / total if total > 0 else 0.0
+        scale = max(weights.values())
+        if scale <= 0:
+            return 0.0
+        total = math.fsum(w / scale for w in weights.values())
+        return (weights.get(family, 0.0) / scale) / total
     raise ValueError(f"unknown policy {policy!r}")
 
 
 def snips(decisions: list[dict], policy: str) -> dict:
     """SNIPS value estimate over the logged decisions + the effective
     sample size (Σw)²/Σw² — the diagnostics the small-N honesty needs."""
-    ws: list[float] = []
+    if policy not in POLICIES:
+        raise ValueError(f"unknown policy {policy!r}")
+    weighted_rewards: list[tuple[float, float]] = []
     for d in decisions:
-        p = float(d["propensity"])
-        pa = _pi(policy, d["family"], d["weights"])
-        if p > 0.0 and pa > 0.0:
-            ws.append(pa / p)
-    if not ws:
+        try:
+            p = float(d["propensity"])
+            reward = float(d["reward"])
+            weights = d["weights"]
+            if (not math.isfinite(p) or not 0.0 < p <= 1.0
+                    or not math.isfinite(reward)
+                    or not isinstance(weights, dict)
+                    or d["family"] not in weights
+                    or not all(math.isfinite(float(w)) and float(w) >= 0
+                               for w in weights.values())):
+                continue
+            pa = _pi(policy, d["family"], weights)
+            if not math.isfinite(pa) or not 0.0 < pa <= 1.0:
+                continue
+            weight = pa / p
+            if math.isfinite(weight):
+                weighted_rewards.append((weight, reward))
+        except (KeyError, TypeError, ValueError, OverflowError):
+            continue
+    if not weighted_rewards:
         return {"value": None, "ess": 0.0}
-    s = sum(ws)
-    ess = (s * s) / sum(w * w for w in ws)
-    num = sum(w * d["reward"] for w, d in zip(ws, decisions))
-    return {"value": num / s, "ess": ess}
+    scale = max(w for w, _ in weighted_rewards)
+    normalized = [(w / scale, reward) for w, reward in weighted_rewards]
+    s = sum(w for w, _ in normalized)
+    ess = (s * s) / sum(w * w for w, _ in normalized)
+    reward_scale = max(abs(reward) for _, reward in normalized)
+    if reward_scale == 0:
+        value = 0.0
+    else:
+        value = math.fsum((w / s) * (reward / reward_scale)
+                          for w, reward in normalized) * reward_scale
+    return {"value": value if math.isfinite(value) else None, "ess": ess}
 
 
 def _bootstrap_ci(decisions: list[dict], policy: str, draws: int,
-                  seed: int = 7) -> list[float]:
+                  seed: int = 7) -> list[float] | None:
     rng = random.Random(seed)
     vals = []
     n = len(decisions)
-    for _ in range(draws):
+    for _ in range(draws if n else 0):
         sample = [decisions[rng.randrange(n)] for _ in range(n)]
         est = snips(sample, policy)
         if est["value"] is not None:
             vals.append(est["value"])
     if not vals:
-        return [0.0, 0.0]
+        return None
     vals.sort()
     return [vals[int(0.025 * len(vals))], vals[int(0.975 * len(vals)) - 1]]
 
 
-def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
+def _valid_support(weights, family):
+    try:
+        return (bool(weights) and str(family) in weights
+                and all(math.isfinite(float(v)) and float(v) >= 0
+                        for v in weights.values())
+                and float(weights[str(family)]) > 0)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _observed_reward(row):
+    parts = [row[name] for name in ("r_incr", "r_settle") if name in row]
+    if not parts:
+        return None
+    try:
+        if not all(not isinstance(x, bool) and math.isfinite(float(x)) for x in parts):
+            return None
+        result = math.fsum(float(x) for x in parts)
+    except (ValueError, TypeError, OverflowError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def compare(  # noqa: C901
+        ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP,
+        experiment: ControlledOPE | None = None) -> dict:
     """The comparison report: per-policy SNIPS + CI + the verdict gate."""
     ws = Path(ws)
     transitions = read_transitions(ws)
     envelopes = _audit_envelopes(ws)
     by_key = {f"{e['claim']}|{e['family']}": e for e in envelopes}
+    envelope_counts = Counter(f"{e['claim']}|{e['family']}" for e in envelopes)
+    transition_counts = Counter(f"{t.get('dispatch_id')}|{t.get('a')}" for t in transitions)
     attribution = _qcell_attribution(ws)
+    receipts = experiment.receipts() if isinstance(experiment, ControlledOPE) else {}
+    audit_ids = Counter(str(e.get('claim') or '') for e in envelopes)
+    transition_ids = Counter(str(t.get('dispatch_id') or '') for t in transitions)
+    accepted_ids = set()
 
     decisions: list[dict] = []
     skipped_no_propensity = 0
     skipped_declared_fiat = 0
     skipped_propensity_mismatch = 0
     skipped_family_mismatch = 0
+    skipped_ambiguous_dispatch = 0
+    skipped_unknown_probability = 0
+    skipped_invalid_probability = 0
+    skipped_invalid_support = 0
+    skipped_experiment_mismatch = 0
+    skipped_invalid_reward = 0
     for t in transitions:
         key = f"{t.get('dispatch_id')}|{t.get('a')}"
+        if envelope_counts[key] > 1 or transition_counts[key] > 1:
+            skipped_ambiguous_dispatch += 1
+            continue
         env = by_key.get(key)
         if env is None or env.get("propensity") is None:
             skipped_no_propensity += 1
@@ -245,26 +359,42 @@ def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
             # hold; the row leaves the weighted join, counted.
             skipped_declared_fiat += 1
             continue
-        t_prop = t.get("propensity")
-        if t_prop is not None \
-                and abs(float(t_prop) - float(env["propensity"])) > 1e-9:
-            # 4-L8: the two π carriers (audit envelope + transition row
-            # via the launch stash) were stamped from the same receipt at
-            # the same dispatch — a disagreement means one was tampered
-            # with; the corrupted row can no longer move the verdict.
+        try:
+            propensity = float(env["propensity"])
+            t_prop = t.get("propensity")
+            actual = float(t_prop) if t_prop is not None else None
+        except (TypeError, ValueError, OverflowError):
+            skipped_invalid_probability += 1
+            continue
+        if (not math.isfinite(propensity) or not 0 < propensity <= 1
+                or actual is not None and (not math.isfinite(actual) or not 0 < actual <= 1)):
+            skipped_invalid_probability += 1
+            continue
+        if not _valid_support(env["weights"], t.get("a")):
+            skipped_invalid_support += 1
+            continue
+        if actual is not None and abs(actual - propensity) > 1e-9:
             skipped_propensity_mismatch += 1
             warn("policy_compare.compare",
-                 f"refused decision {key!r}: recorded propensity "
-                 f"{float(t_prop)} != envelope propensity "
-                 f"{float(env['propensity'])} — the π carriers disagree "
-                 f"(4-L8)")
+                 f"refused decision {key!r}: propensity carriers disagree")
             continue
-        decisions.append({
-            "family": t.get("a"),
-            "reward": (t.get("r_incr") or 0.0) + (t.get("r_settle") or 0.0),
-            "weights": env["weights"],
-            "propensity": env["propensity"],
-        })
+        expected = receipts.get(str(t.get('dispatch_id') or ''))
+        if expected is None:
+            skipped_unknown_probability += 1
+            continue
+        if (any(env.get(field) != expected[field] for field in
+                ('family', 'weights', 'propensity', 'information_set', 'probability_source'))
+                or t.get('a') != expected['family'] or t_prop is None
+                or env.get('family_override') or t.get('family_override')):
+            skipped_experiment_mismatch += 1
+            continue
+        reward = _observed_reward(t)
+        if reward is None:
+            skipped_invalid_reward += 1
+            continue
+        decisions.append({'family': expected['family'], 'weights': expected['weights'],
+                          'propensity': expected['propensity'], 'reward': reward})
+        accepted_ids.add(str(t.get('dispatch_id') or ''))
 
     report = {
         "schema": "policy-compare/1",
@@ -276,23 +406,58 @@ def compare(ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP) -> dict:
         "skipped_declared_fiat": skipped_declared_fiat,
         "skipped_propensity_mismatch": skipped_propensity_mismatch,
         "skipped_family_mismatch": skipped_family_mismatch,
+        "skipped_ambiguous_dispatch": skipped_ambiguous_dispatch,
+        "skipped_unknown_probability": skipped_unknown_probability,
+        "skipped_invalid_probability": skipped_invalid_probability,
+        "skipped_invalid_support": skipped_invalid_support,
+        "skipped_experiment_mismatch": skipped_experiment_mismatch,
+        "skipped_invalid_reward": skipped_invalid_reward,
         "epsilon": EPSILON,
         "policies": {},
         "verdict": None,
     }
+    if experiment is not None:
+        planned = set(receipts)
+        integrity = {
+            'missing_audit': sum(audit_ids[key] == 0 for key in planned),
+            'missing_transition': sum(transition_ids[key] == 0 for key in planned),
+            'duplicate_audit': sum(audit_ids[key] > 1 for key in planned),
+            'duplicate_transition': sum(transition_ids[key] > 1 for key in planned),
+            'unexpected_audit': sum(count for key, count in audit_ids.items()
+                                    if key not in planned),
+            'unexpected_transition': sum(count for key, count in transition_ids.items()
+                                         if key not in planned),
+            'rejected_planned': len(planned - accepted_ids),
+        }
+        report['experiment_integrity'] = integrity
+        if any(integrity.values()):
+            report['verdict'] = 'incomplete_experiment'
+            return report
     if len(decisions) < MIN_DECISIONS:
         report["verdict"] = "underpowered"
         report["min_decisions"] = MIN_DECISIONS
         return report
+    missing_interval = False
+    insufficient_overlap = False
     for pol in POLICIES:
         est = snips(decisions, pol)
         entry = {"snips": (round(est["value"], 6)
                            if est["value"] is not None else None),
                  "ess": round(est["ess"], 2)}
+        if est['value'] is None or est['ess'] < 20 or est['ess'] / len(decisions) < 0.2:
+            insufficient_overlap = True
         if bootstrap and est["value"] is not None:
-            lo, hi = _bootstrap_ci(decisions, pol, bootstrap)
-            entry["ci95"] = [round(lo, 6), round(hi, 6)]
+            interval = _bootstrap_ci(decisions, pol, bootstrap)
+            entry["ci95"] = ([round(value, 6) for value in interval]
+                             if interval is not None else None)
+            missing_interval |= interval is None
         report["policies"][pol] = entry
+    if missing_interval:
+        report["verdict"] = "underpowered"
+        return report
+    if insufficient_overlap:
+        report['verdict'] = 'insufficient_overlap'
+        return report
     ranked = sorted(
         ((p, v["snips"]) for p, v in report["policies"].items()
          if v["snips"] is not None),

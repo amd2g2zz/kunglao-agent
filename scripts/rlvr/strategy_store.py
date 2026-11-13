@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 from kunglao_log import warn  # canonical warn: ONE implementation
@@ -480,6 +481,182 @@ def _case_update_maps(ws) -> dict[str, list[str]]:
     return out
 
 
+def method_constraint_violation(ws, family: str) -> str | None:
+    """Check authorization, retaining legacy unknown-state compatibility."""
+    import yaml  # noqa: PLC0415
+
+    if family != "dynamic-trace":
+        return None
+    unknown = _support_material_present(ws)
+    try:
+        spec = yaml.safe_load((Path(ws) / "task_spec.yaml").read_text(
+            encoding="utf-8"))
+    except (OSError, UnicodeError, TypeError, yaml.YAMLError):
+        return "dynamic_re authorization unknown: task_spec unreadable" if unknown else None
+    constraints = spec.get("constraints") if isinstance(spec, dict) else None
+    if not isinstance(constraints, dict):
+        return "dynamic_re authorization unknown: constraints missing" if unknown else None
+    permission = str(constraints.get("dynamic_re") or "").strip().lower()
+    if permission == "forbidden":
+        return "task_spec forbids dynamic_re"
+    return "dynamic_re authorization unknown" if unknown and permission != "allowed" else None
+
+
+def _support_material_present(ws) -> bool:
+    """Recorded but invalid/withdrawn evidence must not enable a fallback."""
+    from rlvr import expansion, priors  # noqa: PLC0415
+    import method_families  # noqa: PLC0415
+
+    if (Path(ws) / priors.SUPPORT_MODE_REL).exists():
+        return True
+    present = any((Path(ws) / rel).exists() for rel in (
+        priors.SEED_REL, expansion.RECEIPT_DIR, method_families.DISCOVERED_REL))
+    if present:
+        priors.record_support_mode(ws)  # adopt existing sources before they can disappear
+    return present
+
+
+def _legacy_candidate_support(store, registered) -> tuple:
+    """Retain pre-intake proposal sources with current validation."""
+    import method_families  # noqa: PLC0415
+
+    ws = store.ws
+    for source, read in (("history", store._proposal_prior),
+                         ("case", store._case_prior),
+                         ("store", store._store_prior)):
+        try:
+            proposed = read()
+        except Exception as exc:  # noqa: BLE001 — outage is not support
+            warn("strategy_store.support", f"{source} unreadable: {exc}")
+            continue
+        eligible = {
+            family: float(weight) for family, weight in proposed.items()
+            if (family in registered and isinstance(weight, (int, float))
+                and not isinstance(weight, bool) and math.isfinite(weight)
+                and weight > 0
+                and method_families.validate_method_family(family, ws)[0]
+                and not method_constraint_violation(ws, family))}
+        if eligible:
+            return _share(eligible), source, {f: [source] for f in eligible}
+    return {}, "none", {}
+
+
+def _expansion_evidence_present(ws, receipt: dict) -> bool:
+    """Revalidate explicit artifact references; legacy receipts may omit them."""
+    trigger = receipt.get("trigger")
+    if not isinstance(trigger, dict) or "evidence" not in trigger:
+        return True
+    evidence = trigger["evidence"]
+    if not isinstance(evidence, list) or not evidence:
+        return False
+    for ref in evidence:
+        if not isinstance(ref, str) or not ref.strip():
+            return False
+        path = Path(ref)
+        if not path.is_absolute():
+            path = Path(ws) / path
+        try:
+            with path.open("rb") as artifact:
+                artifact.read(1)
+        except (OSError, ValueError):
+            return False
+    return True
+
+
+def _expansion_candidate_support(ws, registered) -> dict[str, list[str]]:
+    """Read currently closing admission receipts without duplicating mass."""
+    import method_families  # noqa: PLC0415
+    from rlvr import expansion  # noqa: PLC0415
+
+    # An expansion receipt may nominate an already registered method as
+    # well as an overlay token. Admission is rechecked against the live
+    # overlay and its receipt; duplicate receipts do not duplicate mass.
+    try:
+        receipts = expansion.read_receipts(ws)
+    except Exception as exc:  # noqa: BLE001 — corrupt evidence adds no support
+        warn("strategy_store.support", f"expansion unreadable: {type(exc).__name__}: {exc}")
+        receipts = []
+    expansion_families: dict[str, list[str]] = {}
+    for receipt in receipts:
+        if not _expansion_evidence_present(ws, receipt):
+            continue
+        admitted = receipt.get("admitted")
+        hypotheses = receipt.get("hypotheses")
+        if not isinstance(admitted, list) or not isinstance(hypotheses, list):
+            continue
+        admitted_ids = {str(h) for h in admitted}
+        for hyp in hypotheses:
+            if not isinstance(hyp, dict) or str(hyp.get("id") or "") not in admitted_ids:
+                continue
+            family = str(hyp.get("family") or "").strip()
+            if (family in registered and method_families.TOKEN_RE.fullmatch(family)
+                    and method_families.validate_method_family(family, ws)[0]
+                    and not method_constraint_violation(ws, family)):
+                expansion_families.setdefault(family, []).append(
+                    f"expansion_receipt:{receipt.get('receipt')}")
+    return expansion_families
+
+
+def _current_candidate_support(store) -> tuple:
+    """Build support from intake and current admitted expansion receipts.
+
+    History reweights this set but never adds a family. Registry and
+    overlay admission are checked at decision time, including revocation.
+    """
+    import method_families  # noqa: PLC0415
+    from rlvr import priors  # noqa: PLC0415
+
+    ws = store.ws
+    try:
+        registered = method_families.registered_tokens(ws)
+    except Exception as exc:  # noqa: BLE001 — never invent support
+        warn("strategy_store.support", f"registry unreadable: {type(exc).__name__}: {exc}")
+        return {}, "none", {}
+    weights: dict[str, float] = {}
+    sources: dict[str, list[str]] = {}
+    if not _support_material_present(ws):
+        return _legacy_candidate_support(store, registered)
+    try:
+        seeded = priors.intake_prior_weights(ws)
+    except Exception as exc:  # noqa: BLE001 — invalid intake is not support
+        warn("strategy_store.support", f"intake unreadable: {type(exc).__name__}: {exc}")
+        seeded = {}
+    for family, weight in sorted(seeded.items()):
+        if (family in registered and isinstance(weight, (int, float))
+                and not isinstance(weight, bool) and math.isfinite(weight)
+                and weight > 0 and method_families.validate_method_family(family, ws)[0]
+                and not method_constraint_violation(ws, family)):
+            weights[family] = float(weight)
+            sources[family] = ["llm_prior", f"intake:{priors.SEED_REL}"]
+
+    expansion_families = _expansion_candidate_support(ws, registered)
+    base = sum(weights.values()) / len(weights) if weights else 1.0
+    for family in sorted(expansion_families):
+        weights.setdefault(family, base)
+        sources.setdefault(family, []).extend(
+            ["expansion", *sorted(set(expansion_families[family]))])
+    try:
+        history = store._proposal_prior()
+    except Exception as exc:  # noqa: BLE001 — history adjusts, never authorizes
+        warn("strategy_store.support", f"history unreadable: {type(exc).__name__}: {exc}")
+        history = {}
+    try:
+        case_weights = store._case_prior()
+    except Exception as exc:  # noqa: BLE001 — corrupt learning adds no weight
+        warn("strategy_store.support", f"case prior unreadable: {type(exc).__name__}: {exc}")
+        case_weights = {}
+    for family in weights:
+        if family in history and history[family] > 0:
+            weights[family] *= 1.0 + history[family]
+            sources[family].append("history_weight")
+        if family in case_weights and case_weights[family] > 0:
+            weights[family] *= 1.0 + case_weights[family]
+            sources[family].append("case_weight")
+    labels = set().union(*sources.values())
+    source = "llm_prior" if "llm_prior" in labels else ("expansion" if weights else "none")
+    return _share(weights), source, sources
+
+
 class PosteriorStrategyStore:
     """THE StrategyStore implementation over the landed faces."""
 
@@ -507,19 +684,14 @@ class PosteriorStrategyStore:
         receipt = self.method_sample(state_fingerprint)
         return str(receipt["family"]) if receipt else None
 
-    def method_sample(self, state_fingerprint: str) -> dict | None:
-        """#691: the full draw receipt behind ``method_lead`` — the SAME
-        prior chain (measured history → the explicit intake llm-prior →
-        the case posteriors → the cross-task store), the SAME
-        ``q_cells_seed_state`` seed, the SAME sampler kwargs, plus the
-        additive ``prior_source`` label (history | llm_prior | case |
-        store) so receipts distinguish a prior the workspace earned from
-        one it was TOLD or LEARNED. None = no candidates anywhere — the
-        honest cold gap, never a fabricated draw."""
-        prior, source = self.proposal_prior_labeled()
-        if not prior:
-            prior = self._store_prior()
-            source = "store" if prior else source
+    def method_sample(self, state_fingerprint: str, *, arm_context=None) -> dict | None:
+        """Draw from current support, with history used as weight evidence.
+
+        Legacy history/case/store fallback applies only before intake or
+        discovery material has been recorded. Candidate provenance is kept
+        separate from the unknown probability of an external declaration.
+        """
+        prior, source, sources = _current_candidate_support(self)
         if not prior:
             return None
         rng, _round = q_cells.q_cells_seed_state(self.ws)
@@ -528,46 +700,23 @@ class PosteriorStrategyStore:
         kwargs.update(self._warm_pool_kwargs(prior.keys()))
         kwargs.update(self._negative_pool_kwargs(prior.keys()))
         kwargs.update(self._termination_kwargs(prior.keys()))
+        if arm_context is not None:
+            kwargs["arm_context"] = arm_context
         receipt = q_cells.sample_method_family(
             state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
         receipt["prior_source"] = source
+        receipt["candidate_sources"] = sources
+        receipt["probability_source"] = "unknown"
         return receipt
 
     def proposal_prior_labeled(self) -> tuple[dict[str, float], str]:
-        """#691 T3 — ``_proposal_prior``'s labeled face: (prior, source),
-        source ∈ {``history``, ``llm_prior``, ``case``, ``none``}.
-        ``history`` is the workspace's measured declaration shares (the
-        prior it earned); ``llm_prior`` is the explicit
-        runs/llm-prior.json intake doc when no history exists (the prior
-        it was TOLD); ``case`` is the learning→decision bridge — the
-        runs/posteriors.yaml case Betas folded into family weights
-        through the update_map join (the prior the oracle TAUGHT it).
-        Retired tokens filtered by the same registry wall as every other
-        prior face, share-normalized like any candidate set. Fail-open:
-        the #544 tolerant read face maps a missing/corrupt intake doc to
-        empty silently (never a raise); only an unexpected failure at
-        THIS seam warns (one rate-limited warn, error class only) and
-        the chain continues empty."""
-        prior = self._proposal_prior()
-        if prior:
-            return prior, "history"
-        try:
-            from rlvr import priors as _priors  # noqa: PLC0415 — lazy
-            seeded = _priors.intake_prior_weights(self.ws)
-        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
-            warn("strategy_store.llm_prior",
-                 f"{type(exc).__name__}: {exc} (fail-open: no llm prior)")
-            seeded = {}
-        prior = _share(_registered_only(seeded or {}))
-        if prior:
-            return prior, "llm_prior"
-        try:
-            prior = self._case_prior()
-        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
-            warn("strategy_store.case_prior",
-                 f"{type(exc).__name__}: {exc} (fail-open: no case prior)")
-            prior = {}
-        return (prior, "case") if prior else ({}, "none")
+        """Current proposal weights and their primary evidence source.
+
+        Per-candidate provenance is retained on the full sampling receipt.
+        Recorded invalid evidence never falls back to historical support.
+        """
+        prior, source, _sources = _current_candidate_support(self)
+        return prior, source
 
     # ------------------------------------------------ the case source
 
@@ -867,36 +1016,28 @@ def _round_lead(ws) -> str | None:
 
 
 def reconcile_declaration(ws, declared: str | None) -> dict:
-    """#691 — the dispatch-gate reconciliation view for ONE declared
-    method family: the gate's OWN sampler draw (the same face
-    ``method_lead`` renders, recomputed at dispatch time — anti-spoof:
-    nothing the envelope says can move it) plus the DECLARED family's
-    draw probability under it.
+    """Reconcile the sampled and externally declared methods.
 
-    Returns ``{"sampled_family", "propensity", "prior_source",
-    "deviates", "sampled_propensity", "round_lead"}`` — or the all-None
-    gap view on every miss: no workspace, no declaration, no proposal
-    material (the honest cold gap), or any failure (ONE rate-limited
-    warn carrying the error class only). Fail-open by design: telemetry
-    never turns an ALLOW into anything else. ``propensity`` is the
-    sampler's draw probability of the DECLARED family (0.0 when it is
-    not a candidate at all — the draw could never have chosen it; the
-    honest number, not a gap); ``sampled_propensity`` is the same
-    quantity for the sampler's OWN draw, so the two families'
-    probabilities stay separable on the dispatch row. ``round_lead`` is
-    the composed round-strategy lead in force (advisory; None when no
-    strategy object exists)."""
+    Conditional draw weights explain candidate support; they do not
+    identify the behavior probability of an LLM or manual declaration.
+    """
     gap = {"sampled_family": None, "propensity": None,
            "prior_source": None, "deviates": False,
            "sampled_propensity": None, "round_lead": None}
     if not ws or not declared:
         return gap
+    evidence_mode = True  # inability to establish the mode cannot authorize legacy fallback
     try:
+        evidence_mode = _support_material_present(ws)
         from rlvr import state as rlvr_state  # noqa: PLC0415 — lazy
         store = PosteriorStrategyStore(ws)
         fp = rlvr_state.signature_hash(rlvr_state.snapshot(Path(ws)))
         receipt = store.method_sample(fp)
         if receipt is None:
+            if _support_material_present(ws):
+                return {**gap, "supported": False,
+                        "probability_source": "unknown", "candidates": {},
+                        "candidate_sources": {}}
             return gap
         sampled = str(receipt.get("family") or "").strip() or None
         weights: dict[str, float] = {}
@@ -906,22 +1047,31 @@ def reconcile_declaration(ws, declared: str | None) -> dict:
             except (TypeError, ValueError):
                 weights[str(fam)] = 0.0
         total = sum(weights.values())
-        propensity = (round(weights.get(str(declared), 0.0) / total, 6)
-                      if total > 0.0 else None)
-        sampled_propensity = (
-            round(weights.get(sampled, 0.0) / total, 6)
+        conditional = weights.get(str(declared), 0.0) / total if total > 0.0 else None
+        sampled_conditional = (
+            weights.get(sampled, 0.0) / total
             if (total > 0.0 and sampled) else None)
         return {
             "sampled_family": sampled,
-            "propensity": propensity,
+            "propensity": None,
+            "probability_source": "unknown",
+            "conditional_sampler_weight": conditional,
+            "sampled_conditional_weight": sampled_conditional,
+            "supported": str(declared) in (receipt.get("candidate_sources") or {}),
+            "candidates": receipt.get("candidates", {}),
+            "candidate_sources": receipt.get("candidate_sources", {}),
             "prior_source": receipt.get("prior_source"),
             "deviates": bool(sampled) and str(declared) != sampled,
-            "sampled_propensity": sampled_propensity,
+            "sampled_propensity": None,
             "round_lead": _round_lead(ws),
         }
-    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+    except Exception as exc:  # noqa: BLE001 — retain the authorization boundary
         warn("strategy_store.reconcile_declaration",
              f"{type(exc).__name__}: {exc}")
+        if evidence_mode:
+            return {**gap, "supported": False, "support_error": type(exc).__name__,
+                    "probability_source": "unknown", "candidates": {},
+                    "candidate_sources": {}}
         return gap
 
 

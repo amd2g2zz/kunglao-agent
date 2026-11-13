@@ -89,12 +89,13 @@ def test_mismatched_carriers_are_refused(tmp_path, monkeypatch) -> None:
     assert len(calls) == 1
 
 
-def test_agreeing_carriers_join_the_estimate(tmp_path) -> None:
+def test_agreeing_legacy_carriers_do_not_establish_probability(tmp_path) -> None:
     ws = _ws(tmp_path)
     _transition(ws, "C-3", "static", propensity=0.7)
     _envelope(ws, "C-3", "static", propensity=0.7)
     report = pc.compare(ws)
-    assert report["decisions"] == 1
+    assert report["decisions"] == 0
+    assert report["skipped_unknown_probability"] == 1
     assert report["skipped_declared_fiat"] == 0
     assert report["skipped_propensity_mismatch"] == 0
 

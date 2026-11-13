@@ -1,27 +1,9 @@
 # -*- coding: utf-8 -*-
-"""tests/test_ws2_declared_rides_545.py — WS2 (#545) deliverable 3: the
-declared-family bypass fix. A declared family no longer skips the sampler
-silently: the sampler still runs (the score face — candidates ride the
-receipt), the DECLARED family wins the envelope, and the receipt records
-propensity 1.0 (the declared proposal is π≈1 — correctly re-weighted for
-OPE; policy_compare's `skipped_no_propensity` gap closes).
+"""Declared dispatch receipts and keyed settlement.
 
-The censored-review data (PR #549) showed the practical cost of the
-bypass: 0/50 real transition rows carry a propensity field — every
-dispatch was declared-path, so the DR-OPE record never existed in
-practice.
-
-Pins:
-
-  1. declared dispatch: envelope carries candidates INCLUDING the
-     declared family + propensity 1.0; the transition row banks that
-     propensity (the OPE record completes end-to-end).
-  2. sampler failure on the declared path degrades to the minimal honest
-     receipt (propensity 1.0, the declared family as the sole candidate)
-     — never envelope-less, never a skipped OPE row.
-  3. undeclared dispatch (control): the MC propensity face unchanged.
-  4. the settle face records the store row with the dispatch's arm_key
-     and the banked propensity (the cross-task record is keyed).
+#1033 supersedes the old pi=1 and declaration-injected-candidate assumptions.
+A declared action remains identified, behavior probability stays unknown,
+and an outage never fabricates candidate support. Direct MC is deferred to #1034.
 """
 from __future__ import annotations
 
@@ -86,6 +68,9 @@ def _envelopes(ws) -> list[dict]:
 def test_declared_family_records_propensity_1_and_rides_candidates(
         tmp_path, monkeypatch):
     ws = _ws(tmp_path)
+    from rlvr import priors
+    (ws / "task_spec.yaml").write_text("family: static-replay\n")
+    priors.seed_intake_prior(ws, families=[FAMILY])
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
                        str(tmp_path / "store"))
     ctx = _ctx(ws, FAMILY)
@@ -93,8 +78,9 @@ def test_declared_family_records_propensity_1_and_rides_candidates(
     assert request.method_family == FAMILY, "the declared family wins"
     env = _envelopes(ws)[-1]
     receipt = env["envelope"]
-    assert receipt["propensity"] == 1.0, \
-        "the declared proposal is deterministic: pi = 1.0 for OPE"
+    assert receipt["propensity"] is None
+    assert receipt["probability_source"] == "unknown"
+    assert receipt["actual_method_family"] == FAMILY
     cands = receipt.get("candidates") or {}
     assert FAMILY in cands, \
         "the declared family enters the candidates with its P_LLM weight"
@@ -110,10 +96,9 @@ def test_declared_family_records_propensity_1_and_rides_candidates(
         set(), {"acts": []})
     trans = [r for r in ir.read_transitions(ws)
              if r.get("dispatch_id") == "C-004"]
-    assert trans and trans[-1].get("propensity") == 1.0, \
-        "the transition row banks the declared propensity (DR-OPE record)"
+    assert trans and trans[-1].get("propensity") is None
     rows = strategy_store.load_rows(ws=None)
-    assert rows and rows[-1]["propensity"] == 1.0
+    assert rows and rows[-1]["propensity"] is None
     assert rows[-1]["arm_key"] == f"{FAMILY}|facts_snapshot|none|1", \
         "the store row is keyed by the dispatch's 4-dim arm_key"
     assert rows[-1]["provenance"]["dispatch_id"] == "C-004"
@@ -130,14 +115,18 @@ def test_sampler_failure_still_records_propensity_1(tmp_path, monkeypatch):
     assert request.method_family == FAMILY
     env = _envelopes(ws)[-1]
     receipt = env["envelope"]
-    assert receipt["propensity"] == 1.0, \
-        "even with the sampler down, the OPE record rides (pi = 1.0)"
-    assert FAMILY in (receipt.get("candidates") or {}), \
-        "the minimal honest receipt names the declared candidate"
+    assert receipt["propensity"] is None
+    assert receipt["probability_source"] == "unknown"
+    assert receipt["actual_method_family"] == FAMILY
+    assert receipt.get("sampled_family") is None
+    assert receipt["candidates"] == {}
 
 
 def test_undeclared_path_still_uses_the_mc_propensity(tmp_path, monkeypatch):
     ws = _ws(tmp_path)
+    from rlvr import priors
+    (ws / "task_spec.yaml").write_text("family: static-replay\n")
+    priors.seed_intake_prior(ws, families=[FAMILY])
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
                        str(tmp_path / "store"))
     ctx = _ctx(ws, "")  # no declaration -> the sampler decides

@@ -124,8 +124,8 @@ def test_declared_family_records_propensity_and_sampled_family(
     """#691 T2: one prior family, declared as-is — the dispatch
     observation row carries the full reconciliation (the #804 usage
     merge: the row IS the record): sampled_family matches the
-    declaration, propensity is the sampler's draw probability (1.0 for
-    the sole candidate), prior_source names where the prior came
+    declaration, conditional_sampler_weight is 1.0 for the sole candidate;
+    the external declaration's behavior propensity is unknown. prior_source names where the prior came
     from."""
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
@@ -138,7 +138,9 @@ def test_declared_family_records_propensity_and_sampled_family(
     assert row['schema'] == 'q-cell-obs/1'
     assert row['method_family'] == 'static-decompile'
     assert row['sampled_family'] == 'static-decompile'
-    assert row['propensity'] == 1.0
+    assert row['propensity'] is None
+    assert row['conditional_sampler_weight'] == 1.0
+    assert row['probability_source'] == 'unknown'
     assert row['prior_source'] == 'history'
     # a matched declaration is not a deviation — no event
     assert _events(ws, 'sample_deviation') == []
