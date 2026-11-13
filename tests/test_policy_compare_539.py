@@ -91,7 +91,8 @@ def test_underpowered_gate_and_propensity_skip(tmp_path):
          "propensity": 0.8, "reward": 1.0}] * 5)
     rep = pc.compare(small, bootstrap=0)
     assert rep["verdict"] == "underpowered"
-    assert rep["decisions"] == 5
+    assert rep["decisions"] == 0
+    assert rep["skipped_ambiguous_dispatch"] == 5
 
     mixed = _ws(tmp_path / "b", [
         {"claim": f"C-{i:03d}", "family": "alpha-arm", "weights": W2,
@@ -99,9 +100,10 @@ def test_underpowered_gate_and_propensity_skip(tmp_path):
         {"claim": "C-999", "family": "beta-arm", "weights": W2,
          "propensity": None, "reward": 1.0}])
     rep2 = pc.compare(mixed, bootstrap=0)
-    assert rep2["decisions"] == 45
+    assert rep2["decisions"] == 0
     assert rep2["skipped_no_propensity"] == 1
-    assert rep2["verdict"]["best"] in pc.POLICIES
+    assert rep2["skipped_unknown_probability"] == 45
+    assert rep2["verdict"] == "underpowered"
 
 
 def test_snips_keeps_reward_aligned_when_target_weight_is_zero():
@@ -168,12 +170,13 @@ def test_bootstrap_with_no_valid_replicate_is_unavailable():
     assert pc._bootstrap_ci(decisions, "thompson", 1, seed=7) is None
 
 
-def test_compare_reports_unavailable_bootstrap_not_zero_interval(tmp_path):
+def test_compare_does_not_rank_unverified_legacy_bootstrap_data(tmp_path):
     rows = [{"claim": "C-000", "family": "a", "weights": {"a": 1.0},
              "propensity": 1.0, "reward": 1.0}]
     rows += [{"claim": f"C-{i:03}", "family": "a", "weights": {"a": 1.0},
               "propensity": 0.0, "reward": 0.0} for i in range(1, 100)]
     result = pc.compare(_ws(tmp_path, rows), bootstrap=1)
-    assert result["policies"]["thompson"]["snips"] == 1.0
-    assert result["policies"]["thompson"]["ci95"] is None
+    assert result["decisions"] == 0
+    assert result["skipped_unknown_probability"] == 1
+    assert result["skipped_invalid_probability"] == 99
     assert result["verdict"] == "underpowered"

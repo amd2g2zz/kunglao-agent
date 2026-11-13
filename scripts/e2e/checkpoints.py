@@ -671,35 +671,15 @@ def _uniform_propensity(receipt: dict) -> float:
 def _stamp_ope_propensity(ctx: RunContext, receipt: dict | None,
                           declared: bool, method_family: str,
                           fingerprint: str | None) -> None:
-    """The DR-OPE record on the envelope receipt — three faces, one
-    write site (fail-open: a propensity problem is never a dispatch
-    gate). SAMPLER receipts carry the MC propensity; a DECLARED
-    proposal is the behavior policy itself (deterministic — pi = 1.0,
-    correctly re-weighted for OPE); a UNIFORM-scheduler receipt carries
-    exactly 1/K — the exchangeable draw's marginal action probability,
-    the OPE weight of the policy this measurement arm forswears learning
-    for. The env fingerprint rides when it exists."""
+    """Record an honest gap when executed behavior probability is unknown."""
     if not method_family or receipt is None:
         return
-    try:
-        if declared:
-            receipt["propensity"] = 1.0
-            receipt["declared"] = True
-        elif str(receipt.get("scheduler") or "") == SCHEDULER_UNIFORM:
-            receipt["propensity"] = _uniform_propensity(receipt)
-        else:
-            from rlvr import meta_arms as _ma2
-            qc_mod = _load_repo_module(ctx.repo, "rlvr.q_cells")
-            _rows = [r for r in qc_mod.JSONLQStore(
-                str(ctx.ws)).observations() if isinstance(r, dict)]
-            _fams = sorted({str(r.get("method_family")) for r in _rows
-                            if r.get("method_family")} | {method_family})
-            receipt["propensity"] = round(_ma2.mc_propensity(
-                _rows, method_family, _fams), 4)
-        if fingerprint:
-            receipt["fingerprint"] = fingerprint
-    except Exception as exc:  # noqa: BLE001 — bonus, never a gate
-        kunglao_log.warn("e2e.propensity", f"{type(exc).__name__}: {exc}")
+    receipt["propensity"] = None
+    receipt["probability_source"] = "unknown"
+    if declared:
+        receipt["declared"] = True
+    if fingerprint:
+        receipt["fingerprint"] = fingerprint
 
 
 def _sample_envelope_family(ws, require_family: str | None = None
