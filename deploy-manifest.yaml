@@ -1563,7 +1563,7 @@ files:
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
-    sha256: b7c7b0a462fc52fe2ca27101e6a0ad6b69a239f1b469d5f866001119592d1091
+    sha256: a303e35db094731ca9c623325c01d974d220a2eb26bb0e0becc4aa3336f6bc79
   - src: scripts/rlvr/pool_indexer.py
     dest: .claude/scripts/rlvr/pool_indexer.py
     kind: scaffold
