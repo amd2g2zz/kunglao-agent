@@ -352,13 +352,53 @@ def test_multiround_host_executes_newly_evidenced_registered_method(
     assert f"expansion_receipt:{doc['receipt']}" in sample['candidate_sources']['dynamic-trace']
     second, handle = checkpoints._launch_dispatch(ctx, 'C-001', set())
     assert second is not None and second.method_family == 'dynamic-trace'
-    # The orchestrator supplies the evidence-based override rationale to
-    # the real family gate, as it would when dispatching an agent.
-    prompt = Path(second.prompt_file)
-    prompt.write_text(prompt.read_text() + '\nagent-reasoning: observed-pair.json requires live observation\n')
+    # The host-selected family reaches the gate without a fabricated override.
     face.run_dispatch(second, handle)
     assert received == ['static-decompile', 'dynamic-trace']
     assert q_cells.dispatch_rows(workspace)[-1]['method_family'] == 'dynamic-trace'
+
+
+def test_declared_override_requires_caller_rationale(workspace: Path, monkeypatch):
+    import random
+    import time
+
+    from e2e import checkpoints, llm_faces, model
+
+    monkeypatch.setattr(q_cells, 'q_cells_seed_state',
+                        lambda _ws: (random.Random(3), 0))
+    sampled, _ = checkpoints._sample_envelope_family(workspace)
+    actual = ({'static-decompile', 'dynamic-trace'} - {sampled}).pop()
+
+    class Runner:
+        def run(self, *args, **kwargs):
+            return model.CmdOutcome(rc=0, stdout='{"result":"STATUS: DONE"}', stderr='')
+
+    runner = Runner()
+    run_state = model.RunState(
+        run_id='override', unit='synthetic', family='synthetic',
+        repo=str(Path(__file__).resolve().parents[1]), task_dir=str(workspace),
+        ws=str(workspace), evidence_dir=str(workspace / 'evidence'),
+        budget_seconds=60, llm_mode='auto', started_ts='t',
+        started_monotonic=0.0, anchors={})
+    run_state.method_family = actual
+    face = llm_faces.AutoLlmFace(runner, Path(run_state.evidence_dir))
+    ctx = checkpoints.RunContext(state=run_state, runner=runner, face=face,
+                                 clock=time, sleep_fn=lambda _: None)
+    request, _ = checkpoints._launch_dispatch(ctx, 'C-001', set())
+    prompt = Path(request.prompt_file).read_text(encoding='utf-8')
+    view = strategy_store.reconcile_declaration(workspace, actual)
+    assert view['deviates'] and view['supported']
+    rc, _, _ = sinks._method_family_gate(
+        {'workspace': str(workspace)}, prompt, 'C-001',
+        'kunglao-worker', 1, ['grep', 'python3'])
+    assert rc == 2
+    # The live orchestrator supplies this line in the Agent prompt. The
+    # checkpoint harness has no caller rationale input and does not add it.
+    reasoned = prompt + '\nagent-reasoning: observed evidence requires independent observation\n'
+    rc, family, _ = sinks._method_family_gate(
+        {'workspace': str(workspace)}, reasoned, 'C-001',
+        'kunglao-worker', 1, ['grep', 'python3'])
+    assert rc is None and family == actual
 
 
 def test_missing_reason_cannot_override_current_sample(workspace: Path):
