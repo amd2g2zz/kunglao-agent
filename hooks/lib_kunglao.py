@@ -476,18 +476,18 @@ def is_verifier_remediation_dispatch(ws, claim_id: str,
 # ---- #249: STALLED remedy-exemption identity (single source) ----
 
 # The remedy-declared dispatch marker. A dispatch prompt carrying this line
-# declares "I am the STALLED gate's own prescribed remedy" — admitted ONLY
+# declares "I am the convergence gate's own prescribed remedy" — admitted ONLY
 # in intersection with detector state (the stuck set / the minted frontier),
-# never on the marker alone. convergence_health's STALLED action prose
-# prints the same literal; the cross-face sync is pinned by
+# never on the marker alone. convergence_health's STALLED and SPINNING
+# action prose prints the same literal; the cross-face sync is pinned by
 # tests/test_stalled_remedy_249.py (scripts/ must not import the hooks twin,
 # so the constant is duplicated there with a pinning test — same posture as
 # the #237 H1 agent markers before lib became their single source).
 STALLED_REMEDY_MARKER = "remedy: decompose"
 
-# Round-2 escalation (review HIGH/MEDIUM): the admit telemetry action row
-# the rc=1 face appends for EVERY admitted remedy dispatch; the detector's
-# stalled_state counts consecutive cycles from these rows, and at depth
+# Escalation: the admit telemetry action row the rc=1 and rc=2 faces append
+# for EVERY admitted remedy dispatch; the detector's stalled_state counts
+# consecutive cycles from these rows, and at depth
 # >= STALLED_REMEDY_MAX_DEPTH the follow-through channel closes (channel A
 # stays open, bounded by the plan/zerooutput battery) — repeated remedy
 # cycles escalate toward the human face instead of mint-looping.
@@ -498,10 +498,10 @@ STALLED_REMEDY_MAX_DEPTH = 2
 def is_stalled_remedy_dispatch(ws, claim_id, payload=None, prompt_text="",
                                stuck_ids=None, flatlined_open_ids=None,
                                remedy_depth=0) -> bool:
-    """#249: True when the dispatch IS the STALLED gate's own prescribed
-    remedy. Mirror of the #237 D2 discipline: a dispatch-prompt declaration
-    (the marker, here) intersected with DETECTOR STATE — never the
-    declaration alone, never the state without a declared purpose.
+    """True when the dispatch IS the convergence gate's own prescribed
+    remedy, at the STALLED or the SPINNING face. A dispatch-prompt
+    declaration (the marker, here) intersected with DETECTOR STATE — never
+    the declaration alone, never the state without a declared purpose.
 
     Two narrow channels, both marker-gated:
       A. remedy-declared: the target claim is in the STUCK set (dispatched
@@ -525,8 +525,9 @@ def is_stalled_remedy_dispatch(ws, claim_id, payload=None, prompt_text="",
 
     Fail-closed: blank claim id, unreadable register, empty flatline set,
     or no stuck parent -> False (the legacy block applies). Scope: the
-    CALLER (the worker_budget rc=1 face) guarantees the STALLED verdict —
-    SPINNING (rc=2) is never exempt. `payload` is accepted for signature
+    CALLER (the worker_budget rc=1 / rc=2 faces) guarantees the STALLED or
+    SPINNING verdict; both faces share this predicate, channels and depth
+    cap. `payload` is accepted for signature
     symmetry with the #237 predicate (any agent class may carry the
     remedy; no payload read today).
     """

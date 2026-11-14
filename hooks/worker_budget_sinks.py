@@ -240,9 +240,13 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'convergence loop unhealthy (STALLED / SPINNING). Fix: run '
             'uv run --project <skill> <skill>/scripts/convergence_health.py <ws> for the '
             'diagnostic - STALLED: re-prime the loop (workers/heartbeat alive? '
-            'claim actually in progress?); SPINNING: STOP dispatching and '
-            'reconcile what is being re-done (usually a missing '
-            'verify/promote step) - collapse the spin, then resume.'
+            'claim actually in progress?); SPINNING: reconcile what is being '
+            're-done (usually a missing verify/promote step), then dispatch '
+            'the remedy the diagnostic prints - at STALLED and SPINNING '
+            'alike only a dispatch carrying its remedy marker for a stuck '
+            'claim (or a sub-claim minted from it) is admitted, every other '
+            'dispatch is rejected; with no stuck claim there is no remedy '
+            'target - collapse the spin, then resume.'
         ),
     },
     'batteryreg': {
@@ -1256,12 +1260,12 @@ def pre_check(payload: dict, paths: dict) -> int:
         # exists to demand.
         ('drift', (True, '') if verifier_remediation
          else check_plan_drift(paths)),
-        # #249: the dispatch context rides along so the STALLED rc=1 face
-        # can admit the gate's own prescribed remedy (mirror of the D2
-        # drift skip above — same dispatch, both faces must agree). The
-        # exemption is INSIDE the rc=1 face: SPINNING/crash faces are
-        # untouched, and every other gate below still applies to a remedy
-        # dispatch.
+        # The dispatch context rides along so the STALLED rc=1 and
+        # SPINNING rc=2 faces can admit the gate's own prescribed remedy
+        # (mirror of the verifier-remediation skip of the drift gate
+        # above — same dispatch, both faces must agree). The exemption is
+        # INSIDE the rc=1 / rc=2 faces: the crash face is untouched, and
+        # every other gate below still applies to a remedy dispatch.
         ('health', check_convergence_health(paths, cid, payload, prompt)),
         # v1.9.39 (#475): env-state freshness gate — a dispatch whose tier/
         # tools need a drifted environment capability is REJECTED; missing/

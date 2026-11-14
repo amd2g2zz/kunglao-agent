@@ -507,13 +507,12 @@ def _active_blockers(workspace: Path):
 
 
 def _count_facts(workspace: Path) -> int:
-    """Total facts on disk (for churn detection — facts growing without claims closing).
+    """Total facts on disk (the churn input — facts growing while open claims
+    hold; convergence_health reports it as information, never as a verdict).
 
-    v1.9.8 fix: real workspaces name facts `F001-<slug>.md` (NO hyphen after F —
-    e.g. F001-chemistry-as-mapassign-literal.md), while test_workspace used
-    `F-001-*.md`. The old glob `F-*.md` matched only the test convention, so
-    facts_total was always 0 in production → the SPINNING churn branch
-    ("facts grew 5+ while open_count held") could never fire. Count BOTH."""
+    Real workspaces name facts `F001-<slug>.md` (NO hyphen after F — e.g.
+    F001-chemistry-as-mapassign-literal.md) while test workspaces use
+    `F-001-*.md`; both conventions are counted."""
     fdir = workspace / "facts"
     if not fdir.exists():
         return 0

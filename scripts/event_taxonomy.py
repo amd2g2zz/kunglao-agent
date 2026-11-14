@@ -338,7 +338,7 @@ EMIT_ACTIONS = [
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "split_units_minted",  # issue 293 claim_granularity split fan-out mint face (parent SUPERSEDED rides detail)
     "stale_plan_on_new_evidence",
-    "stalled_remedy_admitted",  # issue-249 rc=1 face admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
+    "stalled_remedy_admitted",  # STALLED/SPINNING remedy-exemption admit telemetry row (convergence-ledger operator action; the remedy-depth counter source)
     "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
     "strategic_action_recorded",  # the recorded FIGHT/BYPASS/INVEST route choice + propensity (rlvr/strategic_action)
     "t2_queue_built",     # issue 429 §1 T2 ladder rung: round-close priority queue over sides persisted (verification_ladder)

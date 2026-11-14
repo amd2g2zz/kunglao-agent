@@ -113,7 +113,14 @@ the trajectory:
 |---|---|---|---|
 | `HEALTHY` | 0 | open_count trending down | keep going |
 | `STALLED` | 1 | flat 5+ turns OR claim open 3+ turns | diagnose stuck claims before next dispatch |
-| `SPINNING` | 2 | flat 8+ turns OR 5+ facts with open_count held | STOP; pick one intervention |
+| `SPINNING` | 2 | flat 8+ turns over open work (fact growth with open_count held is reported as `churn`, information only) | pick one intervention; the `remedy` dispatch for a stuck claim is admitted at the gate |
+
+The `STALLED` and `SPINNING` verdict JSON both carry a `remedy` block
+(`operator`, `claims`, `dispatch_marker`, `mint_cmd`). `claims` is the
+stuck set (dispatched claims open 3+ turns) — empty when none is stuck. A
+dispatch carrying the `dispatch_marker` line for a stuck claim (or for a
+sub-claim minted from it via `mint_cmd`) is admitted at the gate at either
+verdict; every other dispatch is rejected until the flatline breaks.
 
 Run every 3rd turn, and whenever "busy but stuck":
 ```bash
@@ -125,6 +132,7 @@ python scripts/convergence_health.py <workspace>
 1. **Escalate tier** — T1→T2→T3 if not exhausted
 2. **Reformulate** — rewrite the claim so it's answerable from artifact
 3. **Decompose** — split into 2-3 smaller claims each individually closeable
+   (the `remedy` block's `mint_cmd`, dispatched with its `dispatch_marker`)
 4. **DEFER** — mark terminal with documented rationale (stops the loop cleanly)
 5. **Escalate to user** — genuine "no artifact can answer this", with a specific question
 

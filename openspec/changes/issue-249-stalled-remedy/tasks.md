@@ -6,8 +6,9 @@
   JSON carries the invokable `remedy` (operator decompose, stuck claims,
   dispatch marker, mint command); the action string carries the same
   literals; #2 wording pins survive.
-- [x] 1.2 fast: HEALTHY / NO_DATA / SPINNING output shapes untouched
-  (remedy is STALLED-only; SPINNING out of scope).
+- [x] 1.2 fast: HEALTHY / NO_DATA output shapes untouched (the remedy is
+  carried by STALLED and SPINNING; the SPINNING contract is pinned in
+  tests/test_spinning_remedy.py).
 - [x] 1.3 fast: cross-face marker sync (lib constant == detector prose
   literal) — a drift fails loudly.
 - [x] 1.4 fast: `stalled_state` mirrors the verdict (stuck ids + flatlined
@@ -20,7 +21,7 @@
 - [x] 1.6 fast: the rc=1 face — remedy dispatch admitted, ordinary
   dispatch blocked, marked-but-not-stuck blocked, legacy 1-arg call
   blocked, state-verdict drift fails closed, lib outage fails closed,
-  SPINNING rc=2 never exempt, crashed rc=4 fail-open preserved.
+  SPINNING rc=2 shares the exemption, crashed rc=4 fail-open preserved.
 - [x] 1.7 fast: the sinks battery forwards (claim, payload, prompt) to the
   health gate.
 - [x] 1.8 tests/test_stalled_remedy_full_cycle_249.py (slow): the pinned
@@ -44,7 +45,7 @@
 - [x] 2.3 hooks/worker_budget_core.py: `_stalled_remedy_exemption`
   (lib predicate + detector state, fail-closed on every unresolvable
   input) + `check_convergence_health` optional (claim_id, payload,
-  prompt_text) with the exemption INSIDE the rc=1 face only.
+  prompt_text) with the exemption INSIDE the rc=1 and rc=2 faces.
 - [x] 2.4 hooks/worker_budget_sinks.py: pre_check forwards the dispatch
   context to the health gate.
 - [x] 2.5 tests/_tiers.py: test_stalled_remedy_249 -> FAST_MODULES;
