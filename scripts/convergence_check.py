@@ -55,6 +55,7 @@ claim-register.yaml AND task_spec.yaml, else the check hard-errors
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -704,6 +705,8 @@ def _load_task_spec(workspace: Path) -> dict:
 # appeared ZERO times in the judgment chain — the loop could mark every
 # claim PROVEN while the runner was all red.
 ORACLE_STATUS_REL = ("runs", "oracle-status.json")
+# where the runner reads its case files (oracle_runner.CASES_REL)
+ORACLE_CASES_REL = ("oracle", "cases")
 
 
 def _load_oracle_status(workspace: Path) -> dict:
@@ -2589,6 +2592,17 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             decision["pending_settlements"] = _pending
     except Exception as exc:  # noqa: BLE001 — advisory read face, never the verdict
         warn("pending_settlements", f"{type(exc).__name__}: {exc}")
+    # per-file oracle case problems. Conditional key (byte-frozen anchors
+    # stay identical when every case loads or no case directory exists):
+    # visibility only — a refused case never stops dispatching and is no
+    # blocker file, so the verdict machine is untouched. The reporter is a
+    # pure read; a failure inside it leaves one rate-limited warning.
+    try:
+        _case_errors = _oracle_case_errors(workspace)
+        if _case_errors:
+            decision["oracle_case_errors"] = _case_errors
+    except Exception as exc:  # noqa: BLE001 — advisory read face, never the verdict
+        warn("oracle_case_errors", f"{type(exc).__name__}: {exc}")
     # emit_snapshot=False (resume's #466 read-only contract) must quiesce
     # the #51 always-on recording too: signals are computed and attached
     # identically, but the value/rho persistence stays off (#51 regression:
@@ -2597,7 +2611,40 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
                                            emit=emit_snapshot)
     if emit_snapshot:
         _emit_decision_snapshot(workspace, result)
+        _emit_oracle_case_error_events(workspace,
+                                       result.get("oracle_case_errors"))
     return result
+
+
+def _oracle_case_errors(workspace: Path) -> list[dict]:
+    """The oracle runner's per-file case problems for this workspace; []
+    when it carries no case directory, or one holding only link stubs
+    (id + target_pq documents nothing attempts to run). A pure read."""
+    cases_dir = Path(workspace).joinpath(*ORACLE_CASES_REL)
+    if not cases_dir.is_dir():
+        return []
+    import oracle_runner
+    if not oracle_runner.holds_runner_cases(cases_dir):
+        return []
+    return oracle_runner.case_errors(cases_dir)
+
+
+def _emit_oracle_case_error_events(ws, errors) -> None:
+    """One ``oracle_case_error`` event per distinct error fingerprint, ever
+    (kunglao_log.emit_once keeps the emitted keys, so repeated decisions
+    stay quiet). Fail-open: logging must never block the decision."""
+    try:
+        from kunglao_log import emit_once
+        for err in errors or ():
+            fingerprint = hashlib.sha256(json.dumps(
+                [err["file"], err["case"], err["field"], err["error"]],
+                ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+            emit_once(ws, "orchestrator", "oracle_case_error", fingerprint,
+                      artifact=f"oracle/cases/{err['file']}",
+                      detail=json.dumps({**err, "fingerprint": fingerprint},
+                                        ensure_ascii=False, sort_keys=True))
+    except Exception as exc:  # noqa: BLE001 — fail-open: event emission, never the verdict
+        warn("oracle_case_error_emit", f"{type(exc).__name__}: {exc}")
 
 
 def _emit_decision_snapshot(ws, d: dict) -> None:
@@ -2651,6 +2698,12 @@ def _human(d: dict) -> str:
                      f"for {first['claim']} ({first['path']})")
     if d["active_blockers"]:
         lines.append(f"blockers:       {d['active_blockers']}")
+    case_errors = d.get("oracle_case_errors") or []
+    if case_errors:
+        first = case_errors[0]
+        lines.append(f"oracle case errors: {len(case_errors)} — "
+                     f"{first['file']} (field {first['field'] or 'n/a'}): "
+                     f"{first['fix']}")
     o = d.get("oracle")  # #108: the honest progress face (always present)
     if o is not None:
         if o.get("absent"):

@@ -204,7 +204,9 @@ K_ZERO_FILES = (
 # (register/mark/check, one loads each).
 K_RESIDUAL_PINS = {
     "rho_verifier": (1, 1),
-    "kunglao_log": (5, 1),
+    # one more load than the base count: emit_once reads its emitted-keys
+    # state file (a workspace state read, not a JSONL loop parse)
+    "kunglao_log": (6, 1),
     "kunglao_record": (1, 1),
     "kunglao_resume": (2, 0),
     "heartbeat": (3, 2),

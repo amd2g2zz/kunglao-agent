@@ -208,7 +208,16 @@ Compute = Callable[[dict], dict]
 
 
 class OracleCaseError(ValueError):
-    """Case-set lint refusal (#108 half C) — loud, never silently blessed."""
+    """Case-set lint refusal (#108 half C) — loud, never silently blessed.
+
+    ``field`` names the case-document key the refusal is about (``expected``,
+    ``mutations``, ``update_map``, ...); None when no single key is at fault.
+    The structured name is what ``case_errors`` reports — it is never parsed
+    back out of the message."""
+
+    def __init__(self, message: str, *, field: str | None = None) -> None:
+        super().__init__(message)
+        self.field = field
 
 
 # ------------------------------------------------- #126 admission lints
@@ -270,14 +279,15 @@ def _resolve_evidence_ref(ws: Path, case_path: Path, cid: str,
     if not text:
         raise OracleCaseError(
             f"{case_path.name}: case {cid!r}: expected entry {field!r} "
-            f"carries an empty evidence_ref")
+            f"carries an empty evidence_ref", field="expected")
     norm = text.replace("\\", "/").lower()
     if norm.startswith(("runs/", "oracle/")) or "oracle-status" in norm:
         raise OracleCaseError(
             f"{case_path.name}: case {cid!r}: expected entry {field!r}: "
             f"evidence ref {text!r} points into the oracle's own output "
             f"(runs/ | oracle/) — self-anchor refused (#126: circular "
-            f"verification is the machine channel for a 100% pass rate)")
+            f"verification is the machine channel for a 100% pass rate)",
+            field="expected")
     if "/" in text:
         candidates = [ws / Path(text)]
     else:
@@ -301,7 +311,7 @@ def _resolve_evidence_ref(ws: Path, case_path: Path, cid: str,
         f"{case_path.name}: case {cid!r}: expected entry {field!r}: evidence "
         f"ref {text!r} does not resolve to an existing fact-pipeline "
         f"artifact (facts/F*.md or an evidence/ file) under the workspace — "
-        f"refs are declarations, not resolutions (#126)")
+        f"refs are declarations, not resolutions (#126)", field="expected")
 
 
 # ------------------------------------------------------------ case loading
@@ -358,8 +368,8 @@ def _parse_expected(ws: Path, case_path: Path, cid: str, raw) -> list[dict]:
     if fault is not None:
         if fault == EXPECTED_TOP_LEVEL_FAULT:
             raise OracleCaseError(
-                f"{case_path.name}: case {cid!r} {fault}")
-        raise OracleCaseError(f"{case_path.name}: {fault}")
+                f"{case_path.name}: case {cid!r} {fault}", field="expected")
+        raise OracleCaseError(f"{case_path.name}: {fault}", field="expected")
     out: list[dict] = []
     for e in raw:
         field = e["field"]
@@ -385,7 +395,8 @@ def _parse_mutations(case_path: Path, cid: str, raw) -> list[dict]:
         return []
     if not isinstance(raw, list):
         raise OracleCaseError(
-            f"{case_path.name}: case {cid!r}: `mutations` must be a list")
+            f"{case_path.name}: case {cid!r}: `mutations` must be a list",
+            field="mutations")
     out: list[dict] = []
     for i, m in enumerate(raw):
         if isinstance(m, str):  # shorthand: - auth_algo  (kind defaults change)
@@ -394,12 +405,13 @@ def _parse_mutations(case_path: Path, cid: str, raw) -> list[dict]:
                 or not m["field"]:
             raise OracleCaseError(
                 f"{case_path.name}: case {cid!r}: mutation #{i} needs a "
-                f"`field` name")
+                f"`field` name", field="mutations")
         kind = m.get("kind") or "change"
         if kind not in MUTATION_KINDS:
             raise OracleCaseError(
                 f"{case_path.name}: case {cid!r}: mutation {m['field']!r} has "
-                f"unknown kind {kind!r} (have {MUTATION_KINDS})")
+                f"unknown kind {kind!r} (have {MUTATION_KINDS})",
+                field="mutations")
         out.append({"field": m["field"], "kind": kind})
     return out
 
@@ -422,7 +434,7 @@ def _parse_update_map(case_path: Path, cid: str, group: str, raw,
             f"mapping {repr({'green_up': ['H-xxx'], 'red_up': ['H-yyy']})} "
             f"of hypothesis ids (#126: cross-candidate separation — the "
             f"case's outcome must functionally depend on the referenced "
-            f"hypothesis's model)")
+            f"hypothesis's model)", field="update_map")
     green = raw.get("green_up")
     red = raw.get("red_up") or []
     if not isinstance(green, list) or not green:
@@ -431,11 +443,11 @@ def _parse_update_map(case_path: Path, cid: str, group: str, raw,
             f"non-empty list of hypothesis ids — nothing rises if green "
             f"(#126: an outcome invariant across the hypothesis space — "
             f"the HTTP-200 'environment predicate' class — discriminates "
-            f"nothing upward)")
+            f"nothing upward)", field="update_map")
     if not isinstance(red, list):
         raise OracleCaseError(
             f"{case_path.name}: case {cid!r}: update_map.red_up must be a "
-            f"list of hypothesis ids")
+            f"list of hypothesis ids", field="update_map")
     for direction, ids in (("green_up", green), ("red_up", red)):
         for h in ids:
             hid = str(h).strip()
@@ -444,14 +456,15 @@ def _parse_update_map(case_path: Path, cid: str, group: str, raw,
                     f"{case_path.name}: case {cid!r}: update_map."
                     f"{direction}: {hid!r} is not an OPEN hypothesis in the "
                     f"store (missing, terminal, or malformed) — update_map "
-                    f"moves live candidates only (#126)")
+                    f"moves live candidates only (#126)", field="update_map")
             if open_groups[hid] != group:
                 raise OracleCaseError(
                     f"{case_path.name}: case {cid!r}: update_map."
                     f"{direction}: {hid!r} competes in "
                     f"{open_groups[hid]!r}, not the linked competitor group "
                     f"{group!r} — update_map ids must sit inside "
-                    f"hypothesis_ref's own competitor group (#126)")
+                    f"hypothesis_ref's own competitor group (#126)",
+                    field="update_map")
     return {"green_up": [str(h).strip() for h in green],
             "red_up": [str(h).strip() for h in red]}
 
@@ -471,7 +484,7 @@ def _retired_or_stages(p: Path, cid: str, doc: dict) -> tuple[bool, dict]:
         raise OracleCaseError(
             f"{p.name}: case {cid!r}: `stages` must be a mapping of stage "
             f"name -> expected value (the runner diffs the client's stages "
-            f"dict stage-wise, #146)")
+            f"dict stage-wise, #146)", field="stages")
     return False, dict(stages or {})
 
 
@@ -486,7 +499,8 @@ def _require_hypothesis_ref(p: Path, cid: str, raw) -> str:
             f"{p.name}: case {cid!r}: `hypothesis_ref` is required and "
             f"must name a hypothesis id in the store (#126: without the "
             f"linkage a case that discriminates nothing in the live "
-            f"competitor field passes for a real experiment)")
+            f"competitor field passes for a real experiment)",
+            field="hypothesis_ref")
     return hyp_ref
 
 
@@ -502,7 +516,7 @@ def _get_linked_hypothesis(hypotheses, p: Path, cid: str,
             f"{p.name}: case {cid!r}: hypothesis_ref {hyp_ref!r} does "
             f"not resolve to a readable hypothesis in "
             f"{hypotheses.root} ({exc}) — a link to nothing links "
-            f"nothing (#126)") from None
+            f"nothing (#126)", field="hypothesis_ref") from None
 
 
 def _require_fresh_signature(p: Path, cid: str,
@@ -523,6 +537,130 @@ def _require_fresh_signature(p: Path, cid: str,
     seen_signatures[sig] = cid
 
 
+class _CaseSet:
+    """The set-level context one case file is admitted against: the
+    hypothesis-store faces the update_map and live-group lints read, and
+    the action signatures earlier files of the set already claimed."""
+
+    def __init__(self, cases_dir: Path) -> None:
+        self.cases_dir = cases_dir
+        self.ws = cases_dir.parent.parent  # <ws>/oracle/cases -> ws root (#126)
+        from hypothesis_store import HypothesisStore
+        self.hypotheses = HypothesisStore(self.ws / "hypotheses")
+        # #126 amendment: OPEN-hypothesis faces for the update_map + live-group
+        # lints (id -> competitor_group, and the per-group OPEN census).
+        self.open_groups: dict[str, str] = {
+            h.id: h.competitor_group for h in self.hypotheses.list_open()}
+        self.open_in_group: dict[str, int] = {}
+        for g in self.open_groups.values():
+            self.open_in_group[g] = self.open_in_group.get(g, 0) + 1
+        self.seen_signatures: dict[tuple[str, str], str] = {}
+
+
+def _read_case(p: Path) -> tuple[dict, str]:
+    """Parse one case file: (document, case id). The id falls back to the
+    file stem."""
+    doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+    if not isinstance(doc, dict):
+        raise OracleCaseError(f"{p.name}: case file is not a mapping")
+    cid = str(doc.get("id") or p.stem).strip()
+    if not cid:
+        raise OracleCaseError(f"{p.name}: case id is empty", field="id")
+    return doc, cid
+
+
+def _admit_case(ctx: _CaseSet, p: Path, doc: dict, cid: str) -> dict | None:
+    """Lint one parsed case against the set context and return its runnable
+    form; None when the case leaves the acceptance net (retired, or a valid
+    vague root). Raises OracleCaseError on the first refusal. Claims the
+    case's action signature in ``ctx`` — the one set-level check."""
+    # #146: retired skips BEFORE the lints; stages pins expected
+    # stage values for the stage-diff forensics.
+    skip_retired, stages_expected = _retired_or_stages(p, cid, doc)
+    if skip_retired:
+        return None
+    # #301: the semantic admission gate — a valid root face
+    # (decomposition/bounce) skips the case before the structural
+    # lints the way a #146 retirement does; a counterfeit-coin clause
+    # or an invalid tree is refused with the rejection class NAMED.
+    import oracle_case_admission as oca
+    skip, refusal = oca.pre_gate(doc, ctx.cases_dir)
+    if refusal:
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: {refusal}")
+    if skip:
+        return None
+    expected = _parse_expected(ctx.ws, p, cid, doc.get("expected"))
+    mutations = _parse_mutations(p, cid, doc.get("mutations"))
+    # #126: mutations are an admission requirement now — a case that
+    # cannot go red under a deliberately wrong implementation is a
+    # rubber stamp (the --mutation flag made mandatory at load).
+    if not mutations:
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: `mutations` is required non-empty "
+            f"at admission (#126) — a case that cannot go red under a "
+            f"deliberately wrong implementation is a rubber stamp",
+            field="mutations")
+    # #126: case -> hypothesis linkage (trivial-oracle class refused).
+    hyp_ref = _require_hypothesis_ref(p, cid, doc.get("hypothesis_ref"))
+    hyp = _get_linked_hypothesis(ctx.hypotheses, p, cid, hyp_ref)
+    # #126 amendment: cross-candidate separation. The HTTP-200 specimen
+    # ("success" = server liveness — a property of the ENVIRONMENT,
+    # invariant across the hypothesis space) cannot write a valid
+    # update_map and is refused here.
+    update_map = _parse_update_map(p, cid, hyp.competitor_group,
+                                   doc.get("update_map"), ctx.open_groups)
+    # #126 amendment: a live competition to discriminate. A group with
+    # <2 OPEN members is a self-filed singleton — vacuous by width.
+    n_live = ctx.open_in_group.get(hyp.competitor_group, 0)
+    if n_live < 2:
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: competitor group "
+            f"{hyp.competitor_group!r} holds {n_live} OPEN "
+            f"hypotheses — a live competition needs >=2 candidates to "
+            f"discriminate; a self-filed singleton vacuous hypothesis "
+            f"is refused (#126)", field="hypothesis_ref")
+    # #126 (E3): the observation channel is declared, never inferred
+    # from tool names — the tool-family vocabulary cannot classify
+    # "frida stalker trace" and "ida server trace" as one channel.
+    channel = str(doc.get("channel") or "").strip()
+    if not channel:
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: `channel` is required (#126: the "
+            f"observation channel is declared, not inferred)",
+            field="channel")
+    # #126: action-signature dedup. Same signature = one case; a second
+    # case with an identical signature adds no marginal discriminative
+    # power and is refused. Different channel or different
+    # competitor_group = different signature (cross-channel divergence
+    # is itself an observation).
+    sig = action_signature(channel, hyp.competitor_group)
+    _require_fresh_signature(p, cid, sig, ctx.seen_signatures)
+    # #301: the semantic admission lint — the quantified verification
+    # contract (artifact, artifact_kind, criterion, threshold,
+    # feeds_decision); the three counterfeit-coin classes
+    # (category-existence / comprehension-claim / activity-claim) are
+    # refused with the class named. Runs LAST: the #108/#126
+    # structural refusals keep their priority.
+    violations = oca.lint_case(doc)
+    if violations:
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: " + " | ".join(violations),
+            field="verification")
+    return {
+        "id": cid,
+        "channel": channel,
+        "hypothesis_ref": hyp_ref,
+        "competitor_group": hyp.competitor_group,
+        "update_map": update_map,
+        "params": doc.get("params") or {},
+        "expected_stages": dict(stages_expected or {}),
+        "expected": expected,
+        "mutations": mutations,
+        "verification": dict(doc.get("verification") or {}),
+    }
+
+
 def load_cases(cases_dir) -> list[dict]:
     """Load + lint every ``*.yaml`` case. Raises OracleCaseError on the
     first refusal (#108 half C presence lint + #126 admission integrity:
@@ -530,109 +668,100 @@ def load_cases(cases_dir) -> list[dict]:
     dedup, mutations required, cross-candidate separation — a non-vacuous
     update_map over OPEN hypotheses inside a live >=2-OPEN competitor
     group) — the case set is blessed as a whole or not at all."""
-    cases_dir = Path(cases_dir)
-    ws = cases_dir.parent.parent  # <ws>/oracle/cases -> ws root (#126)
-    from hypothesis_store import HypothesisStore
-    hypotheses = HypothesisStore(ws / "hypotheses")
-    # #126 amendment: OPEN-hypothesis faces for the update_map + live-group
-    # lints (id -> competitor_group, and the per-group OPEN census).
-    open_groups: dict[str, str] = {h.id: h.competitor_group
-                                   for h in hypotheses.list_open()}
-    open_in_group: dict[str, int] = {}
-    for g in open_groups.values():
-        open_in_group[g] = open_in_group.get(g, 0) + 1
+    ctx = _CaseSet(Path(cases_dir))
     cases: list[dict] = []
-    seen_signatures: dict[tuple[str, str], str] = {}
-    for p in sorted(cases_dir.glob("*.yaml")):
-        doc = yaml.safe_load(p.read_text(encoding="utf-8"))
-        if not isinstance(doc, dict):
-            raise OracleCaseError(f"{p.name}: case file is not a mapping")
-        cid = str(doc.get("id") or p.stem).strip()
-        if not cid:
-            raise OracleCaseError(f"{p.name}: case id is empty")
-        # #146: retired skips BEFORE the lints; stages pins expected
-        # stage values for the stage-diff forensics.
-        skip_retired, stages_expected = _retired_or_stages(p, cid, doc)
-        if skip_retired:
-            continue
-        # #301: the semantic admission gate — a valid root face
-        # (decomposition/bounce) skips the case before the structural
-        # lints the way a #146 retirement does; a counterfeit-coin clause
-        # or an invalid tree is refused with the rejection class NAMED.
-        import oracle_case_admission as oca
-        skip, refusal = oca.pre_gate(doc, cases_dir)
-        if refusal:
-            raise OracleCaseError(
-                f"{p.name}: case {cid!r}: {refusal}")
-        if skip:
-            continue
-        expected = _parse_expected(ws, p, cid, doc.get("expected"))
-        mutations = _parse_mutations(p, cid, doc.get("mutations"))
-        # #126: mutations are an admission requirement now — a case that
-        # cannot go red under a deliberately wrong implementation is a
-        # rubber stamp (the --mutation flag made mandatory at load).
-        if not mutations:
-            raise OracleCaseError(
-                f"{p.name}: case {cid!r}: `mutations` is required non-empty "
-                f"at admission (#126) — a case that cannot go red under a "
-                f"deliberately wrong implementation is a rubber stamp")
-        # #126: case -> hypothesis linkage (trivial-oracle class refused).
-        hyp_ref = _require_hypothesis_ref(p, cid, doc.get("hypothesis_ref"))
-        hyp = _get_linked_hypothesis(hypotheses, p, cid, hyp_ref)
-        # #126 amendment: cross-candidate separation. The HTTP-200 specimen
-        # ("success" = server liveness — a property of the ENVIRONMENT,
-        # invariant across the hypothesis space) cannot write a valid
-        # update_map and is refused here.
-        update_map = _parse_update_map(p, cid, hyp.competitor_group,
-                                       doc.get("update_map"), open_groups)
-        # #126 amendment: a live competition to discriminate. A group with
-        # <2 OPEN members is a self-filed singleton — vacuous by width.
-        n_live = open_in_group.get(hyp.competitor_group, 0)
-        if n_live < 2:
-            raise OracleCaseError(
-                f"{p.name}: case {cid!r}: competitor group "
-                f"{hyp.competitor_group!r} holds {n_live} OPEN "
-                f"hypotheses — a live competition needs >=2 candidates to "
-                f"discriminate; a self-filed singleton vacuous hypothesis "
-                f"is refused (#126)")
-        # #126 (E3): the observation channel is declared, never inferred
-        # from tool names — the tool-family vocabulary cannot classify
-        # "frida stalker trace" and "ida server trace" as one channel.
-        channel = str(doc.get("channel") or "").strip()
-        if not channel:
-            raise OracleCaseError(
-                f"{p.name}: case {cid!r}: `channel` is required (#126: the "
-                f"observation channel is declared, not inferred)")
-        # #126: action-signature dedup. Same signature = one case; a second
-        # case with an identical signature adds no marginal discriminative
-        # power and is refused. Different channel or different
-        # competitor_group = different signature (cross-channel divergence
-        # is itself an observation).
-        sig = action_signature(channel, hyp.competitor_group)
-        _require_fresh_signature(p, cid, sig, seen_signatures)
-        # #301: the semantic admission lint — the quantified verification
-        # contract (artifact, artifact_kind, criterion, threshold,
-        # feeds_decision); the three counterfeit-coin classes
-        # (category-existence / comprehension-claim / activity-claim) are
-        # refused with the class named. Runs LAST: the #108/#126
-        # structural refusals keep their priority.
-        violations = oca.lint_case(doc)
-        if violations:
-            raise OracleCaseError(
-                f"{p.name}: case {cid!r}: " + " | ".join(violations))
-        cases.append({
-            "id": cid,
-            "channel": channel,
-            "hypothesis_ref": hyp_ref,
-            "competitor_group": hyp.competitor_group,
-            "update_map": update_map,
-            "params": doc.get("params") or {},
-            "expected_stages": dict(stages_expected or {}),
-            "expected": expected,
-            "mutations": mutations,
-            "verification": dict(doc.get("verification") or {}),
-        })
+    for p in sorted(ctx.cases_dir.glob("*.yaml")):
+        doc, cid = _read_case(p)
+        case = _admit_case(ctx, p, doc, cid)
+        if case is not None:
+            cases.append(case)
     return cases
+
+
+# one-line corrective hint per offending case-document key
+_CASE_FIX_BY_FIELD = {
+    "expected": "write `expected` as a non-empty list of entries "
+                "{field, value, evidence_refs: [<fact ids>]} (or "
+                "{field, value, pending-observation: true})",
+    "mutations": "write `mutations` as a non-empty list of {field, kind} "
+                 "entries, kind one of " + "|".join(MUTATION_KINDS),
+    "update_map": "write `update_map` as {green_up: [<open hypothesis ids>], "
+                  "red_up: [...]} inside hypothesis_ref's competitor group",
+    "hypothesis_ref": "set `hypothesis_ref` to an existing hypothesis id "
+                      "whose competitor group holds at least two open "
+                      "hypotheses",
+    "channel": "declare `channel`, the observation channel the case "
+               "realizes",
+    "stages": "write `stages` as a mapping of stage name to expected value",
+    "id": "give the case a non-empty `id`, or drop the key to use the "
+          "file name",
+    "verification": "add a `verification` block: artifact, artifact_kind, "
+                    "criterion, threshold, feeds_decision",
+}
+_CASE_FIX_DEFAULT = ("correct the case file as the error names, or retire "
+                     "the case (status: retired)")
+_CASE_FIX_UNREADABLE = "repair the case file so it parses as a YAML mapping"
+
+
+def case_errors(cases_dir) -> list[dict]:
+    """Every problem in the case set, each ``*.yaml`` file checked on its
+    own — the per-file view ``load_cases`` cannot give, since it refuses
+    the whole set at the first bad file. One dict per problem: ``file``,
+    ``case`` (the case id, None when the file yields none), ``error`` (the
+    refusal message as ``load_cases`` would raise it), ``field`` (the
+    offending case-document key, None when no single key is at fault) and
+    ``fix`` (a one-line corrective hint).
+
+    The per-file admission and the set-level checks are ``load_cases``'s
+    own, in the same file order. A pure read: a missing directory or a
+    clean set returns []."""
+    cases_dir = Path(cases_dir)
+    if not cases_dir.is_dir():
+        return []
+    ctx = _CaseSet(cases_dir)
+    problems: list[dict] = []
+    for p in sorted(cases_dir.glob("*.yaml")):
+        cid = None
+        try:
+            doc, cid = _read_case(p)
+            _admit_case(ctx, p, doc, cid)
+        except OracleCaseError as exc:
+            problems.append({
+                "file": p.name, "case": cid, "error": str(exc),
+                "field": exc.field,
+                "fix": _CASE_FIX_BY_FIELD.get(exc.field, _CASE_FIX_DEFAULT)})
+        except (yaml.YAMLError, UnicodeDecodeError, OSError) as exc:
+            detail = " ".join(str(exc).split())
+            problems.append({
+                "file": p.name, "case": None,
+                "error": (f"{p.name}: case file unreadable "
+                          f"({type(exc).__name__}: {detail})"),
+                "field": None, "fix": _CASE_FIX_UNREADABLE})
+    return problems
+
+
+# case-document keys that make a file an attempt at a runnable case (the
+# arming fields). A file declaring none of them is a link stub — id plus
+# target_pq, read by the posterior legs and the failure gate, never run.
+CASE_RUNNER_KEYS = ("channel", "hypothesis_ref", "update_map", "expected",
+                    "mutations")
+
+
+def holds_runner_cases(cases_dir) -> bool:
+    """True when the directory holds at least one ``*.yaml`` file that is
+    not a link stub: a document declaring a runner case key, or a file that
+    does not even read as a mapping. A directory of link stubs only, or no
+    files at all, is False — nothing in it is an attempt at a runnable
+    case. A pure read."""
+    for p in sorted(Path(cases_dir).glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, UnicodeDecodeError, OSError):
+            return True
+        if not isinstance(doc, dict) or any(
+                key in doc for key in CASE_RUNNER_KEYS):
+            return True
+    return False
 
 
 def retired_case_ids(cases_dir) -> list[str]:

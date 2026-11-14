@@ -201,6 +201,7 @@ EMIT_ACTIONS = [
     "constitution_injected",  # issue 434 SessionStart constitution injection (once per session)
     "context_manifest",  # issue 293 dispatch-assembly context inventory (cards/plan/siblings/providers)
     "converge",
+    "credit_unattributable",  # a terminal claim whose dispatch was attempted but never committed: its credit can never be banked (claim + reason + trace sources in the detail)
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
     "decision_snapshot",  # #818 batch-1: decide() per-verdict input snapshot
@@ -291,6 +292,7 @@ EMIT_ACTIONS = [
     "operator_observation",  # issue 434 UserPromptSubmit operator-intent observation row (pure recording)
     "operator_sanction_deferral",  # the completion-gate operator CLI's human-only deferral seal face (loud, mint-sanction)
     "oracle_cadence_warn",  # #132 settlement-cadence loud faces: broken client (all-red) / missing registered client / case-set refusal / runner failure — never a silent skip
+    "oracle_case_error",  # one oracle case file the runner refuses: file, case id, offending field and fix hint in the detail (one row per distinct error fingerprint)
     "oracle_probe_t1",    # issue 429 §1 T1 ladder rung: mid-round oracle probe batch fired on a long round (verification_ladder)
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)

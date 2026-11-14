@@ -711,28 +711,49 @@ def _settle_case_legs(ws: Path, banked: list[str],
     return out
 
 
-def run(ws: Path, *, dry_run: bool = False) -> dict:
-    """Assemble + settle one pass. Telemetry posture: any failure inside
-    degrades to an error field, never a crash (the tick must not die).
-    dry_run assembles and grades only — no ledger rows, no Q-cell bank.
+#: why an uncredited claim cannot be credited: a dispatch was attempted
+#: (persisted traces exist) and none ever committed, so no ledger row can
+#: key the credit to a dispatch
+UNATTRIBUTABLE_REASON = "dispatch-never-committed"
 
-    Both legs ride the pass: the round-credit settlement (+ its Q-cell
-    bank and case-posterior observations) for the terminal-claim set, and
-    the episode-tier amendment. The tier leg keys on settled task
-    rollouts, not on the round-credit set, so it runs even when no
-    terminal claim is currently dispatchable-visible."""
-    claims = terminal_claims(ws)
-    # #800 R2: the credit pass stays CLAIM-grained (the #433 ladder's
-    # artifact attribution joins the facts' creator=C-NN field; the
-    # bridge's family map is claim-keyed), but a terminal claim with
-    # NO dispatch-ledger row is a pre-#800 workspace — unsupported
-    # (no-backcompat ruling 2026-09-01): loud gap, excluded from the
-    # pass. The REAL dispatch id enters at the q-cell bank seam
-    # (scalar._bank_q_cell_credit resolves it from the ledger).
-    dispatches = []
-    off_ledger = 0
+
+def _record_unattributable(ws: Path, uncredited: dict[str, list[str]]) -> None:
+    """One durable ``credit_unattributable`` event per (claim, reason), however
+    many settlement passes see the condition: ``kunglao_log.emit_once`` keeps
+    the emitted keys in a workspace state file, which — unlike a scan of the
+    day logs — survives log retention and costs no log read per pass."""
+    from kunglao_log import emit_once
+
+    for cid, sources in uncredited.items():
+        emit_once(ws, "orchestrator", "credit_unattributable",
+                  f"{cid}|{UNATTRIBUTABLE_REASON}", claim=cid,
+                  detail=json.dumps(
+                      {"claim": cid, "reason": UNATTRIBUTABLE_REASON,
+                       "sources": sources}, sort_keys=True))
+
+
+def _classify_terminal_claims(
+        ws: Path, claims: list[str],
+) -> tuple[list[dict], list[str], dict[str, list[str]]]:
+    """Split the terminal claims into ``(dispatches, not_dispatched,
+    uncredited)``.
+
+    The credit pass stays CLAIM-grained (the ladder's artifact attribution
+    joins the facts' creator=C-NN field; the bridge's family map is
+    claim-keyed). A terminal claim joins it only through a committed
+    dispatch-ledger row; the REAL dispatch id enters at the q-cell bank
+    seam (scalar._bank_q_cell_credit resolves it from the ledger). A claim
+    without one is classified from the persisted traces
+    (claims_store.dispatch_attempts), never guessed: no attempt ever
+    touched it -> ``not_dispatched``; an attempt without a commit ->
+    ``uncredited``, mapped to the trace kinds that show the attempt. A
+    claim whose ledger read failed is left out of all three (one warn) and
+    retried by the next pass."""
+    dispatches: list[dict] = []
+    not_dispatched: list[str] = []
+    uncredited: dict[str, list[str]] = {}
+    attempts = None
     for cid in claims:
-        _led = None
         try:
             import claims_store as _cstore8
             _led = _cstore8.latest_committed_dispatch(ws, cid)
@@ -740,15 +761,41 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             warn("settle_round_credit.dispatch_id",
                  f"ledger read failed for {cid} "
                  f"({type(_did_exc).__name__}: {_did_exc})")
-        if _led is None:
-            off_ledger += 1
-            warn("settle_round_credit.off_ledger",
-                 f"terminal claim {cid} has no dispatch-ledger row "
-                 f"(pre-#800 workspace — unsupported per the "
-                 f"no-backcompat ruling); banking skipped")
             continue
-        dispatches.append({"dispatch_id": cid,
-                           "round": len(dispatches) + 1})
+        if _led is not None:
+            dispatches.append({"dispatch_id": cid,
+                               "round": len(dispatches) + 1})
+            continue
+        if attempts is None:
+            attempts = _cstore8.dispatch_attempts(ws)
+        if cid in attempts:
+            uncredited[cid] = attempts[cid]
+        else:
+            not_dispatched.append(cid)
+    return dispatches, not_dispatched, uncredited
+
+
+def run(ws: Path, *, dry_run: bool = False) -> dict:
+    """Assemble + settle one pass. Telemetry posture: any failure inside
+    degrades to an error field, never a crash (the tick must not die).
+    dry_run assembles and grades only — no ledger rows, no Q-cell bank,
+    no events.
+
+    Both legs ride the pass: the round-credit settlement (+ its Q-cell
+    bank and case-posterior observations) for the terminal-claim set, and
+    the episode-tier amendment. The tier leg keys on settled task
+    rollouts, not on the round-credit set, so it runs even when no
+    terminal claim is currently dispatchable-visible.
+
+    A terminal claim without a committed dispatch is reported, never
+    silently skipped: ``not_dispatched`` lists the claims no dispatch
+    attempt ever touched (nothing is owed); ``uncredited`` lists those
+    with an attempt but no commit, whose credit can never be banked (one
+    ``credit_unattributable`` event each, once)."""
+    dispatches, not_dispatched, uncredited = _classify_terminal_claims(
+        ws, terminal_claims(ws))
+    if uncredited and not dry_run:
+        _record_unattributable(ws, uncredited)
     # issue-678 T5: the armed-case count rides EVERY pass (dry included)
     # — zero armed cases is the silent gap that kept
     # runs/posteriors.yaml from ever existing, now loud
@@ -779,10 +826,15 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             out.update(_settle_case_legs(ws, banked, amended))
     else:
         out = {"settled": 0, "rounds": 0,
-               "reason": "no terminal claims - nothing to settle"}
+               "reason": ("no terminal claim has a committed dispatch - "
+                          "nothing to settle"
+                          if not_dispatched or uncredited else
+                          "no terminal claims - nothing to settle")}
     out["cases_armed"] = len(armed)
-    if off_ledger:
-        out["off_ledger"] = off_ledger
+    if not_dispatched:
+        out["not_dispatched"] = not_dispatched
+    if uncredited:
+        out["uncredited"] = list(uncredited)
     if dry_run:
         out["would_amend_tiers"] = _pending_tier_rows(ws)
     else:
