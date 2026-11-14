@@ -60,7 +60,7 @@ files:
   scripts/check_global_rule_subset.py: 1
   scripts/claim_expiry.py: 2
   scripts/claim_granularity.py: 12
-  scripts/claims_store.py: 22
+  scripts/claims_store.py: 21
   scripts/claims_view.py: 43
   scripts/claudemd_frame.py: 8
   scripts/completion_gate.py: 26
@@ -290,7 +290,7 @@ files:
   scripts/runtime_facts.py: 3
   scripts/scalar_settlement.py: 2
   scripts/script_harvest.py: 5
-  scripts/settle_round_credit.py: 9
+  scripts/settle_round_credit.py: 5
   scripts/shell_defaults.py: 4
   scripts/signals_stream.py: 3
   scripts/silent_except_lint.py: 1

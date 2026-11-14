@@ -3,6 +3,11 @@
 The next eligible Stop is the recovery consumer. The intent is a checkpoint,
 not a transaction across the existing settlement writers. Their own dedupe
 keys own partial-write recovery; completion requires reading their results.
+
+A terminal claim whose credit can never be banked (a dispatch was attempted,
+none committed) is a permanent condition, not a retryable fault: completion
+is still recorded, and the claims are listed under ``uncredited`` in the
+terminal record and the settlement span.
 """
 from __future__ import annotations
 
@@ -160,6 +165,7 @@ def settle_stop(ws) -> dict:
             if any(value for key, value in credit.items()
                    if key == "error" or key.endswith("_error")):
                 raise RuntimeError("round credit settlement failed")
+            uncredited = list(credit.get("uncredited") or [])
             _require_learning_seals(ws, bound)
             _require_dispatch_credit(ws, bound)
             if ledger.pending_settlement(ws):
@@ -169,9 +175,10 @@ def settle_stop(ws) -> dict:
                 raise RuntimeError("mission episode is absent")
             episode_pool.es.read_episode_file(episode)
             episode_settle.derived_views(ws)
-            doc.update(status="completed", episode=str(episode.relative_to(ws)))
+            doc.update(status="completed", episode=str(episode.relative_to(ws)),
+                       uncredited=uncredited)
             _checkpoint(path, doc)
-            _span(ws, bound, "settlement", "completed")
+            _span(ws, bound, "settlement", "completed", uncredited)
             _span(ws, bound, "mission_terminal", "completed")
             return {"status": "completed", **result}
         except Exception as exc:
@@ -275,8 +282,11 @@ def inspect(ws) -> dict:
             "spans": spans}
 
 
-def _span(ws: Path, bound: dict, operation: str, state: str) -> None:
-    """Best-effort trace of an actual call; never certifies settlement."""
+def _span(ws: Path, bound: dict, operation: str, state: str,
+          uncredited: list | None = None) -> None:
+    """Best-effort trace of an actual call; never certifies settlement.
+    A non-empty ``uncredited`` rides the row so the trace names the claims
+    whose credit could not be attributed."""
     import time  # noqa: PLC0415
     from kunglao_log import warn  # noqa: PLC0415
 
@@ -289,6 +299,8 @@ def _span(ws: Path, bound: dict, operation: str, state: str) -> None:
                parent_id),
            "role": "orchestrator", "gen_ai.operation.name": operation,
            "event": state, "time_ns": time.time_ns(), "usage": "unknown"}
+    if uncredited:
+        row["uncredited"] = list(uncredited)
     try:
         with (ws / "runs" / "face-spans.jsonl").open("a") as stream:
             stream.write(json.dumps(row, sort_keys=True) + "\n")

@@ -61,7 +61,7 @@ files:
   scripts/claim_expiry.py:
     r1: 2
   scripts/claims_store.py:
-    r1: 13
+    r1: 12
   scripts/claims_view.py:
     r1: 26
   scripts/claudemd_frame.py:
@@ -497,7 +497,7 @@ files:
   scripts/script_harvest.py:
     r1: 4
   scripts/settle_round_credit.py:
-    r1: 5
+    r1: 3
   scripts/shell_defaults.py:
     r1: 1
   scripts/slot_monitor.py:

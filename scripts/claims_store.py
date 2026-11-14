@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess  # noqa: F401 — (pid liveness uses os.kill; kept for typing parity)
 import sys
 import uuid
@@ -77,6 +78,33 @@ DISPATCH_LEDGER_SCHEMA = "dispatch-ledger/1"
 #: production 392-warn lesson).
 MISSING_ROLLOUT_REPEAT_LIMIT = 3
 MISSING_ROLLOUT_AUDIT_REL = Path("runs") / ".missing-rollout-audit.json"
+
+#: the legacy home of the q-cell observation rows (still present in
+#: workspaces that predate the consolidated experience ledger)
+LEGACY_Q_CELL_LOG_REL = Path("runs") / "q-cell-log.jsonl"
+_Q_CELL_STAMP = "q-cell-obs"
+
+#: the trace kinds ``dispatch_attempts`` reports, in report order
+DISPATCH_TRACE_KINDS = ("ledger", "register", "experience", "q_cell_log",
+                        "provenance")
+
+#: the shape of a claim id a trace row may name. Same family as
+#: incremental_reward._STASH_TOKEN_RE. A value outside this shape is a
+#: dirty row, not a claim id.
+_CLAIM_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def _claim_token(value) -> str | None:
+    """Return the claim id a trace row names, or None when the row carries
+    no usable id. Only a ``str`` scalar whose stripped text matches
+    ``_CLAIM_TOKEN_RE`` qualifies; every other shape (None, list, dict,
+    bool, int, a non-conforming string) is dropped rather than
+    stringified — a dirty row is skipped, never turned into a phantom
+    claim id."""
+    if not isinstance(value, str):
+        return None
+    token = value.strip()
+    return token if _CLAIM_TOKEN_RE.match(token) else None
 
 #: a journal older than this (or with a dead owner pid) is recovered
 RECOVERY_WINDOW_S = 120.0
@@ -431,15 +459,106 @@ def _audit_state_save(ws, state: dict) -> None:
 
 def latest_committed_dispatch(ws, claim: str) -> dict | None:
     """The last COMMITTED ledger row for the claim — the settlement
-    face's dispatch-id resolver. None = no ledger row (a pre-#800
-    workspace: unsupported per the no-backcompat ruling; the settle
-    face reports it as a loud off-ledger gap, never an alias)."""
+    face's dispatch-id resolver. None = no committed row: the settle
+    face classifies such a claim from the persisted dispatch traces
+    (``dispatch_attempts``) as never dispatched or uncredited, never
+    through an alias."""
     latest = None
     for row in _iter_ledger_rows(ws):
         if (row.get("state") == "committed"
                 and str(row.get("claim") or "") == str(claim)):
             latest = row
     return latest
+
+
+def _jsonl_dicts(path: Path) -> list:
+    """Every parseable object row of one JSONL file. An absent file reads
+    as empty; an unreadable one warns on stderr and reads as empty — a
+    trace reader never raises."""
+    if not path.is_file():
+        return []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"{path.name} read failed ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
+        return []
+    from kunglao_log import iter_jsonl
+    return [row for row in iter_jsonl(text.splitlines())
+            if isinstance(row, dict)]
+
+
+def _positive_count(value) -> bool:
+    try:
+        return int(value or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _register_dispatch_claims(ws) -> list:
+    """Ids of the claims whose register row carries ``dispatch_count`` > 0.
+    A failed register read warns on stderr and yields none — the other
+    traces still stand."""
+    try:
+        doc = _load_register_doc(ws)
+    except Exception as exc:  # noqa: BLE001 — trace reader, never the caller
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"register read failed for the dispatch-count trace "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
+        return []
+    claims = doc.get("claims") if isinstance(doc, dict) else None
+    return [c.get("id") for c in claims or []
+            if isinstance(c, dict) and _positive_count(c.get("dispatch_count"))]
+
+
+def _attempt_traces(ws):
+    """Yield ``(kind, claim)`` for every persisted trace of a dispatch
+    attempt, one pair per trace row."""
+    from rlvr import consolidated_ledger
+    for row in _iter_ledger_rows(ws):
+        yield "ledger", row.get("claim")
+    for claim in _register_dispatch_claims(ws):
+        yield "register", claim
+    for row in consolidated_ledger.read(ws, "experience",
+                                        schema_prefix=_Q_CELL_STAMP):
+        if row.get("source") == "dispatch":
+            yield "experience", row.get("claim")
+    for row in _jsonl_dicts(Path(ws) / LEGACY_Q_CELL_LOG_REL):
+        if (str(row.get("schema") or "").startswith(_Q_CELL_STAMP)
+                and row.get("source") == "dispatch"):
+            yield "q_cell_log", row.get("claim")
+    for row in _jsonl_dicts(Path(ws) / PROVENANCE_REL):
+        if row.get("event") in ("dispatch", "abort_dispatch"):
+            yield "provenance", row.get("claim")
+
+
+def dispatch_attempts(ws) -> dict:
+    """Claim id -> the trace kinds showing a dispatch of the claim was
+    attempted, for every claim with at least one. The union of five
+    persisted traces, because no single one survives every workspace
+    generation:
+
+      ledger      runs/dispatch-ledger.jsonl, a row of ANY state
+      register    claim-register.yaml ``dispatch_count`` > 0
+      experience  runs/experience.jsonl q-cell rows with source=dispatch
+      q_cell_log  runs/q-cell-log.jsonl, the legacy home of the same rows
+      provenance  runs/claims-provenance.jsonl, event dispatch/abort_dispatch
+
+    A committed dispatch is itself an attempt (ledger kind); a caller
+    that needs the attempted-but-uncommitted set excludes the claims
+    ``latest_committed_dispatch`` resolves. Kinds come back in
+    ``DISPATCH_TRACE_KINDS`` order. Tolerant: absent files read as empty,
+    a row whose claim is not a usable id (wrong shape or out-of-token
+    text) is skipped — never stringified into a phantom key — and a
+    failed register read leaves the other four traces standing."""
+    found: dict = {}
+    for kind, claim in _attempt_traces(ws):
+        cid = _claim_token(claim)
+        if cid:
+            found.setdefault(cid, set()).add(kind)
+    return {cid: [k for k in DISPATCH_TRACE_KINDS if k in kinds]
+            for cid, kinds in found.items()}
 
 
 def audit_missing_rollouts(ws) -> list:
