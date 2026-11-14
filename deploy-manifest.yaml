@@ -307,7 +307,7 @@ files:
   - src: scripts/claims_store.py
     dest: .claude/scripts/claims_store.py
     kind: scaffold
-    sha256: 6d1a3c790211511874c49b35e88b20689410739abe58793187c260f309325888
+    sha256: aa310f5a2741ee9a4686d0af9df9a88eab490cad57a04e77606a65b6137bbc89
   - src: scripts/claims_view.py
     dest: .claude/scripts/claims_view.py
     kind: scaffold

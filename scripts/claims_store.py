@@ -79,9 +79,6 @@ DISPATCH_LEDGER_SCHEMA = "dispatch-ledger/1"
 MISSING_ROLLOUT_REPEAT_LIMIT = 3
 MISSING_ROLLOUT_AUDIT_REL = Path("runs") / ".missing-rollout-audit.json"
 
-#: the legacy home of the q-cell observation rows (still present in
-#: workspaces that predate the consolidated experience ledger)
-LEGACY_Q_CELL_LOG_REL = Path("runs") / "q-cell-log.jsonl"
 _Q_CELL_STAMP = "q-cell-obs"
 
 #: the trace kinds ``dispatch_attempts`` reports, in report order
@@ -512,6 +509,26 @@ def _register_dispatch_claims(ws) -> list:
             if isinstance(c, dict) and _positive_count(c.get("dispatch_count"))]
 
 
+def _legacy_q_cell_rel() -> Path | None:
+    """The retired q-cell log's rel, taken from the migration registry —
+    the only sanctioned naming site for a retired rel. None when the
+    registry is unavailable (that trace is skipped; the other four
+    stand)."""
+    try:
+        from consolidate_ledgers import LEGACY_SOURCES
+    except Exception as exc:  # noqa: BLE001 — trace reader, never the caller
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"migration registry unavailable ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
+        return None
+    rels = LEGACY_SOURCES.get("experience") or {}
+    for rel, stamps in rels.items():
+        stamps = stamps if isinstance(stamps, (list, tuple)) else (stamps,)
+        if any(str(s).startswith(_Q_CELL_STAMP) for s in stamps):
+            return Path(str(rel))
+    return None
+
+
 def _attempt_traces(ws):
     """Yield ``(kind, claim)`` for every persisted trace of a dispatch
     attempt, one pair per trace row."""
@@ -524,10 +541,12 @@ def _attempt_traces(ws):
                                         schema_prefix=_Q_CELL_STAMP):
         if row.get("source") == "dispatch":
             yield "experience", row.get("claim")
-    for row in _jsonl_dicts(Path(ws) / LEGACY_Q_CELL_LOG_REL):
-        if (str(row.get("schema") or "").startswith(_Q_CELL_STAMP)
-                and row.get("source") == "dispatch"):
-            yield "q_cell_log", row.get("claim")
+    legacy_rel = _legacy_q_cell_rel()
+    if legacy_rel is not None:
+        for row in _jsonl_dicts(Path(ws) / legacy_rel):
+            if (str(row.get("schema") or "").startswith(_Q_CELL_STAMP)
+                    and row.get("source") == "dispatch"):
+                yield "q_cell_log", row.get("claim")
     for row in _jsonl_dicts(Path(ws) / PROVENANCE_REL):
         if row.get("event") in ("dispatch", "abort_dispatch"):
             yield "provenance", row.get("claim")
@@ -542,7 +561,7 @@ def dispatch_attempts(ws) -> dict:
       ledger      runs/dispatch-ledger.jsonl, a row of ANY state
       register    claim-register.yaml ``dispatch_count`` > 0
       experience  runs/experience.jsonl q-cell rows with source=dispatch
-      q_cell_log  runs/q-cell-log.jsonl, the legacy home of the same rows
+      q_cell_log  the retired q-cell log (named by the migration registry)
       provenance  runs/claims-provenance.jsonl, event dispatch/abort_dispatch
 
     A committed dispatch is itself an attempt (ledger kind); a caller
