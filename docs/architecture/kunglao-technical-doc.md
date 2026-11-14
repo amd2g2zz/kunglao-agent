@@ -132,7 +132,7 @@ sequenceDiagram
 | 计划闸            | `check_worker_plan`         | `plan`         | 再派发无 worker 亲写计划                      |
 | 粒度闸            | `check_claim_granularity`   | `granularity`  | ≥8 步或 ≥2 族各 ≥2 步                      |
 | 零输出断路器         | `check_zero_output_circuit` | `zerooutput`   | (tool,claim) 指纹重复零产出                  |
-| STALLED 补救     | `check_convergence_health`  | —（放行）          | rc=1 + `remedy: decompose`            |
+| STALLED/SPINNING 补救 | `check_convergence_health`  | —（放行）          | rc=1 或 rc=2 + `remedy: decompose`      |
 | verifier 通行    | lib_kunglao 单谓词             | —（放行）          | PROVEN claim 的 verifier 派发            |
 
 envelope v1：`{"kunglao_dispatch":{"version":1,"claim":"C-NN","tier":N,"tools":[...],"agent":"..."}}`；`method_family` 双面声明解析（`_mf432.declared_value`）；**咽喉点纪律（#432）**：该字面量只允许在 worker_budget_sinks（freeze-test 钉死，dispatch_gate 出现即红）。

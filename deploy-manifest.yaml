@@ -47,7 +47,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: d66fd0edca4a7361d1b2fa1bab9108b048b6a4fba32314962fab37597d0a5dc4
+    sha256: 80f0d42c10c9ce3994b5b0198dbfb207e72e6ed5d8cd2588cbf97dc33332fc3c
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -91,7 +91,7 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: 0f7ecc9e28ccda66c408c4e9ef1cb1771db7dd1376d889c2cd1f9ee9f2a54a68
+    sha256: 4b1bc95275317343bcc575150374876d29c06f33ebe110757258ad662be9d757
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: dd14c556d4af0753bb5fb3fa3ef7c3210dd4ae01cccf9a2b2b7b16ff09d24d18
+    sha256: 40035fbd8c24ee7ae0739be57f62a8a1a4eaa3476fb9e49beab78ffeb878bc9a
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -347,11 +347,11 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 77f841c224205fd4dacf35cecf45ceb3ca963f71b91fb72414cd115f86b22527
+    sha256: 7a530d70a154dd95c5d1192979ab169e48dbf66aa2554666ce505080e36fff7d
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
-    sha256: 125c1d381421c3ef7cd80f64ef40b408b2edaa056d31a1781ce0c982643302d2
+    sha256: 6f4ab346412f6d886dd738b6368e6ded84e2ea460a683d9348a7bff7c1912ace
   - src: scripts/cost_gate.py
     dest: .claude/scripts/cost_gate.py
     kind: scaffold
@@ -551,7 +551,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 53ac190a10c41e74f4727fe279655322b538193a1055808529b69c2c08c046f7
+    sha256: 3c7e13ad660bb745b99d3a19ef50ffd449f996725a88a9897f7bdcbf019b2a14
   - src: scripts/evidence_certify.py
     dest: .claude/scripts/evidence_certify.py
     kind: scaffold
@@ -751,7 +751,7 @@ files:
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
-    sha256: e284907ce887ae1c1e34f998ed665476ccd85127aaeb3971c035fc9b82d99e91
+    sha256: 1fa408ff652f8a1994920ee17342b5871a01405cbf5963f1e7802e538ba95f75
   - src: scripts/kunglao-record.py
     dest: .claude/scripts/kunglao-record.py
     kind: scaffold
@@ -1739,7 +1739,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 3eb70198360ddbda6b8424d40d37038891b78bd0e08c95ff925db70d82a929f3
+    sha256: c3818a29d5a7548b3e38e6c85be1891dd8a909bbcabab1be6109b9dc1b9e4cf5
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1799,7 +1799,7 @@ files:
   - src: references/contracts/convergence-loop.md
     dest: .claude/references/contracts/convergence-loop.md
     kind: asset
-    sha256: af3f712b4ae1816074e513d617bcf68ba644f862d40e8965b17b062d6bdd1c17
+    sha256: 3b13ca682f013bd365d64081678ba5416d3556957f312b8b593e0ff95cffc076
   - src: references/contracts/distill-pipeline.md
     dest: .claude/references/contracts/distill-pipeline.md
     kind: asset
@@ -2643,7 +2643,7 @@ files:
   - src: skills/kunglao-agent/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: b2da70fead3361f3ad0aea4611f39add144d55b1876780e21270fdf8c90da563
+    sha256: f1867b11f1212f923f1d1942c5f7583bd04c34101fb151c7ad7f55eef5fdc872
   - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
     kind: asset

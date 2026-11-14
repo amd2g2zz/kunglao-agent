@@ -155,7 +155,7 @@ def test_convergence_health(tmp: Path) -> None:
     v = ch.assess(ch._read_ledger(ws))
     check("ch.stalled", v.get("verdict") == "STALLED", str(v))
 
-    # SPINNING: facts grow 5+ while open_count held
+    # SPINNING: open_count flat for the 8-round SPINNING_FLATLINE
     for i in range(8):
         append("DISPATCH", 2, facts_total=10 + i)
     v = ch.assess(ch._read_ledger(ws))

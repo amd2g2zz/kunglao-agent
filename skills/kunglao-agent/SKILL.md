@@ -231,7 +231,7 @@ Four rules: (1) repair AT the failed layer N — jumping to another tool on a la
 
 ## Convergence health
 
-`uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd turn — HEALTHY/STALLED/SPINNING; `worker_budget.py` REJECTS dispatch while STALLED (exit 1) or SPINNING (exit 2).
+`uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd turn — HEALTHY/STALLED/SPINNING; `worker_budget.py` REJECTS dispatch while STALLED (exit 1) or SPINNING (exit 2) except the prescribed remedy dispatch (the verdict's `remedy` block: `dispatch_marker` + `mint_cmd`).
 
 **A failed attempt is not a negative result**: run `failure_analysis_gate.py <WORKSPACE> <C-NN>` before re-dispatch or NEGATIVE; `--lessons` aggregates closed-loop analyses into `references/lessons/`.
 

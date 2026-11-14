@@ -15,14 +15,17 @@ operator (issue-234 fan-out, merged as scripts/target_ladder.py); the
 
 ## What Changes
 
-1. **Invokable remedy reference (detector face)**: the STALLED verdict
-   JSON carries a `remedy` object (operator: decompose, the stuck claims,
-   the remedy-declared dispatch marker, the target-ladder mint command),
-   and the human action string carries the same literals. The recovery
-   protocol is never prose-only again. SPINNING (rc=2) keeps its
-   harder-stop semantics — out of scope per the issue.
-2. **Remedy exemption (gate face)**: at the rc=1 STALLED face ONLY,
-   `check_convergence_health` admits the gate's own prescribed remedy —
+1. **Invokable remedy reference (detector face)**: the STALLED and
+   SPINNING verdict JSON carries a `remedy` object (operator: decompose,
+   the stuck claims — the detector's stuck set —, the remedy-declared
+   dispatch marker, the target-ladder mint command), and the human action
+   string carries the same literals. The recovery protocol is never
+   prose-only. SPINNING is entered by the open_count flatline alone
+   (8+ rounds over open work); fact growth while open_count holds is
+   reported under `churn` as information only.
+2. **Remedy exemption (gate face)**: at the rc=1 STALLED face and the
+   rc=2 SPINNING face (same predicate, channels, depth cap and admit
+   telemetry), `check_convergence_health` admits the gate's own prescribed remedy —
    a dispatch whose prompt carries the `remedy: decompose` marker AND
    whose target intersects detector state (mirror of the #237 D2
    verifier pass-through, single-sourced in hooks/lib_kunglao):
@@ -35,8 +38,9 @@ operator (issue-234 fan-out, merged as scripts/target_ladder.py); the
    The exemption is fail-closed on every unresolvable input (no claim id,
    lib outage, detector state unresolvable, register unreadable); legacy
    1-arg callers keep the exact prior block behavior; every other gate in
-   the pre_check battery still applies to a remedy dispatch; SPINNING and
-   the rc=4 fail-open crash semantics are untouched.
+   the pre_check battery still applies to a remedy dispatch; the rc=4
+   fail-open crash semantics are untouched. With open claims but no
+   stuck claim there is no remedy target at either face.
 3. **Mechanical flatline break**: minting via the existing issue-234
    machinery (`scripts/target_ladder.py --mint`, `mint_sibling_claims`)
    registers OPEN sub-claims -> the next ledger entry changes open_count
@@ -48,8 +52,6 @@ operator (issue-234 fan-out, merged as scripts/target_ladder.py); the
 ## Out of Scope
 
 - The #203 anchor-backflow reformulate channel (owner routing pin).
-- SPINNING (rc=2) remedy routing / harder-stop semantics (separate
-  judgment per the issue).
 - The trajectory metric design (#129 owns loop-health) and the #241
   plan-granularity split face (`scripts/claim_granularity.py`, merged on
   its own branch, not yet in dev) — this change wires the MERGED #234

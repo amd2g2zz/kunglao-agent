@@ -14,15 +14,17 @@ test_stalled_remedy_full_cycle_249.py, slow tier):
   R2  the STALLED action string carries the same literals (marker + mint
       command); the issue-2 pins ("never dispatched" / "dispatched but flat")
       survive
-  G1  HEALTHY / NO_DATA / SPINNING output shapes are untouched (remedy is
-      STALLED-only; SPINNING keeps its harder-stop semantics, out of scope)
+  G1  HEALTHY / NO_DATA output shapes are untouched (the remedy block is
+      carried by the STALLED and SPINNING verdicts only; the SPINNING face
+      itself is pinned in test_spinning_remedy.py)
   R3  stalled_state() — the single state source the exemption face
       consumes — mirrors the verdict and is None (fail-closed) off-STALLED
   R4  the lib predicate's two narrow channels (remedy-declared stuck
       claim / minted OPEN sub-claim) + its fail-closed edges
   R5  worker_budget_core's rc=1 face admits ONLY the prescribed remedy
-      dispatch; SPINNING and crash faces are untouched; legacy 1-arg calls
-      keep the exact prior block behavior; lib outage is fail-closed
+      dispatch; the crash face is untouched; the rc=2 SPINNING face shares
+      the exemption; legacy 1-arg calls keep the exact prior block
+      behavior; lib outage is fail-closed
   R6  the sinks pre_check chain forwards the dispatch context to the
       health gate (the wiring the exemption rides)
 
@@ -122,7 +124,7 @@ class TestStalledRemedyReference:
         assert "never dispatched" in r["action"]
         assert "dispatched but flat" in r["action"]
 
-    def test_non_stalled_shapes_untouched(self):
+    def test_remedy_only_on_stalled_and_spinning(self):
         healthy = ch.assess([
             _snap(0, 3, ["C-1", "C-2", "C-3"], []),
             _snap(1, 2, ["C-1", "C-2"], []),
@@ -136,8 +138,8 @@ class TestStalledRemedyReference:
         spinning = ch.assess([_snap(i, 2, ["C-1"], ["C-1"])
                               for i in range(8)])
         assert spinning["verdict"] == "SPINNING"
-        assert "remedy" not in spinning, \
-            "SPINNING harder-stop semantics are out of scope (issue-249)"
+        assert spinning["remedy"]["dispatch_marker"] == MARKER, \
+            "SPINNING carries the same remedy block as STALLED"
 
 
 # =====================================================================
@@ -566,11 +568,18 @@ class TestCoreRc1Face:
         assert ok is False
         assert "diagnose before dispatching" in msg
 
-    def test_spinning_rc2_never_exempt(self, tmp_path, monkeypatch):
+    def test_spinning_rc2_admits_prescribed_remedy(
+            self, tmp_path, monkeypatch):
         ws = _healthy_ws(tmp_path)
-        _write_ledger(ws, _stalled_ledger())
+        _write_ledger(ws, [_snap(i, 1, ["C-1"], ["C-1"])
+                           for i in range(ch.SPINNING_FLATLINE)])
         monkeypatch.setattr(wbc, "_run_py", self._rc(2))
         payload, prompt = _dispatch_payload("C-1", marker=True)
+        ok, msg = wbc.check_convergence_health(
+            _paths_for(ws), "C-1", payload, prompt)
+        assert ok is True
+        assert "SPINNING" in msg
+        payload, prompt = _dispatch_payload("C-1", marker=False)
         ok, msg = wbc.check_convergence_health(
             _paths_for(ws), "C-1", payload, prompt)
         assert ok is False
