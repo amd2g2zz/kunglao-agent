@@ -658,6 +658,10 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     dispatch_ids = [str(d.get("dispatch_id") or "")
                     for d in (dispatches or [])]
     artifacts = backfill_artifact_creators(artifacts, dispatch_ids)
+    # the creating dispatch per fact — the harness stamp, authoritative
+    # at the bank seam; a fact without it keeps the legacy claim-latest
+    # fallback and names the degradation on its credit row
+    producer_of = _producer_map(artifacts)
     doc = round_credit(dispatches, artifacts, waste)
     settled_n = 0
     banked: list[str] = []
@@ -717,10 +721,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
         # face (never the banked reward) and the budget-overrun audit
         # trail ride the settlement only when the dispatch carried the
         # inputs — legacy rows stay byte-identical.
-        if "r_sorted" in row:
-            settlement["r_sorted"] = row["r_sorted"]
-        if "budget_overrun" in row:
-            settlement["budget_overrun"] = row["budget_overrun"]
+        _settlement_seams(settlement, row, producer_of)
         prior_late = [str(x) for x in (prior_st.get("late_cited") or [])]
         late_cited = prior_late + [
             aid for aid in row["credited"]
@@ -741,7 +742,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             # observation log has no retraction face, so re-banking would
             # double-count the round.
             if not (existing and existing.get("settlement") is not None):
-                bank = _bank_q_cell_credit(ws, row)
+                bank = _bank_q_cell_credit(ws, row, producer_of)
                 # #718: the same first-settlement tick banks the L1
                 # rollout return — the claim-terminal learning target the
                 # orchestration layer consumes (fail-open, lazy import;
@@ -756,7 +757,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
         # ledger says); the repair/amendment NEVER reports into
         # `banked` — the case-posterior leg keys on that set.
         if existing and existing.get("settlement") is not None:
-            if _reconcile_q_cell_bank(ws, row):
+            if _reconcile_q_cell_bank(ws, row, producer_of):
                 amended.append(str(row["dispatch_id"]))
     return {"settled": settled_n, "untraced": doc["untraced"],
             "unattributed_waste": doc["unattributed_waste"],
@@ -815,7 +816,77 @@ def _real_did(ws, did: str) -> str:
     return did
 
 
-def _reconcile_q_cell_bank(ws, row: dict) -> bool:
+def _settlement_seams(settlement: dict, row: dict,
+                      producer_of: dict | None) -> None:
+    """The settlement's additive-when-present seams: the sorted
+    observation face, the budget-overrun audit trail, and the named
+    producer-attribution degradation (a credited fact without the
+    creating-dispatch stamp keeps the legacy fallback — named, never a
+    silent guess). Legacy rows stay byte-identical."""
+    if "r_sorted" in row:
+        settlement["r_sorted"] = row["r_sorted"]
+    if "budget_overrun" in row:
+        settlement["budget_overrun"] = row["budget_overrun"]
+    note = _attribution_note(row, producer_of)
+    if note:
+        settlement["producer_attribution"] = note
+
+
+#: the creating-dispatch id shape (the dispatch ledger's mint) — a stamp
+#: that fails it is never trusted as a producer (unstamped, named below)
+_DISPATCH_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+
+
+def _producer_map(artifacts: list[dict]) -> dict[str, str]:
+    """fact id -> the harness-stamped creating dispatch id (present only
+    on facts carrying a stamp that passes the dispatch-id shape; an
+    absent or inconsistent stamp keeps the named fallback — a forged or
+    malformed value is never trusted as a producer)."""
+    out: dict[str, str] = {}
+    for a in (artifacts or []):
+        did = str(a.get("created_by_dispatch") or "").strip()
+        if did and _DISPATCH_ID_RE.match(did):
+            out[str(a.get("id") or "")] = did
+    return out
+
+
+def _attribution_note(row: dict,
+                      producer_of: dict | None) -> dict | None:
+    """The named degradation block for a credit row whose credited facts
+    predate the creating-dispatch stamp: the fallback is named, never a
+    silent guess. None when every credited fact carries the stamp."""
+    unstamped = [aid for aid in (row.get("credited") or [])
+                 if not (producer_of or {}).get(str(aid))]
+    if not unstamped:
+        return None
+    return {"fallback": "creator-stamp-missing", "facts": unstamped}
+
+
+def _producer_groups(row: dict,
+                     producer_of: dict | None) -> dict[str, dict]:
+    """The row's facts grouped by their creating dispatch id (the harness
+    stamp): ``{dispatch_id: {"credited": [...], "n": int}}`` where ``n``
+    counts credited + demoted facts (the residue carriers). An unstamped
+    fact groups under "" — the legacy claim-latest fallback, named on the
+    credit row at settle."""
+    groups: dict[str, dict] = {}
+    for fid in (row.get("credited") or []):
+        did = str((producer_of or {}).get(str(fid)) or "").strip()
+        g = groups.setdefault(did, {"credited": [], "n": 0})
+        g["credited"].append(str(fid))
+        g["n"] += 1
+    for e in (row.get("demoted") or []):
+        if not isinstance(e, dict):
+            continue
+        fid = str(e.get("id") or "")
+        did = str((producer_of or {}).get(fid) or "").strip()
+        g = groups.setdefault(did, {"credited": [], "n": 0})
+        g["n"] += 1
+    return groups or {"": {"credited": [], "n": 0}}
+
+
+def _reconcile_q_cell_bank(ws, row: dict,
+                           producer_of: dict | None = None) -> bool:
     """The bank tracks the LEDGER, not the first write. Two faces
     behind one guard: a bank that never landed (no settlement-source
     rows) gets the full first bank via the q-cell faces DIRECTLY —
@@ -826,38 +897,52 @@ def _reconcile_q_cell_bank(ws, row: dict) -> bool:
     break."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        did = _real_did(ws, str(row["dispatch_id"]))
-        mass = _qc.banked_mass(ws, did)
-        if mass is None:
-            # an unreadable log is not an empty one — amending against a
-            # fabricated (0, 0) read would fire a full-target overshoot
-            warn("q_cell_reconcile", f"{did}: log unreadable — skipped")
-            return False
-        _s, _f, n_rows = mass
-        if n_rows == 0:
-            step_sum, step_n = _qc.step_credit_totals(ws, did)
-            if step_n == 0:
-                bank = _qc.observe_settlement(
-                    ws, did, row["r"], reward=float(row["r"]),
-                    confidence_band=BAND_ROUND_CREDIT)  # #799 R2b
-            else:
-                d_s, d_f = _calibration_delta(
-                    row["r"], step_sum, step_n,
-                    band_ceil=_qc.OBSERVATION_BAND_CEIL)
-                bank = _qc.observe_step_calibration(
-                    ws, did, d_s, failure_delta=d_f)
-            return bool((bank or {}).get("appended"))
-        bank = _qc.amend_settlement(ws, did, row["r"],
-                                    reason="ledger-amendment")
-        return bool(bank.get("appended"))
+        fallback_did = _real_did(ws, str(row["dispatch_id"]))
+        groups = _producer_groups(row, producer_of)
+        total = sum(g["n"] for g in groups.values())
+        residue = float(row["r"]) - float(len(row.get("credited") or []))
+        ok = False
+        for did, g in groups.items():
+            target = did or fallback_did
+            share = (g["n"] / total) if total else 1.0
+            value = float(len(g["credited"])) + residue * share
+            mass = _qc.banked_mass(ws, target)
+            if mass is None:
+                # an unreadable log is not an empty one — amending against a
+                # fabricated (0, 0) read would fire a full-target overshoot
+                warn("q_cell_reconcile", f"{target}: log unreadable — skipped")
+                continue
+            _s, _f, n_rows = mass
+            if n_rows == 0:
+                step_sum, step_n = _qc.step_credit_totals(ws, target)
+                if step_n == 0:
+                    bank = _qc.observe_settlement(
+                        ws, target, value, reward=float(row["r"]),
+                        confidence_band=BAND_ROUND_CREDIT)
+                else:
+                    d_s, d_f = _calibration_delta(
+                        value, step_sum, step_n,
+                        band_ceil=_qc.OBSERVATION_BAND_CEIL)
+                    bank = _qc.observe_step_calibration(
+                        ws, target, d_s, failure_delta=d_f)
+                ok = ok or bool((bank or {}).get("appended"))
+                continue
+            bank = _qc.amend_settlement(ws, target, value,
+                                        reason="ledger-amendment")
+            ok = ok or bool(bank.get("appended"))
+        return ok
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_reconcile", f"{type(exc).__name__}: {exc}")
         return False
 
 
-def _bank_q_cell_credit(ws, row: dict) -> dict | None:
-    """Issue 462 W5: bank one settled round credit into the matching Q
-    cell (rlvr.q_cells.observe_settlement — the match-and-bank face).
+def _bank_q_cell_credit(ws, row: dict,
+                        producer_of: dict | None = None) -> dict | None:
+    """Bank one settled round credit into the matching Q cell
+    (rlvr.q_cells.observe_settlement — the match-and-bank face).
+    Production credit keys on the dispatch that CREATED the credited
+    facts (the harness stamp); a fact without the stamp keeps the legacy
+    claim-latest fallback and names the degradation on the credit row.
     The bank result carries the matched row's ``arm_key``/``fingerprint``
     so the SAME settled credit keys the cross-task posterior store row
     (rlvr.strategy_store.append_store_row) without a second scan — the
@@ -865,40 +950,57 @@ def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     caller. Telemetry posture: fail-open, a banked-credit failure is one
     rate-limited WARN and never breaks settlement (the determinism wall
     covers the ledger receipt; the Q bank is the learning feed). Returns
-    the bank dict (None on failure) so the caller can thread the matched
-    dispatch signature into the L1 rollout-return bank (#718) without a
+    the first bank dict (None on failure) so the caller can thread the
+    matched dispatch signature into the L1 rollout-return bank without a
     second match scan.
 
-    #712 branch: when step credit already banked for this dispatch
-    (``step_credit_totals`` — n > 0) the terminal bank is the RESIDUAL,
-    not the raw ladder — one signed ``observe_step_calibration`` row so
-    cumulative success lands on the ladder value (over-credit clawed
-    back, under-credit topped up) and cumulative failure on 1 − L.
-    n == 0 is the NORMAL claim-shape under the real-id key (#804
-    restatement, not a compat acceptance): a claim with no banked step
-    credit settles whole through ``observe_settlement`` — the ladder
-    value IS the terminal mass, there is nothing to residualize."""
+    When step credit already banked for a producing dispatch
+    (``step_credit_totals`` — n > 0) that producer's terminal bank is
+    the RESIDUAL, not the raw share — one signed
+    ``observe_step_calibration`` row so cumulative success lands on the
+    ladder value (over-credit clawed back, under-credit topped up) and
+    cumulative failure on 1 − L. n == 0 is the NORMAL claim-shape under
+    the real-id key: a producer with no banked step credit settles whole
+    through ``observe_settlement`` — the ladder value IS the terminal
+    mass, there is nothing to residualize."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        did = _real_did(ws, str(row["dispatch_id"]))
-        step_sum, step_n = _qc.step_credit_totals(ws, did)
-        if step_n == 0:
-            bank = _qc.observe_settlement(
-                ws, did, row["r"], reward=float(row["r"]),
-                confidence_band=BAND_ROUND_CREDIT)  # #799 R2b
-        else:
-            delta_success, delta_failure = _calibration_delta(
-                row["r"], step_sum, step_n,
-                band_ceil=_qc.OBSERVATION_BAND_CEIL)
-            bank = _qc.observe_step_calibration(
-                ws, did, delta_success, failure_delta=delta_failure)
+        fallback_did = _real_did(ws, str(row["dispatch_id"]))
+        groups = _producer_groups(row, producer_of)
+        total = sum(g["n"] for g in groups.values())
+        # the row's trace/waste residue rides the producers' fact shares;
+        # a row with no fact carriers rides its full residue on the
+        # fallback group
+        residue = float(row["r"]) - float(len(row.get("credited") or []))
+        bank = None
+        for did, g in groups.items():
+            target = did or fallback_did
+            share = (g["n"] / total) if total else 1.0
+            value = float(len(g["credited"])) + residue * share
+            step_sum, step_n = _qc.step_credit_totals(ws, target)
+            if step_n == 0:
+                one = _qc.observe_settlement(
+                    ws, target, value, reward=float(row["r"]),
+                    confidence_band=BAND_ROUND_CREDIT)
+            else:
+                delta_success, delta_failure = _calibration_delta(
+                    value, step_sum, step_n,
+                    band_ceil=_qc.OBSERVATION_BAND_CEIL)
+                one = _qc.observe_step_calibration(
+                    ws, target, delta_success, failure_delta=delta_failure)
+            if bank is None:
+                bank = one
+            # the store row carries the SAME real dispatch id the Q
+            # bank matched (the rollout key) and ONLY its own share —
+            # a multi-producer round never double-counts the claim's
+            # value across the cross-task store
+            _bank_strategy_store_row(
+                ws, {**row, "dispatch_id": target, "r": value,
+                     "credited": list(g["credited"])}, one)
+        return bank
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
         return None
-    # #800 R2: the store row carries the SAME real dispatch id the Q
-    # bank matched (the rollout key), never the claim-grained row id
-    _bank_strategy_store_row(ws, {**row, "dispatch_id": did}, bank)
-    return bank
 
 
 def _bank_l1_rollout_return(ws, row: dict, bank: dict | None) -> None:
@@ -1188,8 +1290,10 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
         fid = str(meta.get("id") or path.stem)
         creator = str(meta.get("creator") or meta.get("trace_id") or "")
         claim_id = str(meta.get("claim_id") or "").strip()
+        stamped = str(meta.get("created_by_dispatch") or "").strip()
         out.append({"id": fid,
                     "creator": creator or None,
+                    **({"created_by_dispatch": stamped} if stamped else {}),
                     "status": str(meta.get("status") or ""),
                     "verify_status": str(meta.get("verify_status") or ""),
                     "claim_id": claim_id or None,

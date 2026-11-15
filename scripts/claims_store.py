@@ -468,6 +468,21 @@ def latest_committed_dispatch(ws, claim: str) -> dict | None:
     return latest
 
 
+def committed_dispatch_ids(ws, claim: str) -> list[str]:
+    """Every committed dispatch id for the claim, oldest first — the
+    full producing/verifying set (a claim can carry several committed
+    dispatches; the credit bank keys on the producer, so a certifier
+    must see them all, never only the latest)."""
+    out: list[str] = []
+    for row in _iter_ledger_rows(ws):
+        if (row.get("state") == "committed"
+                and str(row.get("claim") or "") == str(claim)):
+            did = str(row.get("dispatch_id") or "")
+            if did:
+                out.append(did)
+    return out
+
+
 def _jsonl_dicts(path: Path) -> list:
     """Every parseable object row of one JSONL file. An absent file reads
     as empty; an unreadable one warns on stderr and reads as empty — a
@@ -751,7 +766,8 @@ def _txn_step_stash(ws, journal: dict) -> bool:
         doc = ir.record_launch(ws, journal["claim"],
                                journal.get("method_family") or "dispatch",
                                branch_budget=journal.get("branch_budget")
-                               or None)
+                               or None,
+                               dispatch_id=journal.get("id"))
         return doc is not None
     except Exception:  # noqa: BLE001 — telemetry face, never the verdict
         return False

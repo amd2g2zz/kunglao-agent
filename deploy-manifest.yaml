@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 40035fbd8c24ee7ae0739be57f62a8a1a4eaa3476fb9e49beab78ffeb878bc9a
+    sha256: b6c3d99da495114431d51195d239b6d4c2f9995d95f3a2872ca54fd9b5bfb4d3
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -111,7 +111,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: b8e2f97be057b5bfbe59f7ed23356a0bb4457f929d2459c2e529c8e8231a2466
+    sha256: b6b4736e6e80036055902ca7600d9e80050f7479d9e9db8f58ac31a5688324c5
   - src: hooks/battery.yaml
     dest: .claude/hooks/battery.yaml
     kind: hook
@@ -307,7 +307,7 @@ files:
   - src: scripts/claims_store.py
     dest: .claude/scripts/claims_store.py
     kind: scaffold
-    sha256: aa310f5a2741ee9a4686d0af9df9a88eab490cad57a04e77606a65b6137bbc89
+    sha256: 7074005193e8bbc48153e36a7e475b9f364388dcd465c61864cb9e9df00c9455
   - src: scripts/claims_view.py
     dest: .claude/scripts/claims_view.py
     kind: scaffold
@@ -819,7 +819,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: 9de83027ccb8a6b81a239e4f7c194b0390682a5e5cf63b57932ac4889b52d1d3
+    sha256: efc739a042a981a9816183eb160bc985f6df296d9f27ea5e05d69dc8a8c969e8
   - src: scripts/lint_protocol.py
     dest: .claude/scripts/lint_protocol.py
     kind: scaffold
@@ -1479,7 +1479,7 @@ files:
   - src: scripts/rlvr/incremental_reward.py
     dest: .claude/scripts/rlvr/incremental_reward.py
     kind: scaffold
-    sha256: b285489b724e65a9714efa9302b36843149f32e4777c5737629c4f7b5f58dd92
+    sha256: ea59e5159ad32202fa57bda4a9694682ed2595537a6d30ed27fb9c23682c05fa
   - src: scripts/rlvr/interruption.py
     dest: .claude/scripts/rlvr/interruption.py
     kind: scaffold
@@ -1595,7 +1595,7 @@ files:
   - src: scripts/rlvr/production_terminal.py
     dest: .claude/scripts/rlvr/production_terminal.py
     kind: scaffold
-    sha256: 298c59a5b851f24bc9897b11ea2cb6a22308d9904e5cfb331a346bd7436f3952
+    sha256: 04b0d405cc3ec87cbdced4dc9e3db5464182988f5f263ecf10c2a47f9be7ce8f
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
@@ -1635,7 +1635,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: 84da55c43dadac9933bb5ff8b1d329fc3a7d600a2ffe99dd8ec37780a10f4147
+    sha256: 4b48a1c361c00113aae7ca7aed193a7604f2e4dc6cc9b26e029c4d899821a1f3
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
@@ -1715,7 +1715,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 535035093d1bd595932a9946a14533694b11912b9ab3a826567c181b0e1a119f
+    sha256: 3606e0e51aaf9801a346d4fa968e6cf4d65ffdfa6364a70568785754bbcc07ac
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
@@ -2223,7 +2223,7 @@ files:
   - src: templates/fact-frontmatter.md
     dest: .claude/templates/fact-frontmatter.md
     kind: asset
-    sha256: 4d65bafb95854cf3fea424e1301ae8f187d9ddf58e30ea133c9c4e9e60de1c40
+    sha256: 538ff79ecbb4386924f2c931d9b7ac45becbe74c0bca202e16b09733386d2a59
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset

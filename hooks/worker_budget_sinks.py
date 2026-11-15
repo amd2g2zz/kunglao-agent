@@ -1419,7 +1419,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     # decided at this line.
     _claims_dispatch_txn(paths, cid=cid, prompt=prompt, agent=agent_name,
                          tier=tier, method_family=mf_value, budget=_budget,
-                         actor=row_agent or worker_id)
+                         actor=row_agent or worker_id, dispatch_id=_did800)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',

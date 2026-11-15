@@ -463,7 +463,7 @@ files:
   scripts/rlvr/reward_signal.py:
     r1: 1
   scripts/rlvr/scalar.py:
-    r1: 10
+    r1: 6
   scripts/rlvr/settlement_scorer.py:
     r1: 1
   scripts/rlvr/signal_guard.py:

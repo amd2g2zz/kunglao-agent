@@ -193,7 +193,8 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
                   s_hash: str = "", propensity: float | None = None,
                   action_type: str = "dispatch",
                   variant: str = "",
-                  branch_budget: dict | None = None) -> dict | None:
+                  branch_budget: dict | None = None,
+                  dispatch_id: str | None = None) -> dict | None:
     """Stash the launch-side state at dispatch time — the settle face
     reads it to close the transition. Fail-open telemetry: never raises
     into the dispatch path. #550: action_type scopes the stash (a verify
@@ -206,7 +207,10 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
     act budget, parsed since #539 with zero consumers) rides the stash so
     the settle face can price a wall_s overrun into attributed-waste and
     the barrier can name the budget it is enforcing. Absent/empty keeps
-    the doc shape byte-identical."""
+    the doc shape byte-identical. ``dispatch_id`` rides when supplied —
+    the dispatch ledger's id, so a fact written during this launch can be
+    stamped with the dispatch that created it; absent keeps the doc shape
+    byte-identical."""
     try:
         ws = Path(ws)
         p = _launch_path(ws, claim, action_type)
@@ -226,6 +230,8 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
             **({"branch_budget": {str(k): v for k, v in
                                   dict(branch_budget).items()}}
                if branch_budget else {}),
+            **({"dispatch_id": str(dispatch_id)}
+               if str(dispatch_id or "").strip() else {}),
         }
         doc = _seal.sign_row(doc)  # #799: the stash is sealed at write
         p.write_text(json.dumps(doc), encoding="utf-8")
@@ -234,6 +240,39 @@ def record_launch(ws, claim: str, action_key: str, phi: float | None = None,
         from kunglao_log import warn  # noqa: PLC0415
         warn("incremental_reward.record_launch",
              f"{type(exc).__name__}: {exc}")
+        return None
+
+
+def current_dispatch_id(ws, claim: str,
+                        action_type: str = "dispatch") -> str | None:
+    """The dispatch currently executing ``claim`` — resolved from the
+    dispatch-launch stash (the in-flight launch mapping). The stash is a
+    worker-writable file, so its ``dispatch_id`` is trusted only after
+    the seal check: an armed channel rejects an unsealed or unverifiable
+    stash, and a sealed stash verifies whatever the channel state (a key
+    that disappeared or went corrupt leaves the row unverifiable —
+    reported, never re-signed). None names the degradation (a pre-stamp
+    stash or an untrusted one): the caller names it at settle, never
+    guesses."""
+    try:
+        ws = Path(ws)
+        p = _launch_path(ws, claim, action_type)
+        if not p.is_file():
+            return None
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict):
+            return None
+        if _seal.armed() or isinstance(doc.get("seal"), dict):
+            ok, why = _seal.verify_row(doc)
+            if not ok:
+                from kunglao_log import warn  # noqa: PLC0415
+                warn("incremental_reward.current_dispatch_id",
+                     f"launch stash seal invalid ({why}) — the dispatch "
+                     f"id is not trusted")
+                return None
+        did = str(doc.get("dispatch_id") or "").strip()
+        return did or None
+    except (OSError, ValueError):
         return None
 
 

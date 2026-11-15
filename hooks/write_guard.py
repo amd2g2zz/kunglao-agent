@@ -336,6 +336,137 @@ def looks_like_carrier(target: Path) -> bool:
             or name == "claim-register.yaml")
 
 
+#: the harness-stamped creating-dispatch field in a fact's frontmatter
+CREATED_BY_FIELD = "created_by_dispatch"
+
+
+def _fm_block(text: str) -> tuple[int, int] | None:
+    """(start, end) offsets of the YAML frontmatter body of a fact text —
+    the lines between the opening ``---`` and the closing ``---``. None
+    when the text carries no closed frontmatter block."""
+    if not text.startswith("---\n"):
+        return None
+    close = text.find("\n---", 4)
+    if close == -1:
+        return None
+    return 4, close
+
+
+def _fm_claim_id(text: str) -> str:
+    """The fact's ``claim_id`` from its frontmatter (empty when absent).
+    A YAML fault degrades to empty — the stamper then falls back to the
+    claim-less resolution, never guesses."""
+    span = _fm_block(text)
+    if span is None:
+        return ""
+    try:
+        import yaml as _y
+        doc = _y.safe_load(text[span[0]:span[1]]) or {}
+    except Exception:  # noqa: BLE001 — malformed frontmatter is unstamped
+        return ""
+    if not isinstance(doc, dict):
+        return ""
+    return str(doc.get("claim_id") or "").strip()
+
+
+#: the creating-dispatch id shape (the dispatch ledger's mint)
+_DISPATCH_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+
+
+def _fm_field(text: str, field: str) -> str | None:
+    """The frontmatter's raw value for one key (None when the key is
+    absent). A YAML fault degrades to None — never a guess."""
+    span = _fm_block(text)
+    if span is None:
+        return None
+    for line in text[span[0]:span[1]].splitlines():
+        if re.match(rf"^{re.escape(field)}\s*:", line):
+            return line.split(":", 1)[1].strip() or None
+    return None
+
+
+def _set_fm_field(text: str, field: str, value: str) -> str:
+    """Set/replace one frontmatter entry — or REMOVE every entry when
+    ``value`` is empty (the fact_status_sync rewrite discipline: only
+    this field moves; every other byte of the fact is preserved)."""
+    span = _fm_block(text)
+    if span is None:
+        return text
+    start, end = span
+    out: list[str] = []
+    done = False
+    for line in text[start:end].splitlines():
+        if re.match(rf"^{re.escape(field)}\s*:", line):
+            if not done and value:
+                out.append(f"{field}: {value}")
+                done = True
+            continue
+        out.append(line)
+    if not done and value:
+        out.insert(0, f"{field}: {value}")
+    return text[:start] + "\n".join(out) + text[end:]
+
+
+def stamp_created_by_dispatch(text: str, creating: str | None,
+                              existing: str | None = None) -> str:
+    """The sanctioned stamper for the creating-dispatch field.
+
+    WRITE-ONCE: ``existing`` — the value the fact already carries from
+    creation — always wins, so a later edit can never re-stamp the
+    producer to the editing dispatch. Otherwise ``creating`` (the
+    harness-resolved dispatch) is written; an empty or unverifiable
+    resolution leaves the field ABSENT (the named creator-stamp-missing
+    degradation at settle). A caller-supplied value inside ``text`` is
+    never carried through — the field is always replaced with the
+    harness's own resolution. An id that fails the dispatch-id shape is
+    never written: an inconsistent stamp is dropped, never guessed."""
+    keep = str(existing or "").strip()
+    value = keep if _DISPATCH_ID_RE.match(keep) else ""
+    if not value:
+        cand = str(creating or "").strip()
+        value = cand if _DISPATCH_ID_RE.match(cand) else ""
+    return _set_fm_field(text, CREATED_BY_FIELD, value)
+
+
+def resolve_creator_dispatch(ws: Path, text: str) -> str | None:
+    """The dispatch that created the fact — resolved at fact-write time
+    from the dispatch-launch stash (``runs/dispatch-launch-<claim>.json``,
+    whose ``dispatch_id`` is seal-verified before it is trusted). No
+    fallback guess: a claim whose current dispatch cannot be resolved
+    with certainty stays unstamped, and settle names the degradation
+    (never a silent claim-latest guess)."""
+    claim = _fm_claim_id(text)
+    if not claim:
+        return None
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        from rlvr import incremental_reward as _ir
+        return _ir.current_dispatch_id(ws, claim)
+    except Exception:  # noqa: BLE001 — fail-open: an unstamped fact is a
+        # named degradation at settle, never a crash at write
+        return None
+
+
+def _updated_input(payload: dict, target: Path, current: str | None,
+                   stamped: str) -> dict:
+    """The tool input whose write lands the STAMPED post-image — the
+    write itself is the sanctioned writer path (the hook never touches
+    the file behind the tool's back). Write keeps its content shape;
+    Edit/MultiEdit express the stamped post-image as one whole-file
+    replacement against the current text."""
+    tool = str(payload.get("tool_name") or "")
+    ti = payload.get("tool_input") or {}
+    base = {"file_path": ti.get("file_path") or str(target)}
+    if tool == "Write":
+        return {**base, "content": stamped}
+    if tool == "Edit":
+        return {**base, "old_string": current or "", "new_string": stamped,
+                "replace_all": False}
+    return {**base, "edits": [{"old_string": current or "",
+                               "new_string": stamped}]}
+
+
 def post_image(payload: dict, target: Path) -> tuple[str | None, str]:
     """The text the file WOULD hold after this tool call.
 
@@ -806,6 +937,30 @@ def main() -> int:
         _dbg(f"workspace audit: {other}")
         _dbg(f"exit BLOCK rc=2 — {len(violations)} violation(s)")
         return RC_BLOCK
+    if carrier == CARRIER_FACT:
+        # The harness stamps the creating dispatch id at fact-write time
+        # (never worker-typed). WRITE-ONCE: the value already on the fact
+        # wins, so a later edit can never re-stamp the producer; a
+        # caller-supplied value in the write is dropped, and an
+        # unresolvable dispatch leaves the field absent (the named
+        # creator-stamp-missing degradation at settle).
+        try:
+            current_text = (target.read_text(encoding="utf-8")
+                            if target.is_file() else None)
+            existing = _fm_field(current_text or "", CREATED_BY_FIELD)
+            creating = resolve_creator_dispatch(ws, text)
+            stamped = stamp_created_by_dispatch(text, creating, existing)
+            if stamped != text:
+                print(json.dumps({"hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "updatedInput": _updated_input(
+                        payload, target, current_text, stamped)}},
+                    ensure_ascii=False))
+                _dbg("created_by_dispatch stamp emitted")
+        except Exception as exc:  # noqa: BLE001 — stamping never blocks
+            warn("write_guard.stamp",
+                 f"{type(exc).__name__}: {exc} — fact stays unstamped")
     if carrier == CARRIER_REGISTER:
         # #880: the write passed every gate and WILL land — claim transitions
         # in the post-image settle here (claim_settled rows + negative-sample
