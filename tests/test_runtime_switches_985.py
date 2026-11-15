@@ -369,7 +369,7 @@ def test_polarity_supply_protection_on_learning_off():
         "KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
         "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK",
         "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_DIRECTION",
-        "KUNGLAO_EVAL_SETTLE", "KUNGLAO_PLAYBOOK",
+        "KUNGLAO_PLAYBOOK",
     } <= learning
     for name in supply | protection:
         assert rs.SWITCHES[name].default is True, (
@@ -451,7 +451,7 @@ def test_recall_arm_declaration_still_ablates(tmp_path, monkeypatch):
 
 def test_learning_switches_default_off(monkeypatch):
     for name in ARM_DECLARED | {
-            "KUNGLAO_DIRECTION", "KUNGLAO_EVAL_SETTLE", "KUNGLAO_PLAYBOOK"}:
+            "KUNGLAO_DIRECTION", "KUNGLAO_PLAYBOOK"}:
         monkeypatch.delenv(name, raising=False)
     from rlvr import attribution as attr
     from rlvr import meta_policy as mp
@@ -521,7 +521,7 @@ def test_matrix_stripped_env_covers_the_declared_arms():
     stripped = set(STRIPPED_ENV)
     assert ARM_DECLARED <= stripped
     assert {"KUNGLAO_EXPANSION", "KUNGLAO_SCHEDULER",
-            "KUNGLAO_DIRECTION", "KUNGLAO_EVAL_SETTLE",
+            "KUNGLAO_DIRECTION",
             "KUNGLAO_PLAYBOOK"} <= stripped
 
 

@@ -890,11 +890,11 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             if route is None and not (
                     existing and existing.get("settlement") is not None):
                 bank = _bank_q_cell_credit(ws, row, producer_of)
-                # #718: the same first-settlement tick banks the L1
-                # rollout return — the claim-terminal learning target the
-                # orchestration layer consumes (fail-open, lazy import;
-                # the L2 bank above is never affected by this leg)
-                _bank_l1_rollout_return(ws, row, bank)
+                # the companion legs follow the bank: a dispatch whose
+                # bank was skipped (a foreign face owns the mass) keeps
+                # its rollout-return leg with the face that banked it
+                if bank is not None:
+                    _bank_l1_rollout_return(ws, row, bank)
                 banked.append(str(row["dispatch_id"]))
         elif res.get("reason") not in ("duplicate: already settled",):
             warn("settle_round_credit", f"{rid}: {res.get('reason')}")
@@ -1039,6 +1039,34 @@ def _producer_groups(row: dict,
     return groups or {"": {"credited": [], "n": 0}}
 
 
+#: the bank rows' ownership marker — THIS face's banks carry it so the
+#: reconcile can tell its own drift from a mass banked by another
+#: settlement face (the blind verdict banks at its own stop)
+BANK_OWNER_ROUND_CREDIT = "round-credit"
+
+
+def _round_credit_banked(ws, did: str) -> bool:
+    """True when this face's own bank (the ``round-credit``-marked
+    settlement rows) exists for the identity — the reconcile's ownership
+    gate: a mass banked by another settlement face is not this ledger's
+    drift, and the correction must never claw it. Fail-open: an
+    unreadable log reads as unowned (the reconcile then skips)."""
+    try:
+        from rlvr import q_cells as _qc  # noqa: PLC0415
+        for row in _seal.trusted_rows(_qc.JSONLQStore(ws).observations(),
+                                      op="scalar.round_credit_banked"):
+            if not isinstance(row, dict) \
+                    or str(row.get("reason") or "") != BANK_OWNER_ROUND_CREDIT:
+                continue
+            if did and (str(row.get("claim") or "") == did
+                        or str(row.get("dispatch_id") or "") == did):
+                return True
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("q_cell_reconcile",
+             f"ownership read failed: {type(exc).__name__}: {exc}")
+    return False
+
+
 def _reconcile_q_cell_bank(ws, row: dict,
                            producer_of: dict | None = None) -> bool:
     """The bank tracks the LEDGER, not the first write. Two faces
@@ -1072,14 +1100,20 @@ def _reconcile_q_cell_bank(ws, row: dict,
                 if step_n == 0:
                     bank = _qc.observe_settlement(
                         ws, target, value, reward=float(row["r"]),
-                        confidence_band=BAND_ROUND_CREDIT)
+                        confidence_band=BAND_ROUND_CREDIT,
+                        reason=BANK_OWNER_ROUND_CREDIT)
                 else:
                     d_s, d_f = _calibration_delta(
                         value, step_sum, step_n,
                         band_ceil=_qc.OBSERVATION_BAND_CEIL)
                     bank = _qc.observe_step_calibration(
-                        ws, target, d_s, failure_delta=d_f)
+                        ws, target, d_s, failure_delta=d_f,
+                        reason=BANK_OWNER_ROUND_CREDIT)
                 ok = ok or bool((bank or {}).get("appended"))
+                continue
+            if not _round_credit_banked(ws, target):
+                # a foreign settlement face owns the mass — not this
+                # ledger's drift; the correction must never claw it
                 continue
             bank = _qc.amend_settlement(ws, target, value,
                                         reason="ledger-amendment")
@@ -1129,19 +1163,30 @@ def _bank_q_cell_credit(ws, row: dict,
         bank = None
         for did, g in groups.items():
             target = did or fallback_did
+            mass = _qc.banked_mass(ws, target)
+            if mass is None or (mass[0] + mass[1]) > 0:
+                # one bank per dispatch: mass already carried by the
+                # identity is owned by another settlement face (the
+                # blind verdict banks at its own stop) — banking here
+                # would double-count it. A MASSLESS row (the
+                # information option) owns no mass and never pre-empts:
+                # the honest terminal outcome still banks through here.
+                continue
             share = (g["n"] / total) if total else 1.0
             value = float(len(g["credited"])) + residue * share
             step_sum, step_n = _qc.step_credit_totals(ws, target)
             if step_n == 0:
                 one = _qc.observe_settlement(
                     ws, target, value, reward=float(row["r"]),
-                    confidence_band=BAND_ROUND_CREDIT)
+                    confidence_band=BAND_ROUND_CREDIT,
+                    reason=BANK_OWNER_ROUND_CREDIT)
             else:
                 delta_success, delta_failure = _calibration_delta(
                     value, step_sum, step_n,
                     band_ceil=_qc.OBSERVATION_BAND_CEIL)
                 one = _qc.observe_step_calibration(
-                    ws, target, delta_success, failure_delta=delta_failure)
+                    ws, target, delta_success, failure_delta=delta_failure,
+                    reason=BANK_OWNER_ROUND_CREDIT)
             if bank is None:
                 bank = one
             # the store row carries the SAME real dispatch id the Q

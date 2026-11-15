@@ -37,8 +37,9 @@ have (the exact #634/#683 pattern the 5-expert review named).
    bookkeeping (step-record/2 aggregate, transition close, waste) and
    skips the producer-surface judgment legs (#712 credit,
    crystallization, belief). `hooks/round_closure` defaults to blind
-   mode and parks the blind input; `KUNGLAO_EVAL_SETTLE=1`
-   (`settlement_wire.eval_settle_enabled`) is the explicit opt-back-in.
+   mode and parks the blind input; the stop face is blind-only (the
+   later dual-path removal retired `settlement_wire.eval_settle_enabled`
+   and the env opt-back-in — no eval reader remained).
 3. **Liveness** — the `blind-settlement-wired` fingerprint
    (`runs/settlement.jsonl`, `settlement-wire/1`, non-empty identity)
    registered in devkit/liveness_fingerprints.json + the stamp in

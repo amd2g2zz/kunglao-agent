@@ -172,17 +172,22 @@ def process_event(payload: dict) -> int:
     return 0
 
 
-def _blind_settlement_face(ws: Path, wire, pending) -> dict:
-    """The issue-802 blind face at the stop boundary: PARK the pending step's
+def _blind_settlement_face(ws: Path, wire, pending,
+                           act_outcome: str = "") -> dict:
+    """The blind face at the stop boundary: PARK the pending step's
     blind input doc (the production writer — the kunglao-settler
     dispatch read face consumes it), then SETTLE every parked claim that
     has a ruling. The step window (since the launch, until now) feeds
-    the artifact scan; the scorer's exclusion wall filters it. An empty
-    artifact window is a LOUD skip — a zero-byte doc is never parked
-    (the settler would have nothing to rule over), and the writer fills
-    the claim's resolved value question when the caller passes none.
-    Fail-open inside its own cage — a parking failure is ONE warn and
-    never the settle; the unblinded judgment is NEVER a fallback."""
+    the artifact scan; the scorer's exclusion wall filters it. The act
+    outcome (this face's own outcome resolution — the word the step
+    settled under) rides the park into the consumer-side sidecar, so
+    the learner feed's censoring route classifies the act exactly as
+    the round-credit close path does. An empty artifact window is a
+    LOUD skip — a zero-byte doc is never parked (the settler would have
+    nothing to rule over), and the writer fills the claim's resolved
+    value question when the caller passes none. Fail-open inside its
+    own cage — a parking failure is ONE warn and never the settle; the
+    unblinded judgment is NEVER a fallback."""
     out: dict = {}
     try:
         from datetime import datetime, timezone
@@ -200,7 +205,8 @@ def _blind_settlement_face(ws: Path, wire, pending) -> dict:
                      "nothing to blind-settle")
             else:
                 try:
-                    res = wire.park_blind_input(ws, claim, artifacts)
+                    res = wire.park_blind_input(ws, claim, artifacts,
+                                                act_outcome=act_outcome)
                     if res.get("parked") or not res.get("reason"):
                         parked = [claim]
                     else:
@@ -326,23 +332,24 @@ def _kernel_faces(ws: Path, session_id: str = "",
     Fail-open double cage: each face is wrapped separately — a kernel
     failure is one rate-limited warn and never disturbs the subagent's
     own stop path."""
-    # #690: the step settlement — SubagentStop IS the step boundary, and
-    # it runs FIRST so every decision face below sees post-settlement
-    # state (settle -> update -> decide). Silent when no step is pending.
-    # issue-802: production defaults to the BLIND face — the unblinded
-    # step-level credit judgment is eval-only (KUNGLAO_EVAL_SETTLE=1 is
-    # the explicit
-    # opt-back-in, rlvr.settlement_wire.eval_settle_enabled). Blind mode
-    # keeps the hash-only mechanical bookkeeping (the act closure), skips
-    # the producer-surface credit legs, PARKS the blind input doc for the
-    # kunglao-settler subagent, and settles any ruling that arrived. The
-    # wire face rides its own cage: a wire failure never disturbs the
-    # stop path and never falls back INTO the unblinded judgment.
-    # issue 805: the closure battery registers too — the launch gate
-    # here is WARN-ONLY (the closure's fail-open double cage is
-    # contractual: a registry trouble is one rate-limited warn and never
-    # disturbs the subagent's stop path; the dispatch battery's gate is
-    # the fail-closed one).
+    # the step settlement — SubagentStop IS the step boundary, and it
+    # runs FIRST so every decision face below sees post-settlement
+    # state (settle -> update -> decide). Silent when no step is
+    # pending. The stop face is BLIND-ONLY: the unblinded step-level
+    # credit judgment has no production reader — it survives as
+    # rlvr.step_grain.settle_step's library face for direct callers
+    # (eval harnesses), and no environment value can steer a production
+    # stop back into it. Blind mode keeps the hash-only mechanical
+    # bookkeeping (the act closure), skips the producer-surface credit
+    # legs, PARKS the blind input doc for the kunglao-settler subagent,
+    # and settles any ruling that arrived. The wire face rides its own
+    # cage: a wire failure never disturbs the stop path and never falls
+    # back INTO the unblinded judgment.
+    # the closure battery registers too — the launch gate here is
+    # WARN-ONLY (the closure's fail-open double cage is contractual: a
+    # registry trouble is one rate-limited warn and never disturbs the
+    # subagent's stop path; the dispatch battery's gate is the
+    # fail-closed one).
     try:
         import battery_registry
         _bat = battery_registry.launch_gate(
@@ -359,14 +366,14 @@ def _kernel_faces(ws: Path, session_id: str = "",
         with scripts_on_path():
             from rlvr import step_grain
             from rlvr import settlement_wire
-            _eval = settlement_wire.eval_settle_enabled()
             pending = step_grain.pending_step(ws)
+            act_outcome = _worker_outcome(ws, pending)
             receipt = step_grain.settle_step(
-                ws, session_id, outcome=_worker_outcome(ws, pending),
-                agent_id=agent_id or None, blind=not _eval)
-            if not _eval:
-                blind_receipt = _blind_settlement_face(
-                    ws, settlement_wire, pending) or {}
+                ws, session_id, outcome=act_outcome,
+                agent_id=agent_id or None, blind=True)
+            blind_receipt = _blind_settlement_face(
+                ws, settlement_wire, pending,
+                act_outcome=act_outcome) or {}
     except Exception as exc:  # noqa: BLE001 — settle face, never blocks
         warn("round_closure_settle", f"{type(exc).__name__}: {exc}")
     if blind_receipt:
