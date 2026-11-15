@@ -899,12 +899,13 @@ def _reconcile_q_cell_bank(ws, row: dict,
         from rlvr import q_cells as _qc  # noqa: PLC0415
         fallback_did = _real_did(ws, str(row["dispatch_id"]))
         groups = _producer_groups(row, producer_of)
-        total = sum(g["n"] for g in groups.values()) or 1
+        total = sum(g["n"] for g in groups.values())
         residue = float(row["r"]) - float(len(row.get("credited") or []))
         ok = False
         for did, g in groups.items():
             target = did or fallback_did
-            value = float(len(g["credited"])) + residue * (g["n"] / total)
+            share = (g["n"] / total) if total else 1.0
+            value = float(len(g["credited"])) + residue * share
             mass = _qc.banked_mass(ws, target)
             if mass is None:
                 # an unreadable log is not an empty one — amending against a
@@ -966,13 +967,16 @@ def _bank_q_cell_credit(ws, row: dict,
         from rlvr import q_cells as _qc  # noqa: PLC0415
         fallback_did = _real_did(ws, str(row["dispatch_id"]))
         groups = _producer_groups(row, producer_of)
-        total = sum(g["n"] for g in groups.values()) or 1
-        # the row's trace/waste residue rides the producers' fact shares
+        total = sum(g["n"] for g in groups.values())
+        # the row's trace/waste residue rides the producers' fact shares;
+        # a row with no fact carriers rides its full residue on the
+        # fallback group
         residue = float(row["r"]) - float(len(row.get("credited") or []))
         bank = None
         for did, g in groups.items():
             target = did or fallback_did
-            value = float(len(g["credited"])) + residue * (g["n"] / total)
+            share = (g["n"] / total) if total else 1.0
+            value = float(len(g["credited"])) + residue * share
             step_sum, step_n = _qc.step_credit_totals(ws, target)
             if step_n == 0:
                 one = _qc.observe_settlement(
