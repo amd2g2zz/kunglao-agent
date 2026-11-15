@@ -83,6 +83,40 @@ def terminal_claims(ws: Path) -> list[str]:
             if str(c.get("status") or "").upper() in TERMINAL]
 
 
+def _terminal_claim_rows(ws: Path) -> list[dict]:
+    """The terminal claim register rows (the settlement set, rows)."""
+    from status_defs import TERMINAL
+
+    return [c for c in _register_claims(ws)
+            if str(c.get("status") or "").upper() in TERMINAL]
+
+
+def _settle_routes(ws: Path, claims: list[dict],
+                   outcomes: dict[str, str]) -> dict[str, tuple]:
+    """cid -> the settlement route (the censoring/pending face) for every
+    terminal claim: the register status, the recorded outcome word and
+    the claim's rule-out evidence, classified by the one pure face
+    (rlvr.scalar.settlement_route). Routed claims settle without moving
+    any Beta/mass; the case-posterior legs skip them (a censored or
+    pending outcome is never an observation)."""
+    from rlvr import scalar as _sc
+
+    arts_by_claim: dict[str, list[dict]] = {}
+    for a in _sc.fact_artifacts(ws):
+        cid = str(a.get("claim_id") or "")
+        if cid:
+            arts_by_claim.setdefault(cid, []).append(a)
+    out: dict[str, tuple] = {}
+    for c in claims:
+        cid = str(c.get("id") or "")
+        route = _sc.settlement_route(
+            str(c.get("status") or ""), outcomes.get(cid, ""),
+            arts_by_claim.get(cid, []))
+        if route is not None:
+            out[cid] = route
+    return out
+
+
 # the credit ladder's own decisive vocabulary: a claim settling under
 # either set is a pass / fail observation on every oracle case linked to
 # the claim's answers_question; every other terminal status reflects
@@ -270,7 +304,25 @@ def _revoke_derived_rows(ws: Path, claim: str, revoked: list[str]) -> None:
              f"{claim}: {type(exc).__name__}: {exc}")
 
 
-def reconcile_case_settlements(ws: Path) -> dict:
+def _decisive_status_map(claims: list[dict],
+                         skip: set[str] | None) -> dict[str, bool]:
+    """cid -> the claim's decisive outcome (pass/fail), the censored and
+    pending claims excluded (never an observation)."""
+    out: dict[str, bool] = {}
+    for claim in claims:
+        cid = str(claim.get("id") or "").strip()
+        if cid in (skip or set()):
+            continue
+        status = str(claim.get("status") or "").upper()
+        if status in CASE_PASS_STATUSES:
+            out[cid] = True
+        elif status in CASE_FAIL_STATUSES:
+            out[cid] = False
+    return out
+
+
+def reconcile_case_settlements(ws: Path,
+                               skip: set[str] | None = None) -> dict:
     """The pair-amendment face: when a claim's CURRENT decisive register
     status disagrees with the outcome already observed for its
     (case, claim) pair, apply the ±1 flip to the case posterior
@@ -280,21 +332,15 @@ def reconcile_case_settlements(ws: Path) -> dict:
     the row lands the effective outcome equals the target and every
     re-run is a read-scan no-op. Honest gaps write nothing: a
     non-decisive terminal, a removed claim, a retired case, an
-    unobserved pair. Telemetry never raises into the pass."""
+    unobserved pair, and the ``skip`` set (censored/pending outcomes —
+    never an observation). Telemetry never raises into the pass."""
     out: dict = {"case_amendments": 0, "case_amendments_error": None}
     try:
         import posteriors_case as po
         from rlvr import consolidated_ledger as cl
         from harness_common import utc_now_z
 
-        status_map: dict[str, bool] = {}
-        for claim in _register_claims(ws):
-            cid = str(claim.get("id") or "").strip()
-            status = str(claim.get("status") or "").upper()
-            if status in CASE_PASS_STATUSES:
-                status_map[cid] = True
-            elif status in CASE_FAIL_STATUSES:
-                status_map[cid] = False
+        status_map = _decisive_status_map(_register_claims(ws), skip)
         known_cases = {c for ids in
                        _cases_by_pq(ws, armed_only=False).values()
                        for c in ids}
@@ -474,9 +520,12 @@ def record_case_settlements(ws: Path, banked: list[str]) -> dict:
         return out
 
 
-def amend_case_settlements(ws: Path) -> dict:
+def amend_case_settlements(ws: Path,
+                           skip: set[str] | None = None) -> dict:
     """The late-arm amendment: sweep EVERY decisive-terminal claim against
-    the ARMED cases and observe each un-observed pair.
+    the ARMED cases and observe each un-observed pair. ``skip`` (the
+    censored/pending claims) never observes: such an outcome is not an
+    observation.
 
     ``record_case_settlements`` keys on ``banked`` — the dispatches whose
     first settlement rode the current pass. That guard bought idempotency
@@ -495,8 +544,10 @@ def amend_case_settlements(ws: Path) -> dict:
         index = _cases_by_pq(ws, armed_only=True)
         if not index:
             return _empty_obs()
+        claims = [c for c in _register_claims(ws)
+                  if str(c.get("id") or "") not in (skip or set())]
         entries = _observation_entries(
-            _register_claims(ws), index, _observed_pairs(ws))
+            claims, index, _observed_pairs(ws))
         return _apply_case_observations(ws, entries, source="late-arm")
     except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
         warn("case_settlements", f"{type(exc).__name__}: {exc}")
@@ -640,14 +691,17 @@ def _settle_episode_tiers(ws: Path) -> dict:
 
 
 def _settle_case_legs(ws: Path, banked: list[str],
-                      amended: list[str]) -> dict:
+                      amended: list[str],
+                      skip: set[str] | None = None) -> dict:
     """The posterior-moving legs of one settlement pass: the Gate C
     degeneracy breaker first (a dead signal freezes everything), then
     fresh -> late-amend -> pair-reconcile, the credit-into-pool bridge
     (frozen signals bridge nothing) and the missing-rollout audit.
-    Fail-open throughout: a guard failure never blocks settlement
-    bookkeeping; the signal_degenerate stderr line is the loud face.
-    Returns the out-dict fields to merge."""
+    ``skip`` is the censored/pending claim set — an outcome that moves no
+    mass is never a case observation either. Fail-open throughout: a
+    guard failure never blocks settlement bookkeeping; the
+    signal_degenerate stderr line is the loud face. Returns the out-dict
+    fields to merge."""
     out: dict = {}
     _frozen = False
     try:
@@ -670,11 +724,11 @@ def _settle_case_legs(ws: Path, banked: list[str],
               "before re-arming.", file=sys.stderr, flush=True)
     else:
         fresh = record_case_settlements(ws, banked)
-        late = amend_case_settlements(ws)
+        late = amend_case_settlements(ws, skip)
         # the pair-amendment leg rides LAST: it reconciles pairs
         # against the register's current truth, after both
         # observation legs had their byte-identical say
-        amended = reconcile_case_settlements(ws)
+        amended = reconcile_case_settlements(ws, skip)
         # the credit-into-pool bridge rides the SAME non-frozen
         # branch (a frozen signal bridges nothing — the
         # degeneracy breaker's freeze covers this leg too)
@@ -733,7 +787,7 @@ def _record_unattributable(ws: Path, uncredited: dict[str, list[str]]) -> None:
 
 
 def _classify_terminal_claims(
-        ws: Path, claims: list[str],
+        ws: Path, claims: list[dict], outcomes: dict[str, str],
 ) -> tuple[list[dict], list[str], dict[str, list[str]]]:
     """Split the terminal claims into ``(dispatches, not_dispatched,
     uncredited)``.
@@ -748,12 +802,15 @@ def _classify_terminal_claims(
     touched it -> ``not_dispatched``; an attempt without a commit ->
     ``uncredited``, mapped to the trace kinds that show the attempt. A
     claim whose ledger read failed is left out of all three (one warn) and
-    retried by the next pass."""
+    retried by the next pass. Each dispatch row carries the claim's
+    ``status`` and recorded outcome word (the settlement's censoring
+    classifier keys on them at the bank seam)."""
     dispatches: list[dict] = []
     not_dispatched: list[str] = []
     uncredited: dict[str, list[str]] = {}
     attempts = None
-    for cid in claims:
+    for claim in claims:
+        cid = str(claim.get("id") or "")
         try:
             import claims_store as _cstore8
             _led = _cstore8.latest_committed_dispatch(ws, cid)
@@ -764,7 +821,9 @@ def _classify_terminal_claims(
             continue
         if _led is not None:
             dispatches.append({"dispatch_id": cid,
-                               "round": len(dispatches) + 1})
+                               "round": len(dispatches) + 1,
+                               "status": str(claim.get("status") or ""),
+                               "outcome": outcomes.get(cid, "")})
             continue
         if attempts is None:
             attempts = _cstore8.dispatch_attempts(ws)
@@ -792,8 +851,14 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     attempt ever touched (nothing is owed); ``uncredited`` lists those
     with an attempt but no commit, whose credit can never be banked (one
     ``credit_unattributable`` event each, once)."""
+    import claims_store as _cstore8
+
+    claims = _terminal_claim_rows(ws)
+    outcomes = {str(c.get("id") or ""): _cstore8.dispatch_failure_reason(
+        ws, str(c.get("id") or "")) for c in claims}
+    routes = _settle_routes(ws, claims, outcomes)
     dispatches, not_dispatched, uncredited = _classify_terminal_claims(
-        ws, terminal_claims(ws))
+        ws, claims, outcomes)
     if uncredited and not dry_run:
         _record_unattributable(ws, uncredited)
     # issue-678 T5: the armed-case count rides EVERY pass (dry included)
@@ -823,13 +888,19 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             # the posterior-moving legs (contract rl-signal-contract/1 §3).
             # Fail-open: a guard failure never blocks settlement
             # bookkeeping; the signal_degenerate blocker is the loud face.
-            out.update(_settle_case_legs(ws, banked, amended))
+            out.update(_settle_case_legs(ws, banked, amended,
+                                         skip=set(routes)))
     else:
         out = {"settled": 0, "rounds": 0,
                "reason": ("no terminal claim has a committed dispatch - "
                           "nothing to settle"
                           if not_dispatched or uncredited else
                           "no terminal claims - nothing to settle")}
+    from rlvr import scalar as _sc
+    out["censored"] = sorted(cid for cid, route in routes.items()
+                             if route[0] == _sc.ROUTE_CENSORED)
+    out["pending_no_mass"] = sorted(cid for cid, route in routes.items()
+                                    if route[0] == _sc.ROUTE_PENDING)
     out["cases_armed"] = len(armed)
     if not_dispatched:
         out["not_dispatched"] = not_dispatched

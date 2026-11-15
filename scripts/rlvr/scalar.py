@@ -178,6 +178,65 @@ OUTCOME_CENSORED = "censored"
 INFRA_OUTCOMES = frozenset({"BLOCKED"})
 CENSORED_OUTCOMES = frozenset({"TIMEOUT"})
 
+# --- settlement censoring: the outcome classes the close path books ------
+#
+# A claim whose outcome is parked/expired/killed or an infrastructure
+# failure carries NO strategy signal: censoring removes information, it
+# never adds wrong signal. The route below keeps those outcomes out of
+# every Beta/mass face and records them as censored on the settlement
+# receipt. Decisive-success outcomes never censor (their settlement is
+# the ladder's own signal); the rule-out outcomes get their own sign.
+CENSORED_CLAIM_STATUSES = frozenset({"DEFERRED", "STALE", "SUPERSEDED",
+                                     "DEAD"})
+SUCCESS_CLAIM_STATUSES = frozenset({"PROVEN", "VERIFIED"})
+RULE_OUT_CLAIM_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
+
+#: the rule-out FINDING class: a NEGATIVE fact is a proven-negative
+#: rule-out (the hypothesis arm died on evidence — real verified work).
+#: A REFUTED fact is a REFUTED PROPOSITION (the finding itself failed —
+#: the strategy's own outcome, priced by the ladder as failure).
+RULE_OUT_FACT_STATUSES = frozenset({"NEGATIVE"})
+
+#: the settlement's censoring route kinds -> the receipt marker key
+ROUTE_CENSORED = "censored"
+ROUTE_PENDING = "pending_no_mass"
+
+#: infrastructure failure reason markers (normalized: lowercase, the
+#: ``_``/space run collapsed to ``-``): a dispatch that died on the
+#: model-API quota or the API itself is an environment outcome, never a
+#: strategy outcome.
+_INFRA_REASON_MARKERS = ("quota", "rate-limit", "api-error", "api-quota")
+#: the right-censoring reason markers (the end was never observed)
+_CENSORED_REASON_MARKERS = ("timeout", "timed-out")
+
+
+def _normalize_word(word: str) -> str:
+    return re.sub(r"[\s_]+", "-", str(word or "").strip().lower())
+
+
+def outcome_censor_class(word: str) -> str | None:
+    """The censoring class (OUTCOME_CENSORED / OUTCOME_INFRA) of one
+    settlement outcome word: the act-outcome classes first (classify_
+    outcome — TIMEOUT censored, BLOCKED infra), then the infrastructure
+    failure reasons (timeout family censored; the commit-transaction's
+    ``step-<name>-failed`` family and the quota / API failures infra).
+    None = a strategy outcome (settles on the ladder). Pure; never
+    guesses an unknown word into a class."""
+    s = str(word or "").strip()
+    if not s:
+        return None
+    cls = classify_outcome(s)
+    if cls in (OUTCOME_CENSORED, OUTCOME_INFRA):
+        return cls
+    low = _normalize_word(s)
+    if any(marker in low for marker in _CENSORED_REASON_MARKERS):
+        return OUTCOME_CENSORED
+    if low.startswith("step-") and low.endswith("-failed"):
+        return OUTCOME_INFRA
+    if any(marker in low for marker in _INFRA_REASON_MARKERS):
+        return OUTCOME_INFRA
+    return None
+
 TIER_GOLD = "GOLD"
 TIER_SILVER = "SILVER"
 TIER_BRONZE = "BRONZE"
@@ -464,13 +523,19 @@ def _artifact_cited(artifact: dict) -> bool:
 def _artifact_credit(artifact: dict) -> tuple[float, str | None]:
     """One artifact's round-credit value under the issue-433 ladder:
     ``(value, demotion reason or None)``. FIRST-MATCH:
+      verified rule-out (independent sign-off)  -> (FULL, None)
       terminal-verified + cited             -> (FULL, None)
       terminal-verified, never cited        -> (TRACE, uncited_verified)
       oracle-backed refutation w/ replay    -> (TRACE,
                                                 refuted_with_replay_evidence)
       anything else (action/tool success)   -> (0.0, None)
-    An unverified artifact earns nothing even when cited — verified is
-    the admission ticket, not an alternative value path."""
+    A VERIFIED rule-out is real work — a verified negative eliminates a
+    hypothesis and banks SUCCESS; the independent sign-off is the
+    verification currency (the maker cannot self-certify). An unverified
+    artifact earns nothing even when cited — verified is the admission
+    ticket, not an alternative value path."""
+    if artifact.get("verified_rule_out"):
+        return ROUND_CREDIT_FULL, None
     status = str(artifact.get("status") or "").strip().upper()
     if status in _CREDIT_TERMINALS:
         if _artifact_cited(artifact):
@@ -495,6 +560,59 @@ def classify_outcome(o_status: str) -> str:
     if s in INFRA_OUTCOMES:
         return OUTCOME_INFRA
     return OUTCOME_STRATEGY
+
+
+def rule_out_pending(claim_artifacts: list[dict]) -> tuple[str, dict] | None:
+    """The unverified rule-out's PENDING route: the claim's rule-out
+    finding (the NEGATIVE fact) exists but carries no independent
+    verification and no replay-backed refutation — the outcome is not
+    evidence, so no mass moves either way. A verified rule-out settles
+    SUCCESS on its producer; replay-backed refutations keep the
+    information option; any credited artifact means real work settles on
+    the ladder. None = the ladder settles the claim."""
+    rule_outs = [a for a in (claim_artifacts or [])
+                 if str(a.get("status") or "").strip().upper()
+                 in RULE_OUT_FACT_STATUSES]
+    if not rule_outs:
+        return None
+    if any(a.get("verified_rule_out") for a in rule_outs):
+        return None
+    if any(_artifact_credit(a)[0] >= ROUND_CREDIT_FULL
+           for a in (claim_artifacts or [])):
+        return None
+    unverified = [str(a.get("id") or "") for a in rule_outs
+                  if not (a.get("oracle_backed_refutation")
+                          and str(a.get("verify_status") or "")
+                          .strip().lower() == "passes")]
+    if not unverified:
+        return None
+    return (ROUTE_PENDING,
+            {"reason": "unverified-rule-out",
+             "facts": [fid for fid in unverified if fid]})
+
+
+def settlement_route(status, outcome,
+                     claim_artifacts: list[dict]) -> tuple[str, dict] | None:
+    """One claim's settlement route — the censoring/pending face the
+    close path books BEFORE the ladder: ``(marker key, marker block)``
+    when the outcome carries no Beta/mass signal, None = the ladder
+    settles it. Decisive-success outcomes never route; a censored
+    claim-status outcome routes on the status word; a rule-out outcome
+    first consults the recorded infrastructure failure (the outcome
+    word), then the unverified-rule-out pending face. Pure."""
+    st = str(status or "").strip().upper()
+    if st in SUCCESS_CLAIM_STATUSES:
+        return None
+    if st in CENSORED_CLAIM_STATUSES:
+        return (ROUTE_CENSORED,
+                {"class": OUTCOME_CENSORED, "reason": st})
+    word = str(outcome or "").strip()
+    cls = outcome_censor_class(word) if word else None
+    if cls is not None:
+        return (ROUTE_CENSORED, {"class": cls, "reason": word})
+    if st in RULE_OUT_CLAIM_STATUSES:
+        return rule_out_pending(claim_artifacts)
+    return None
 
 
 def budget_overrun(branch_budget, usage) -> float:
@@ -632,6 +750,26 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
             "unattributed_waste": unattributed_waste}
 
 
+def _settlement_routes(dispatches: list[dict],
+                       artifacts: list[dict]) -> dict[str, tuple[str, dict]]:
+    """dispatch id -> the censoring/pending route (the claim-status +
+    outcome face), keyed off the dispatch words and the claim's own
+    artifacts. Bare dispatch dicts (no status word) route nothing."""
+    arts_by_claim: dict[str, list[dict]] = {}
+    for a in artifacts:
+        cid = str(a.get("claim_id") or "")
+        if cid:
+            arts_by_claim.setdefault(cid, []).append(a)
+    routes: dict[str, tuple[str, dict]] = {}
+    for d in (dispatches or []):
+        did = str(d.get("dispatch_id") or "")
+        route = settlement_route(d.get("status"), d.get("outcome"),
+                                 arts_by_claim.get(did, []))
+        if route is not None:
+            routes[did] = route
+    return routes
+
+
 def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                         waste: list[dict] | None = None,
                         now=None) -> dict:
@@ -662,6 +800,10 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     # at the bank seam; a fact without it keeps the legacy claim-latest
     # fallback and names the degradation on its credit row
     producer_of = _producer_map(artifacts)
+    # the censoring/pending routes (the claim-status + outcome face):
+    # routed rows settle a marked receipt and never touch a Beta/mass
+    # face. Bare dispatch dicts (no status word) route nothing.
+    routes = _settlement_routes(dispatches, artifacts)
     doc = round_credit(dispatches, artifacts, waste)
     settled_n = 0
     banked: list[str] = []
@@ -669,6 +811,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     ts = now or _now()
     for row in doc["rows"]:
         rid = f"{KIND_ROUND_CREDIT}/{row['dispatch_id']}"
+        route = routes.get(str(row["dispatch_id"]))
         existing = rl.fold(ws, rid)
         if existing is not None:
             # re-run: freeze the signal ts at the row's identity ts so the
@@ -722,6 +865,8 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
         # trail ride the settlement only when the dispatch carried the
         # inputs — legacy rows stay byte-identical.
         _settlement_seams(settlement, row, producer_of)
+        if route is not None:
+            settlement[route[0]] = route[1]
         prior_late = [str(x) for x in (prior_st.get("late_cited") or [])]
         late_cited = prior_late + [
             aid for aid in row["credited"]
@@ -740,8 +885,10 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             # the late-cite amendment path (both carrying a settlement in
             # the fold) refine the LEDGER only — the append-only
             # observation log has no retraction face, so re-banking would
-            # double-count the round.
-            if not (existing and existing.get("settlement") is not None):
+            # double-count the round. A censored/pending route banks
+            # NOTHING — the marker is the record.
+            if route is None and not (
+                    existing and existing.get("settlement") is not None):
                 bank = _bank_q_cell_credit(ws, row, producer_of)
                 # #718: the same first-settlement tick banks the L1
                 # rollout return — the claim-terminal learning target the
@@ -756,7 +903,8 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
         # so a bank that failed on pass 1 is repaired whatever the
         # ledger says); the repair/amendment NEVER reports into
         # `banked` — the case-posterior leg keys on that set.
-        if existing and existing.get("settlement") is not None:
+        if route is None and existing \
+                and existing.get("settlement") is not None:
             if _reconcile_q_cell_bank(ws, row, producer_of):
                 amended.append(str(row["dispatch_id"]))
     return {"settled": settled_n, "untraced": doc["untraced"],
@@ -768,7 +916,13 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             "banked": banked,
             # the dispatches whose bank was corrected or repaired
             # on this pass (the learning signal tracking the ledger)
-            "amended": amended}
+            "amended": amended,
+            # the routed rows: censored outcomes and pending rule-outs
+            # settled without moving any Beta/mass
+            "censored": [d for d, (k, _) in routes.items()
+                         if k == ROUTE_CENSORED],
+            "pending_no_mass": [d for d, (k, _) in routes.items()
+                                if k == ROUTE_PENDING]}
 
 
 def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
@@ -1248,6 +1402,103 @@ def _deliverable_cited(fid: str, cited: set[str]) -> bool:
     return bool(token) and token.group(0) in cited
 
 
+#: the independent sign-off shape rule — mirrors blind_gate's required
+#: fields, kept import-free by the scalar engine's U3 import wall
+#: (pinned equal to its source by test)
+SIGN_OFF_REQUIRED = ("verifier_id", "refute_attempt", "sign_off_at",
+                     "verdict")
+#: verdict words that count as a PASSED independent check — mirrors
+#: verifier_integrity.PASS_VERDICTS (pinned equal to its source by test)
+SIGN_OFF_PASS_VERDICTS = frozenset(
+    {"verified", "confirmed", "pass", "passed", "passes"})
+
+
+def _claim_workers(ws) -> dict[str, str]:
+    """claim id -> the claim's assigned worker identity (the register's
+    ``worker_id`` / ``last_dispatched_worker`` — the maker-checker's
+    key). Tolerant read: a missing or malformed register maps nothing."""
+    import yaml
+    try:
+        doc = yaml.safe_load(
+            (Path(ws) / "claim-register.yaml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return {}
+    out: dict[str, str] = {}
+    for c in (doc or {}).get("claims") or []:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "").strip()
+        for key in ("worker_id", "last_dispatched_worker"):
+            val = str(c.get(key) or "").strip()
+            if cid and val and val.lower() not in ("null", "none", "~"):
+                out[cid] = val
+                break
+    return out
+
+
+def _dispatch_agents(ws) -> dict[str, set[str]]:
+    """dispatch id -> the recorded worker identities (the dispatch row's
+    ``agent``) — the maker behind a creating-dispatch stamp. Tolerant
+    read; a read failure is one warn (the claim-worker and fact-echo
+    comparisons still run)."""
+    out: dict[str, set[str]] = {}
+    try:
+        from rlvr import q_cells as _qc  # noqa: PLC0415 — intra-package
+        for row in _seal.trusted_rows(_qc.JSONLQStore(ws).observations(),
+                                      op="scalar.dispatch_agents"):
+            if not isinstance(row, dict) or str(
+                    row.get("source") or "") != "dispatch":
+                continue
+            did = str(row.get("dispatch_id") or "").strip()
+            agent = str(row.get("agent") or "").strip()
+            if did and agent:
+                out.setdefault(did, set()).add(agent)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("scalar.dispatch_agents", f"{type(exc).__name__}: {exc}")
+    return out
+
+
+def _maker_ids(meta: dict, claim_worker: str | None,
+               dispatch_agents: dict[str, set[str]]) -> set[str]:
+    """The fact's maker identities (maker-checker: the maker cannot
+    self-certify): the fact's own identity echoes (creator / trace_id /
+    the creating-dispatch stamp), the claim's assigned worker identity,
+    and the worker behind the creating dispatch."""
+    out = {str(meta.get(k) or "").strip()
+           for k in ("creator", "trace_id", "created_by_dispatch")}
+    if claim_worker:
+        out.add(str(claim_worker).strip())
+    did = str(meta.get("created_by_dispatch") or "").strip()
+    out |= set(dispatch_agents.get(did, ()))
+    return {m.casefold() for m in out if m}
+
+
+def _independent_rule_out(meta: dict, claim_worker: str | None = None,
+                          dispatch_agents: dict[str, set[str]] | None = None
+                          ) -> bool:
+    """True when the fact is a rule-out finding (the NEGATIVE
+    proven-negative class) carrying INDEPENDENT verification evidence: a
+    ``verifier_sign_off`` block with every required field non-empty, a
+    PASSED independent verdict, and a ``verifier_id`` that is NOT the
+    maker (maker-checker: a self-stamped sign-off is not verification).
+    The producer's own reproduce gate is never independent either."""
+    if str(meta.get("status") or "").strip().upper() \
+            not in RULE_OUT_FACT_STATUSES:
+        return False
+    sign_off = meta.get("verifier_sign_off")
+    if not isinstance(sign_off, dict):
+        return False
+    if not all(str(sign_off.get(f) or "").strip()
+               for f in SIGN_OFF_REQUIRED):
+        return False
+    verdict = str(sign_off.get("verdict") or "").strip().casefold()
+    if verdict not in SIGN_OFF_PASS_VERDICTS:
+        return False
+    vid = str(sign_off.get("verifier_id") or "").strip().casefold()
+    return bool(vid) and vid not in _maker_ids(
+        meta, claim_worker, dispatch_agents or {})
+
+
 def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     """Read <ws>/facts/*.md frontmatter into round-credit artifact rows.
 
@@ -1272,6 +1523,9 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     else:
         cited = {str(c) for c in cited_ids}
     question_bearing = question_claims(ws)
+    # the maker-checker's identity sources (once per read)
+    workers = _claim_workers(ws)
+    agents = _dispatch_agents(ws)
     out: list[dict] = []
     facts_dir = Path(ws) / "facts"
     if not facts_dir.is_dir():
@@ -1294,6 +1548,10 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
         out.append({"id": fid,
                     "creator": creator or None,
                     **({"created_by_dispatch": stamped} if stamped else {}),
+                    **({"verified_rule_out": True}
+                       if _independent_rule_out(
+                           meta, workers.get(claim_id or None), agents)
+                       else {}),
                     "status": str(meta.get("status") or ""),
                     "verify_status": str(meta.get("verify_status") or ""),
                     "claim_id": claim_id or None,

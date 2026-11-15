@@ -274,6 +274,9 @@ def _require_dispatch_credit(ws: Path, bound: dict) -> None:
         row = ledger.fold(ws, f"round_credit/{cid}")
         if row is None or row.get("settlement") is None:
             raise SettlementIncomplete(f"credit settlement absent: {cid}")
+        st = row.get("settlement") or {}
+        if st.get("censored") or st.get("pending_no_mass"):
+            continue  # a censored/pending close is the settlement record
         rows = 0
         for did in dids:
             mass = q_cells.banked_mass(ws, did)

@@ -595,6 +595,57 @@ def dispatch_attempts(ws) -> dict:
             for cid, kinds in found.items()}
 
 
+def dispatch_failure_reason(ws, claim: str) -> str:
+    """The claim's recorded dispatch outcome word: the ``reason`` of its
+    LATEST provenance row when that row is a dispatch/abort failure
+    (a failed commit records ``step-<name>-failed``; an abort records
+    its reason) — the infrastructure-outcome carrier the settlement's
+    censoring classifier reads. "" when the latest row is not a failure
+    (a claim that recovered and settled keeps its terminal outcome) or
+    no provenance exists."""
+    latest = None
+    for row in _jsonl_dicts(Path(ws) / PROVENANCE_REL):
+        if _claim_token(row.get("claim")) == _claim_token(claim):
+            latest = row
+    if latest is not None and str(latest.get("event")) in (
+            "dispatch", "abort_dispatch") and str(latest.get("outcome")) \
+            in ("failed", "aborted"):
+        return str(latest.get("reason") or "")
+    return ""
+
+
+def _marked_settlement(ws, claim: str) -> bool:
+    """True when the claim's round-credit settlement carries a
+    censored/pending marker — a close that recorded its no-mass route is
+    a settlement, never the silent gap the audit hunts. Fail-open: an
+    unreadable ledger reads as unmarked (the gap stands, loud)."""
+    try:
+        from rlvr import ledger as _rl  # noqa: PLC0415 — lazy sibling
+        st = (_rl.fold(ws, f"round_credit/{claim}") or {}).get("settlement")
+    except Exception:  # noqa: BLE001 — fail-open telemetry
+        return False
+    if not isinstance(st, dict):
+        return False
+    return bool(st.get("censored") or st.get("pending_no_mass"))
+
+
+def _settled_quietly(ws, did: str, claim: str) -> bool:
+    """The missing-rollout audit's quiet predicate: the dispatch bank
+    already carries rows, or the claim's settlement carries a
+    censored/pending marker (a close that recorded its no-mass route is
+    a settlement). An UNREADABLE bank log reads quiet (fail-open skip,
+    never a false alarm)."""
+    if did:
+        try:
+            from rlvr import q_cells  # noqa: PLC0415 — lazy sibling
+            bm = q_cells.banked_mass(ws, did)
+        except Exception:  # noqa: BLE001 — fail-open
+            bm = None
+        if bm is None or bm[2] > 0:
+            return True
+    return _marked_settlement(ws, claim)
+
+
 def audit_missing_rollouts(ws) -> list:
     """#800 R2 amendment 4 — the missing-rollout audit. Production
     C-005 (2026-10-21 android run): a dispatched claim went PROVEN
@@ -607,7 +658,6 @@ def audit_missing_rollouts(ws) -> list:
     gaps: list = []
     try:
         from status_defs import TERMINAL
-        from rlvr import q_cells
         doc = _load_register_doc(ws)
         statuses = {str(c.get("id") or ""):
                     str(c.get("status") or "").upper()
@@ -621,22 +671,11 @@ def audit_missing_rollouts(ws) -> list:
             if statuses.get(claim) not in TERMINAL:
                 continue  # in-flight: owes no settlement yet
             did = str(row.get("dispatch_id") or "")
-            # banked presence via the public mass face: banked_mass
-            # returns None = log UNREADABLE (fail-open skip, never a
-            # false alarm) and (s, f, n_rows) otherwise — n_rows is
-            # the existence test (a band-valued solve row counts:
-            # zero mass, existence only). The pre-R2 claim-id alias
-            # is NOT consulted (no-backcompat ruling: the ledger id
-            # is the one key).
-            quiet = False
-            if did:
-                try:
-                    bm = q_cells.banked_mass(ws, did)
-                except Exception:  # noqa: BLE001 — fail-open
-                    bm = None
-                if bm is None or bm[2] > 0:
-                    quiet = True
-            if quiet:
+            # quiet = banked rows exist, or the close recorded a
+            # censored/pending marker (see _settled_quietly). The pre-R2
+            # claim-id alias is NOT consulted (no-backcompat ruling: the
+            # ledger id is the one key).
+            if _settled_quietly(ws, did, claim):
                 continue
             # Standard 11: count per dispatch, escalate once, degrade
             key = did or f"claim:{claim}"
