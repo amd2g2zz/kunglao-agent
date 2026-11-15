@@ -568,7 +568,7 @@ files:
   scripts/workguard.py:
     r1: 3
   scripts/write_gate.py:
-    r1: 10
+    r1: 9
   scripts/write_guard_unlock.py:
     r1: 1
   scripts/ws_layout.py:

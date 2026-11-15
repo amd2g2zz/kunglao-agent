@@ -318,6 +318,33 @@ def _check_note(ws: Path, p: Path) -> list[dict]:
                         f"§1b; create-runs.py self-stamp shape)")}]
 
 
+def _signoff_self_stamp_violations(ws: Path, signoff: dict,
+                                   worker_id: str | None,
+                                   recompute: list[str], rel: str
+                                   ) -> list[dict]:
+    """The maker-checker (§1b) on a verifier_sign_off block: the named
+    verifier must be independent of the producer. Status-blind — the
+    block itself claims independent verification, whatever the fact's
+    status word says (a NEGATIVE rule-out is exactly where a self-stamp
+    farms success credit)."""
+    if not signoff:
+        return []
+    vid = signoff.get("verifier_id", "")
+    # verdict-less sign-off is not evidence — no CONFIRMED default
+    verdict = str(signoff.get("verdict", "")).upper()
+    if not (vid and verdict == "CONFIRMED"):
+        return []
+    if worker_id and _same_actor(vid, worker_id, ws):
+        return [{"rule": "R1", "file": rel, "detail": (
+            f"self-stamp: verifier_sign_off verifier_id={vid} equals "
+            f"worker_id {worker_id} (maker-checker §1b)")}]
+    if recompute and any(_same_actor(vid, s, ws) for s in recompute):
+        return [{"rule": "R1", "file": rel, "detail": (
+            f"verifier_sign_off verifier_id={vid} resolves to the "
+            f"producing script {recompute} — not independent")}]
+    return []
+
+
 def _check_fact(ws: Path, p: Path) -> list[dict]:
     """A fact with verification-claiming status must carry independent-verifier evidence (R1+R2).
 
@@ -336,7 +363,13 @@ def _check_fact(ws: Path, p: Path) -> list[dict]:
             f"status from {list(FACT_VERIFIED_STATUSES)} or downgrade to "
             f"STAMP (state that belongs in claim-register, not frontmatter)")}]
     if not semantic:
-        return []
+        # the maker-checker is status-blind: any fact carrying a
+        # verifier_sign_off block is held to independence, whatever the
+        # status word claims
+        claim_id = str(fm.get("claim_id", "")).strip()
+        return _signoff_self_stamp_violations(
+            ws, _parse_signoff(text), _register_worker_id(ws, claim_id),
+            _prov_recompute_paths(text), f"facts/{p.name}")
     fid = str(fm.get("id", "")).strip() or p.stem
     claim_id = str(fm.get("claim_id", "")).strip()
     worker_id = _register_worker_id(ws, claim_id)
@@ -348,19 +381,13 @@ def _check_fact(ws: Path, p: Path) -> list[dict]:
     evidence: str | None = None
 
     if signoff:
+        found = _signoff_self_stamp_violations(ws, signoff, worker_id,
+                                               recompute, rel)
+        violations.extend(found)
         vid = signoff.get("verifier_id", "")
-        verdict = str(signoff.get("verdict", "")).upper()  # #53: no CONFIRMED default — verdict-less sign-off fails R1 evidence
-        if vid and verdict == "CONFIRMED":
-            if worker_id and _same_actor(vid, worker_id, ws):
-                violations.append({"rule": "R1", "file": rel, "detail": (
-                    f"self-stamp: verifier_sign_off verifier_id={vid} equals "
-                    f"worker_id {worker_id} (maker-checker §1b)")})
-            elif recompute and any(_same_actor(vid, s, ws) for s in recompute):
-                violations.append({"rule": "R1", "file": rel, "detail": (
-                    f"verifier_sign_off verifier_id={vid} resolves to the "
-                    f"producing script {recompute} — not independent")})
-            else:
-                evidence = f"verifier_sign_off verifier_id={vid} independent"
+        if not found and vid and str(signoff.get("verdict", "")).upper() \
+                == "CONFIRMED":
+            evidence = f"verifier_sign_off verifier_id={vid} independent"
     if vbr:
         if any(str(fm.get(k, "")).strip() for k in EXPECTED_FIELDS):
             for s in recompute:
