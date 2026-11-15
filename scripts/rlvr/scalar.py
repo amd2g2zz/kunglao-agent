@@ -855,7 +855,7 @@ def _attribution_note(row: dict,
     """The named degradation block for a credit row whose credited facts
     predate the creating-dispatch stamp: the fallback is named, never a
     silent guess. None when every credited fact carries the stamp."""
-    unstamped = [aid for aid in row["credited"]
+    unstamped = [aid for aid in (row.get("credited") or [])
                  if not (producer_of or {}).get(str(aid))]
     if not unstamped:
         return None
@@ -968,7 +968,7 @@ def _bank_q_cell_credit(ws, row: dict,
         groups = _producer_groups(row, producer_of)
         total = sum(g["n"] for g in groups.values()) or 1
         # the row's trace/waste residue rides the producers' fact shares
-        residue = float(row["r"]) - float(len(row["credited"]))
+        residue = float(row["r"]) - float(len(row.get("credited") or []))
         bank = None
         for did, g in groups.items():
             target = did or fallback_did
