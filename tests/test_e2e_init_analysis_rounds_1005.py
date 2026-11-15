@@ -44,8 +44,6 @@ def test_init_analysis_to_learning_and_settlement(tmp_path, seed, monkeypatch):
     # the cross-task posterior store defaults INSIDE the repo — isolate it.
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
                        str(tmp_path / "posterior-store"))
-    # pin the ambient switch: the eval-settle mode skips the blind park.
-    monkeypatch.setenv("KUNGLAO_EVAL_SETTLE", "0")
     sc = H.Scenario(seed)
     plan = sc.plan(rounds=7)
     ws = H.init_workspace(tmp_path, seed=seed, n_claims=len(plan))

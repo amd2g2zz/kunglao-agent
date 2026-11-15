@@ -195,8 +195,8 @@ arms:
 # the launcher strips KUNGLAO_RECALL / KUNGLAO_EXPANSION /
 # KUNGLAO_PREDICT_BEFORE_TRY / KUNGLAO_META_RETRIEVAL /
 # KUNGLAO_META_VALUE_TABLE / KUNGLAO_META_ATTRIBUTION /
-# KUNGLAO_META_PLAYBOOK / KUNGLAO_DIRECTION / KUNGLAO_EVAL_SETTLE /
-# KUNGLAO_PLAYBOOK / KUNGLAO_SCHEDULER from the inherited environment
+# KUNGLAO_META_PLAYBOOK / KUNGLAO_DIRECTION / KUNGLAO_PLAYBOOK /
+# KUNGLAO_SCHEDULER from the inherited environment
 # before merging each arm's declared env — ambient shell state can never
 # contaminate an arm. Every arm declares the supply/learning defaults
 # above explicitly (declaration matrix), so no arm relies on an

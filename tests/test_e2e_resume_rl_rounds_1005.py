@@ -43,8 +43,6 @@ def test_resume_to_learning_and_settlement(tmp_path, seed, monkeypatch):
     # E2E's store rows to the test's tmp tree (parallel seeds never race).
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
                        str(tmp_path / "posterior-store"))
-    # pin the ambient switch: the eval-settle mode skips the blind park.
-    monkeypatch.setenv("KUNGLAO_EVAL_SETTLE", "0")
     sc = H.Scenario(seed)
     plan = sc.plan(rounds=7)
     ws = H.build_workspace(tmp_path, seed=seed, n_claims=len(plan))

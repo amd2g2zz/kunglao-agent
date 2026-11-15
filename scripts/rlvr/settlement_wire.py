@@ -37,13 +37,25 @@ register is untouched). An oracle-fail maps to ``settle_refuted``. The
 mint's actor is ``settler:<identity>`` — production provenance carries
 the blind grader's identity.
 
-THE EVAL GATE — the unblinded ``settle_step`` judgment is eval-only.
-``eval_settle_enabled()`` (env ``KUNGLAO_EVAL_SETTLE=1``) is the
-explicit opt-in; the production stop face defaults to blind mode. The
-liveness fingerprint rides the ``settlement-wire/1`` rows in the
-consolidated settlement ledger: a blind settlement event always lands a
-settler-identity row — production settlements show settler-identity
-rows from the blind path.
+THE STOP FACE IS BLIND-ONLY. The production stop face has no unblinded
+mode: the unblinded ``settle_step`` judgment survives only as
+``rlvr.step_grain.settle_step``'s library face for direct callers
+(eval harnesses); no environment value can steer a production stop back
+into it. The liveness fingerprint rides the ``settlement-wire/1`` rows
+in the consolidated settlement ledger: a blind settlement event always
+lands a settler-identity row — production settlements show
+settler-identity rows from the blind path.
+
+THE LEARNER FEED — a settled blind verdict BANKS into the q-cell fold
+(``rlvr.q_cells``) on the producing dispatch's arm: the claim resolves
+to the dispatch id the dispatch ledger recorded, and the censoring
+routes (``rlvr.scalar.settlement_route``) gate the bank on the SAME
+faces the round-credit close path books — the register status and the
+ACT OUTCOME word the stop face persisted beside the input doc (a
+quota/timeout/blocked act banks nothing, its ruling notwithstanding).
+One bank per dispatch holds (a replayed settlement never double-banks;
+refinements ride the credit-amendment face). Fail-open telemetry: a
+bank failure is ONE warn, never a settlement break.
 
 Fail-closed on trust, fail-open on telemetry: a refused settlement
 writes nothing and says why; the wire row is the loud receipt either
@@ -60,14 +72,16 @@ from kunglao_log import warn
 from rlvr import consolidated_ledger as cl
 from rlvr import settlement_scorer as bss
 
-#: the explicit eval gate for the unblinded settle_step judgment —
-#: production defaults to the blind face; this env is the opt-back-in
-EVAL_SETTLE_ENV = "KUNGLAO_EVAL_SETTLE"
-
 #: the parked blind input doc (the writer's face — matches the
-#: kunglao-settler input contract) and the ruling doc (its output)
+#: kunglao-settler input contract), the ruling doc (its output), and
+#: the act-outcome sidecar (the stop face's outcome word — consumer
+#: side only, never a settler input: the ruling stays artifact-blind)
 INPUT_REL = "runs/settlement-input-{claim}.json"
 VERDICT_REL = "runs/settlement-verdict-{claim}.json"
+ACT_REL = "runs/settlement-act-{claim}.json"
+
+#: the act-outcome sidecar's schema stamp
+ACT_SCHEMA = "settlement-act/1"
 
 #: the wire row stamp — the liveness fingerprint's ledger evidence
 WIRE_SCHEMA = "settlement-wire/1"
@@ -79,14 +93,6 @@ DEFAULT_SETTLER_IDENTITY = "kunglao-settler"
 #: off the package root when present — the doc pins it path + sha256
 _DEFAULT_RULES = (Path(__file__).resolve().parents[2]
                   / "references" / "contracts" / "reward-rules.yaml")
-
-
-def eval_settle_enabled() -> bool:
-    """True only when the UNBLINDED settle_step judgment was explicitly
-    opted back into (eval runs). The learning switch defaults OFF;
-    anything else — unset, empty, "0" — is production blind mode."""
-    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
-    return runtime_switches.get_bool(EVAL_SETTLE_ENV)
 
 
 def _safe_claim(claim) -> str:
@@ -107,6 +113,10 @@ def blind_input_rel(claim) -> str:
 
 def verdict_rel(claim) -> str:
     return VERDICT_REL.format(claim=_safe_claim(claim))
+
+
+def act_outcome_rel(claim) -> str:
+    return ACT_REL.format(claim=_safe_claim(claim))
 
 
 def default_rules_path() -> str | None:
@@ -255,7 +265,8 @@ def step_window_artifacts(ws, since_ts: str,
 def park_blind_input(ws, claim, artifact_paths, *,
                      identity: str = DEFAULT_SETTLER_IDENTITY,
                      question: str = ...,
-                     rules_path: str | None = ...) -> dict:
+                     rules_path: str | None = ...,
+                     act_outcome: str = "") -> dict:
     """Build + park the blind input doc for one claim (THE production
     writer — the issue-709 docstring's open gap, closed).
 
@@ -263,6 +274,12 @@ def park_blind_input(ws, claim, artifact_paths, *,
     (``claim_question``: register ``answers_question`` through the task
     spec), so an omitted argument can never re-open the empty-question
     hole; an explicit ``question=""`` stays empty.
+
+    ``act_outcome`` (the stop face's own outcome word, the closed
+    act-outcome vocabulary) persists to the consumer-side sidecar
+    (``act_outcome_rel``) — the censoring route's outcome face at
+    settle time; the ruling doc never carries it (the settler stays
+    artifact-blind).
 
     Raises ValueError exactly where the whitelist builder raises
     (excluded face, missing artifact, an empty artifact list, unsafe
@@ -272,6 +289,17 @@ def park_blind_input(ws, claim, artifact_paths, *,
     ``{"claim", "path", "doc", "parked", "reason"}``."""
     ws = Path(ws)
     rel = blind_input_rel(claim)  # also the claim-safety gate
+    word = str(act_outcome or "").strip()
+    if word:
+        side = ws / act_outcome_rel(claim)
+        blob = json.dumps({"schema": ACT_SCHEMA, "claim": str(claim),
+                           "outcome": word},
+                          ensure_ascii=False, sort_keys=True) + "\n"
+        if not (side.is_file()
+                and side.read_text(encoding="utf-8") == blob):
+            tmp = side.with_suffix(".json.tmp")
+            tmp.write_text(blob, encoding="utf-8")
+            tmp.replace(side)
     if rules_path is ...:
         rules_path = default_rules_path()
     if question is ...:
@@ -319,6 +347,17 @@ def load_verdict(ws, claim) -> dict | None:
     return _load_json(p) if p.is_file() else None
 
 
+def load_act_outcome(ws, claim) -> str:
+    """The producing act's settled outcome word ("" when the sidecar is
+    absent or unreadable) — the censoring route's outcome face,
+    persisted at park time from the stop face's own outcome resolution.
+    A sidecar word that is not machine vocabulary censors nothing: the
+    route classifies unknown words as strategy outcomes, exactly like
+    the round-credit close path."""
+    doc = _load_json(Path(ws) / act_outcome_rel(claim))
+    return str((doc or {}).get("outcome") or "").strip()
+
+
 def pending_settlements(ws) -> list[dict]:
     """Parked blind inputs the settler has NOT ruled on yet — the
     dispatch read face (the orchestrator dispatches kunglao-settler for
@@ -355,7 +394,133 @@ def pending_settlements(ws) -> list[dict]:
     return out
 
 
-# ------------------------------------------------------- the consumer
+# ------------------------------------------------------- the learner feed
+
+def _claim_status(ws: Path, claim: str) -> str:
+    """The claim's CURRENT register status ("" when the row, the field,
+    or the register file is absent) — the censoring route reads the
+    lifecycle face at settle time, never a guessed word."""
+    for row in (_yaml_doc(ws / REGISTER_REL).get("claims") or []):
+        if isinstance(row, dict) and str(row.get("id") or "") == claim:
+            return str(row.get("status") or "").strip()
+    return ""
+
+
+def _producing_dispatch(ws: Path, claim: str) -> str:
+    """The dispatch id the dispatch ledger recorded for this claim's
+    producing dispatch — the settled credit's q-cell key. Soft face: no
+    committed row keeps the claim token (the q-cell match face accepts
+    either identity); the ledger id is the one key when it exists."""
+    try:
+        import claims_store as _cs  # noqa: PLC0415 — lazy sibling
+        led = _cs.latest_committed_dispatch(ws, claim)
+        if led:
+            return str(led.get("dispatch_id") or claim)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("rlvr.settlement_wire.bank",
+             f"dispatch-ledger resolve failed: "
+             f"{type(exc).__name__}: {exc}")
+    return claim
+
+
+def _bank_settled_verdict(ws: Path, claim: str, res: dict, *,
+                          act_outcome: str) -> dict | None:
+    """Bank one settled blind verdict into the q-cell fold — the learning
+    feed's consumer face. Order: only a SETTLED verdict reaches here;
+    the censoring routes (``rlvr.scalar.settlement_route`` — the same
+    face the round-credit close path books, driven by the same act
+    outcome word the stop face settled under) gate the bank: a censored
+    or pending outcome records its route on the receipt (marker, class,
+    reason) and banks NOTHING. One bank per dispatch: an identity that already carries
+    banked mass is skipped (``already-banked``) — replays never
+    double-bank and a credit-amendment refinement is never clobbered;
+    a dispatch with banked STEP credit takes the calibration residual
+    face (``observe_step_calibration``), the normal no-step shape takes
+    ``observe_settlement``. The banked row carries the
+    ``blind-settlement`` ownership marker and the bank's companion legs
+    (the cross-task store row, the claim-terminal rollout return) ride
+    this face — the round-credit bank's one-bank-per-dispatch guard
+    hands their ownership over. Fail-open telemetry: a bank failure is
+    ONE rate-limited warn, never a settlement break. None = the bank
+    face did not run (unsettled)."""
+    if not res.get("settled"):
+        return None
+    settlement = res.get("settlement") or {}
+    try:
+        from rlvr import q_cells as _qc  # noqa: PLC0415 — lazy sibling
+        from rlvr import scalar as _sc  # noqa: PLC0415 — lazy sibling
+        target = _producing_dispatch(ws, claim)
+        route = _sc.settlement_route(
+            _claim_status(ws, claim), str(act_outcome or ""),
+            [a for a in _sc.fact_artifacts(ws)
+             if str(a.get("claim_id") or "") == claim])
+        if route is not None:
+            return {"appended": False, "matched": False,
+                    "route": route[0], "class": route[1].get("class"),
+                    "reason": str(route[1].get("reason") or route[0]),
+                    "dispatch_id": target, "beta_updated": False}
+        mass = _qc.banked_mass(ws, target)
+        if mass is None:
+            warn("rlvr.settlement_wire.bank",
+                 f"{target}: log unreadable — the bank pass skipped")
+            return {"appended": False, "matched": False,
+                    "route": None, "class": None, "reason": "log-unreadable",
+                    "dispatch_id": target, "beta_updated": False}
+        if mass[2] > 0:
+            return {"appended": False, "matched": True, "route": None,
+                    "class": None, "reason": "already-banked",
+                    "dispatch_id": target, "beta_updated": False}
+        reward = float(settlement.get("reward") or 0.0)
+        value = _sc.clamp_credit(reward)
+        step_sum, step_n = _qc.step_credit_totals(ws, target)
+        if step_n > 0:
+            d_s, d_f = _sc._calibration_delta(
+                value, step_sum, step_n,
+                band_ceil=_qc.OBSERVATION_BAND_CEIL)
+            bank = _qc.observe_step_calibration(
+                ws, target, d_s, failure_delta=d_f,
+                reason="blind-settlement")
+        else:
+            bank = _qc.observe_settlement(
+                ws, target, value, reward=reward,
+                confidence_band=str(settlement.get("band") or "") or None,
+                reason="blind-settlement")
+        if not (bank.get("matched") and bank.get("appended")) \
+                or 0.0 < value <= _qc.OBSERVATION_BAND_CEIL:
+            # an unmatched/unappended bank, or the massless information
+            # option: no mass landed, so the companion legs stay with
+            # whichever face's bank eventually carries the mass
+            return dict(bank, route=None)
+        # the bank's companion legs follow the bank (the same satellites
+        # the round-credit bank drives — its one-bank-per-dispatch guard
+        # hands their ownership to this face): the cross-task store row
+        # and the claim-terminal rollout return. Fail-open telemetry.
+        try:
+            from rlvr import strategy_store as _store  # noqa: PLC0415
+            _store.append_store_row(
+                ws, method_family=str(bank.get("method_family") or ""),
+                status=str(settlement.get("band") or "TRAJECTORY"),
+                credit=value, dispatch_id=target, claim=str(claim),
+                arm_key=bank.get("arm_key"),
+                fingerprint=bank.get("fingerprint"), facts_citing=0)
+        except Exception as exc:  # noqa: BLE001 — telemetry, never settle
+            warn("rlvr.settlement_wire.bank.store",
+                 f"{target}: {type(exc).__name__}: {exc}")
+        try:
+            from rlvr import l1_value as _l1  # noqa: PLC0415
+            _l1.record_terminal_return(ws, str(claim), reward,
+                                       signature=bank.get("signature_hash"))
+        except Exception as after_exc:  # noqa: BLE001 — telemetry
+            warn("rlvr.settlement_wire.bank.l1",
+                 f"{claim}: {type(after_exc).__name__}: {after_exc}")
+        return dict(bank, route=None)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
+        warn("rlvr.settlement_wire.bank",
+             f"{claim}: {type(exc).__name__}: {exc}")
+        return None
+
+
+# ------------------------------------------------------------ the consumer
 
 def _sha_recheck(ws: Path, input_doc: dict) -> str | None:
     """Every listed artifact's CURRENT bytes must still hash to the
@@ -514,7 +679,10 @@ def settle_parked(ws, claim, *, oracle_verdict: str | None = None,
     scalar.validate_verdict_doc stack -> the ledger), then the
     issue-800/issue-809-aligned claim mint, then the wire row (the fingerprint —
     written for refusals too: a settlement event that did not settle is
-    LOUD). Never raises on contract violations; returns the receipt."""
+    LOUD). A settled verdict then banks into the q-cell fold (the
+    learner feed), censored by the act outcome the stop face parked
+    alongside the input doc. Never raises on contract violations;
+    returns the receipt."""
     ws = Path(ws)
     now_dt = now or datetime.now(timezone.utc)
     input_path = blind_input_rel(claim)
@@ -582,6 +750,13 @@ def settle_parked(ws, claim, *, oracle_verdict: str | None = None,
               input_path=input_path, verdict_path=verdict_path,
               res=res, mint=mint, oracle_verdict=verdict,
               artifacts=len(input_doc.get("artifacts") or []), now=now_dt)
+    # the learner feed: the settled verdict banks on the producing
+    # dispatch's arm, censored by the act outcome the stop face parked
+    # (fail-open telemetry — never the settle receipt)
+    bank = _bank_settled_verdict(ws, str(claim), res,
+                                 act_outcome=load_act_outcome(ws, claim))
+    if bank is not None:
+        res["q_cell_bank"] = bank
     return res
 
 

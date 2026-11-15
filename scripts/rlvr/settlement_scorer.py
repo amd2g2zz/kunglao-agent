@@ -14,10 +14,9 @@ ruling through THIS module (the blind gate -> the validator stack ->
 the ledger), mints the claim through ``claims_store.apply`` (the
 issues-800/809 contract: a PROVEN mint resolves to a PASSED verification
 record), and stamps the ``settlement-wire/1`` liveness rows. The
-unblinded ``settle_step`` judgment is eval-only behind
-``KUNGLAO_EVAL_SETTLE`` (the production stop face defaults to blind
-mode; the mechanical hash-only bookkeeping stays at the boundary in
-every mode).
+unblinded ``settle_step`` judgment has no production reader — the
+production stop face is blind-only; the mechanical hash-only
+bookkeeping stays at the boundary in every mode.
 
 1. THE BLIND INPUT CONTRACT. ``settler_input`` builds from a WHITELIST
    (raw step artifacts as path + sha256, the claim/question, the rules

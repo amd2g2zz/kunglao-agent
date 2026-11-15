@@ -702,7 +702,6 @@ def test_e2e_rounds_settle_and_credit_with_the_seal_on(
     import _rl_e2e as H
     monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
                        str(tmp_path / "posterior-store"))
-    monkeypatch.setenv("KUNGLAO_EVAL_SETTLE", "0")
     sc = H.Scenario(11)
     plan = sc.plan(rounds=7)
     ws = H.build_workspace(tmp_path, seed=11, n_claims=len(plan))

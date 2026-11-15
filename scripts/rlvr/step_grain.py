@@ -274,12 +274,12 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
     crystallization write-back, the belief row — read the producer's
     surfaces (facts/ frontmatter) and are the UNBLINDED settlement:
     they now run ONLY here, behind this signature's ``blind=False``
-    default (the explicit eval face) — the production stop face passes
+    default (the direct-call face) — the production stop face passes
     ``blind=True`` (hooks/round_closure) and the credit instead arrives
     through the blind settler (rlvr.settlement_wire.settle_parked, the
-    scalar.validate_verdict_doc stack + the claims_store mint). Eval
-    opt-in is the env gate KUNGLAO_EVAL_SETTLE (rlvr.settlement_wire.
-    eval_settle_enabled — the single source); blind=True skips the
+    scalar.validate_verdict_doc stack + the claims_store mint). The
+    caller declares the mode through the blind flag — production passes
+    blind=True (hooks/round_closure); blind=True skips the
     judgment legs entirely and reports ``step_credit=None`` /
     ``credit_banked=False`` / ``blind=True`` so a receipt can never be
     mistaken for a blind-mode credit.
@@ -347,13 +347,12 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
         step_credit_value = None
         credit_banked = False
         evidence_items: list = []
-        # issue-802: blind mode is the production face — the unblinded
-        # judgment (producer-surface reads) stays eval-only, and the
-        # derived legs (crystallize / belief) ride the same gate: their
-        # inputs are the step credit and its evidence window. The env
-        # opt-back-in lives at the CALL SITE (round_closure picks the
-        # mode via rlvr.settlement_wire.eval_settle_enabled — the gate's
-        # single source); this signature's blind flag is the switch.
+        # blind mode is the production face — the unblinded judgment
+        # (producer-surface reads) has no production reader, and the
+        # derived legs (crystallize / belief) ride the same flag: their
+        # inputs are the step credit and its evidence window. The mode
+        # is the CALLER's declaration (hooks/round_closure passes
+        # blind=True); this signature's blind flag is the switch.
         if not blind:
             try:
                 from rlvr import q_cells as _qc  # noqa: PLC0415

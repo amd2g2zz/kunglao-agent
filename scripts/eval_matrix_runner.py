@@ -37,7 +37,7 @@ Arms differ ONLY in declared faces (runner face, store kind, env). The
 launcher is HERMETIC: every supply/learning switch an arm can declare
 (KUNGLAO_RECALL / KUNGLAO_EXPANSION / KUNGLAO_PREDICT_BEFORE_TRY /
 KUNGLAO_SCHEDULER / KUNGLAO_META_* / KUNGLAO_DIRECTION /
-KUNGLAO_EVAL_SETTLE / KUNGLAO_PLAYBOOK) is stripped from the inherited
+KUNGLAO_PLAYBOOK) is stripped from the inherited
 environment before each arm's declared env merges — ambient shell state
 can never contaminate an arm. Store isolation: warm arms read an
 ISOLATED per-run COPY of the configured warm store (arms never share a
@@ -138,8 +138,7 @@ STRIPPED_ENV = ("KUNGLAO_RECALL", "KUNGLAO_EXPANSION",
                 "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_SCHEDULER",
                 "KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK",
-                "KUNGLAO_DIRECTION", "KUNGLAO_EVAL_SETTLE",
-                "KUNGLAO_PLAYBOOK")
+                "KUNGLAO_DIRECTION", "KUNGLAO_PLAYBOOK")
 
 VALID_FACES = ("loop", "cc-default", "cc-warm-context")
 VALID_STORES = ("none", "cold", "warm")

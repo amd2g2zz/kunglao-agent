@@ -1715,7 +1715,8 @@ def observe_settlement(ws, dispatch_id: str, credit,
                        *, phi_delta: float | None = None,
                        credit_kind: str = "solve",
                        reward: float | None = None,
-                       confidence_band: str | None = None) -> dict:
+                       confidence_band: str | None = None,
+                       reason: str | None = None) -> dict:
     """THE settlement feed's match-and-bank face (issue 462 W5): bank one
     settled round credit into the q cell the dispatch opened.
 
@@ -1802,7 +1803,11 @@ def observe_settlement(ws, dispatch_id: str, credit,
                                  # when not supplied — legacy rows
                                  # byte-identical).
                                  reward=reward,
-                                 confidence_band=confidence_band)
+                                 confidence_band=confidence_band,
+                                 # the owning settlement face's marker
+                                 # (emitted only when set — the default
+                                 # row stays byte-identical)
+                                 reason=reason)
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
@@ -2119,7 +2124,8 @@ def observe_step_credit(ws, dispatch_id: str, credit, *,
 
 
 def observe_step_calibration(ws, dispatch_id: str, credit, *,
-                             failure_delta: float = 0.0) -> dict:
+                             failure_delta: float = 0.0,
+                             reason: str | None = None) -> dict:
     """#712: bank the claim-terminal RESIDUAL — ONE signed mass-delta row
     that corrects the cumulative Beta into the step-less endpoint:
     ``credit`` = Δsuccess = ladder_credit − Σ(step_credit) (negative =
@@ -2140,7 +2146,7 @@ def observe_step_calibration(ws, dispatch_id: str, credit, *,
                     "reason": "unmatched", "dispatch_id": did,
                     "credit_kind": kind, "beta_updated": False}
         return _bank_matched(ws, did, match, credit, kind=kind,
-                             failure_delta=failure_delta)
+                             failure_delta=failure_delta, reason=reason)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("q_cells.observe_step_calibration",
              f"{type(exc).__name__}: {exc}")

@@ -55,8 +55,7 @@ def terminal_workspace(tmp_path: Path) -> Path:
 def invoke_stop(ws: Path, *, profile: Path, **payload) -> subprocess.CompletedProcess:
     profile.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, HOME=str(profile),
-               KUNGLAO_POSTERIOR_STORE=str(profile / "posterior"),
-               KUNGLAO_EVAL_SETTLE="0")
+               KUNGLAO_POSTERIOR_STORE=str(profile / "posterior"))
     return subprocess.run([sys.executable, str(HOOK)],
                           input=json.dumps({"cwd": str(ws), **payload}),
                           capture_output=True, text=True, timeout=60, env=env)

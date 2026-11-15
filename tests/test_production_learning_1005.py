@@ -18,7 +18,6 @@ def test_armed_production_stop_banks_dispatch_credit_once(tmp_path, monkeypatch)
     monkeypatch.setenv("HOME", str(profile))
     monkeypatch.setattr(seal, "KEY_PATH", profile / ".claude" / seal.KEY_PATH.name)
     assert seal.provision()["armed"]
-    monkeypatch.setenv("KUNGLAO_EVAL_SETTLE", "0")
     ws = H.build_workspace(tmp_path, seed=11, n_claims=1)
     write_hook_state(ws, active_hooks=["completion_gate", "round_closure"])
     family, claim = "static-symbolic", "C-001"

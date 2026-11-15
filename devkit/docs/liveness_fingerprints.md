@@ -59,9 +59,10 @@ a `settlement-wire/1` row (runs/settlement.jsonl, non-empty `identity`)
 proves a ruling was consumed through the blind face
 (rlvr.settlement_wire.settle_parked — parked blind-settlement-input/1
 doc, sha re-check, scalar.validate_verdict_doc stack, claims_store
-mint). The unblinded settle_step judgment is eval-only
-(KUNGLAO_EVAL_SETTLE); a settlement event that did NOT settle still
-lands its row with `settled: false` — refusals are loud, never silent.
+mint). The stop face is blind-only — the unblinded settle_step
+judgment has no production reader; a settlement event that did NOT
+settle still lands its row with `settled: false` — refusals are loud,
+never silent.
 Content-hash dedupe: the same event on an unchanged workspace appends
 once.
 
