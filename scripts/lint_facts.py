@@ -180,6 +180,7 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
     "hypothesis",
     "trace_id",  # #879 trace identity: mission chain id (worker echo channel)
     "creator",  # issue-379 round-credit provenance: the dispatch id that created this fact
+    "created_by_dispatch",  # harness stamp: the dispatch that created this fact (at write time)
     "evidence_class",  # issue 215: evidence-grade class (claim-gate input)
     "assumptions",  # issue 250: '<topic>=<polarity>' premises (semantic refutation)
     "temporal_scope",  # issue 341: 'runtime' for volatile runtime-state facts

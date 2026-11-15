@@ -224,17 +224,24 @@ def _learning_rows(ws: Path, family: str) -> list[dict]:
     return rows
 
 
-def _dispatches(ws: Path, bound: dict) -> dict[str, str]:
+def _dispatches(ws: Path, bound: dict) -> dict[str, list[str]]:
+    """Every committed dispatch id per evidence claim, oldest first —
+    the producing and verifying dispatches alike. The bank keys on the
+    FACT PRODUCER, so certification must see the whole set: keying on
+    the claim's latest dispatch alone deadlocks a claim whose latest
+    dispatch is a verifier (it created no facts, so nothing ever banks
+    on it)."""
     import claims_store  # noqa: PLC0415
     out = {}
     for record in bound["evidence"]:
         cid = record["claim"]
+        dids = claims_store.committed_dispatch_ids(ws, cid)
+        if dids:
+            out[cid] = dids
+            continue
         dispatch = claims_store.latest_committed_dispatch(ws, cid)
         if dispatch is not None:
-            did = str(dispatch.get("dispatch_id") or "")
-            if not did:
-                raise SettlementIncomplete(f"credit dispatch identity missing: {cid}")
-            out[cid] = did
+            raise SettlementIncomplete(f"credit dispatch identity missing: {cid}")
     return out
 
 
@@ -242,7 +249,7 @@ def _require_learning_seals(ws: Path, bound: dict) -> None:
     """Validate participating credit facts through their seal owner, never re-sign."""
     from rlvr import learning_seal  # noqa: PLC0415
     claims = {row["claim"] for row in bound["evidence"]}
-    ids = set(_dispatches(ws, bound).values())
+    ids = {d for dids in _dispatches(ws, bound).values() for d in dids}
     reward_rows = [row for row in _learning_rows(ws, "settlement")
         if row.get("kind") == "round_credit" and row.get("anchor") in claims]
     reward_rows += [row for row in _learning_rows(ws, "experience")
@@ -257,15 +264,26 @@ def _require_learning_seals(ws: Path, bound: dict) -> None:
 
 
 def _require_dispatch_credit(ws: Path, bound: dict) -> None:
-    """Read back the existing bank; no reward or amendment arithmetic here."""
+    """Read back the existing bank; no reward or amendment arithmetic
+    here. The bank is certified against the claim's COMMITTED dispatches
+    as a whole — the producing dispatch carries the solve credit, and a
+    verifying dispatch carries none; keying on the claim's latest
+    dispatch alone would deadlock a verifier-last claim forever."""
     from rlvr import q_cells  # noqa: PLC0415
-    for cid, did in _dispatches(ws, bound).items():
+    for cid, dids in _dispatches(ws, bound).items():
         row = ledger.fold(ws, f"round_credit/{cid}")
         if row is None or row.get("settlement") is None:
-            raise SettlementIncomplete(f"credit settlement absent: {did}")
-        mass = q_cells.banked_mass(ws, did)
-        if mass is None or mass[2] == 0:
-            raise SettlementIncomplete(f"credit bank incomplete: {did}")
+            raise SettlementIncomplete(f"credit settlement absent: {cid}")
+        rows = 0
+        for did in dids:
+            mass = q_cells.banked_mass(ws, did)
+            if mass is None:
+                raise SettlementIncomplete(f"credit bank unreadable: {did}")
+            rows += mass[2]
+        if rows == 0:
+            raise SettlementIncomplete(
+                f"credit bank incomplete: {cid} "
+                f"[{', '.join(dids) or 'no committed dispatch'}]")
 
 
 def inspect(ws) -> dict:
