@@ -4,8 +4,8 @@ source-reliability Betas (#715) in the MEASURED leg (issue #818 climb).
 
 The behavior pins live in tests/test_source_reliability_715.py (fast
 tier — invisible to the CI measured-set coverage leg). This file
-re-pins, on the REAL isolated store (the conftest points
-KUNGLAO_POSTERIOR_STORE at a tmp path): label validation, the
+re-pins on each test's OWN workspace store (the reliability store is
+workspace-local — cross-project learning off): label validation, the
 invalidation-event teacher, the fold's cell/marginal/prior backoff
 ladder, deterministic Thompson draws, and the credit weight face.
 """
@@ -13,10 +13,20 @@ from __future__ import annotations
 
 import random
 
+import pytest
+
 from rlvr import source_reliability as sr  # noqa: E402  (scripts/ on path)
 from rlvr.posteriors import PRIOR_ALPHA_DEFAULT, PRIOR_BETA_DEFAULT
 
 EV = {"source": "ghidra", "reference_class": "derived"}
+
+
+@pytest.fixture()
+def ws(tmp_path, monkeypatch):
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
+    w = tmp_path / "ws"
+    w.mkdir()
+    return w
 
 
 # ---------- labels ----------
@@ -55,8 +65,8 @@ def test_norm_context_defaults_to_the_unnamed_bucket() -> None:
 
 # ---------- the write faces ----------
 
-def test_record_confirmation_appends_the_teacher_event() -> None:
-    res = sr.record_confirmation(EV, confirmed_by="E-2",
+def test_record_confirmation_appends_the_teacher_event(ws) -> None:
+    res = sr.record_confirmation(ws, EV, confirmed_by="E-2",
                                  context_class="packed-js",
                                  ts="2026-10-24T00:00:00Z")
     assert res["recorded"] is True and res["reason"] is None
@@ -69,33 +79,33 @@ def test_record_confirmation_appends_the_teacher_event() -> None:
     assert row["by"] == "E-2"
 
 
-def test_record_refutation_bumps_beta() -> None:
-    res = sr.record_refutation(EV, refuted_by="E-3")
+def test_record_refutation_bumps_beta(ws) -> None:
+    res = sr.record_refutation(ws, EV, refuted_by="E-3")
     assert res["recorded"] is True
     assert res["row"]["event"] == "refuted"
     assert res["row"]["beta_add"] == 1.0
     assert res["row"]["context_class"] == sr.DEFAULT_CONTEXT
 
 
-def test_record_outcome_refuses_bad_outcome_and_bad_labels() -> None:
-    bad_outcome = sr.record_outcome(EV, "vibes")
+def test_record_outcome_refuses_bad_outcome_and_bad_labels(ws) -> None:
+    bad_outcome = sr.record_outcome(ws, EV, "vibes")
     assert bad_outcome == {"recorded": False,
                            "reason": "outcome: one of ('confirmed', "
                                      "'refuted') required, got 'vibes'"}
-    bad_labels = sr.record_outcome({"no": "labels"}, "confirmed")
+    bad_labels = sr.record_outcome(ws, {"no": "labels"}, "confirmed")
     assert bad_labels["recorded"] is False
     assert "reference_class" in bad_labels["reason"]
-    assert sr.store_path().exists() is False or \
-        sr._read_events() == []              # nothing was recorded
+    assert sr.store_path(ws).exists() is False or \
+        sr._read_events(ws) == []            # nothing was recorded
 
 
 # ---------- fold: cell -> marginal -> prior backoff ----------
 
-def test_fold_reads_cells_and_marginals_from_the_store() -> None:
-    sr.record_confirmation(EV, context_class="packed-js")
-    sr.record_confirmation(EV, context_class="packed-js")
-    sr.record_refutation(EV, context_class="obfuscated")
-    view = sr.fold()
+def test_fold_reads_cells_and_marginals_from_the_store(ws) -> None:
+    sr.record_confirmation(ws, EV, context_class="packed-js")
+    sr.record_confirmation(ws, EV, context_class="packed-js")
+    sr.record_refutation(ws, EV, context_class="obfuscated")
+    view = sr.fold(ws=ws)
     cell = view.posterior(EV, context_class="packed-js")
     assert cell["basis"] == "cell"
     assert (cell["alpha"], cell["beta"], cell["n"]) == (3.0, 1.0, 2.0)
@@ -110,10 +120,10 @@ def test_fold_reads_cells_and_marginals_from_the_store() -> None:
         (PRIOR_ALPHA_DEFAULT, PRIOR_BETA_DEFAULT)
 
 
-def test_explicit_context_read_backs_off_to_marginal_when_cell_empty() \
-        -> None:
-    sr.record_confirmation(EV, context_class="packed-js")
-    view = sr.fold()
+def test_explicit_context_read_backs_off_to_marginal_when_cell_empty(
+        ws) -> None:
+    sr.record_confirmation(ws, EV, context_class="packed-js")
+    view = sr.fold(ws=ws)
     # an explicit context with no cell observations answers the marginal
     post = view.posterior(EV, context_class="never-seen")
     assert post["basis"] == "marginal"
@@ -125,9 +135,9 @@ def test_fold_ignores_foreign_schema_rows() -> None:
     assert view.posterior("x", "raw")["basis"] == "prior"
 
 
-def test_theta_draws_are_deterministic_under_a_seeded_rng() -> None:
-    sr.record_confirmation(EV)
-    view = sr.fold()
+def test_theta_draws_are_deterministic_under_a_seeded_rng(ws) -> None:
+    sr.record_confirmation(ws, EV)
+    view = sr.fold(ws=ws)
     a = view.theta(EV, rng=random.Random(7))
     b = view.theta(EV, rng=random.Random(7))
     assert a == b

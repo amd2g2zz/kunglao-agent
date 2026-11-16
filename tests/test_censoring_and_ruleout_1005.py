@@ -250,7 +250,7 @@ def test_rule_out_sign_success_for_verified_pending_for_unverified(
     # store row is the producer arm's own bank and is expected)
     from rlvr import strategy_store
     assert _posterior_state(ws)["posteriors"] == before["posteriors"]
-    assert not [r for r in strategy_store.load_rows(ws=None)
+    assert not [r for r in strategy_store.load_rows(ws)
                 if str((r.get("provenance") or {}).get("dispatch_id"))
                 == did_a2], "an unverified rule-out keys no store row"
 

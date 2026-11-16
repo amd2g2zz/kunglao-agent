@@ -321,7 +321,7 @@ def test_multi_producer_store_rows_never_double_count(tmp_path):
     out = src.run(ws)
     assert out["settled"] == 1, out
 
-    store = [r for r in strategy_store.load_rows(ws=None)
+    store = [r for r in strategy_store.load_rows(ws)
              if str((r.get("provenance") or {}).get("dispatch_id"))
              in (did_a, did_b)]
     assert len(store) == 2, store

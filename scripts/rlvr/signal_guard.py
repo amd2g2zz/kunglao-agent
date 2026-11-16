@@ -52,11 +52,12 @@ def recent_credits(ws: Path, n: int = DEGENERATE_WINDOW) -> list[float]:
       credit series.
 
     The survivors then ride ``learning_seal.trusted_rows``: armed, a
-    forged credit row naming this workspace is refused (the shared
-    family file widened the forgery blast radius — the wall moves with
-    it); unarmed, rows pass (the notice lives on the write face)."""
+    forged credit row naming this workspace is refused (the family
+    file widened the forgery blast radius — the wall moves with it);
+    unarmed, rows pass (the notice lives on the write face)."""
     from rlvr import learning_seal as _seal  # noqa: PLC0415 — lazy
-    mine = Path(ws).name
+    from rlvr import strategy_store as _ss  # noqa: PLC0415 — the id face
+    mine = _ss.workspace_id_of(ws)
     rows = [rec for rec in
             _cl.read(ws, "knowledge", schema_prefix="posterior-store")
             if isinstance(rec, dict)

@@ -132,9 +132,8 @@ class TestStoreFaces:
         later appends never rewrite earlier bytes."""
         rp.record(tmp_path, "s", "a", 1, gamma=0.9, ts=TS)
         # issue-1004 R2c: the live rel is the knowledge family file
-        import os
-        root = os.environ["KUNGLAO_POSTERIOR_STORE"]
-        p = Path(root) / "knowledge-store.jsonl"
+        # (workspace-local since issue-1005)
+        p = tmp_path / "runs" / "posterior" / "knowledge-store.jsonl"
         first = p.read_bytes()
         rp.record(tmp_path, "s", "a", 0, gamma=0.9, ts=TS)
         rp.record(tmp_path, "s", "b", 1, gamma=1.0, ts=TS)
@@ -149,9 +148,8 @@ class TestStoreFaces:
         assert view.cell("sig-a", "static-first") is None
 
     def test_dirty_rows_skipped_fail_open(self, tmp_path, monkeypatch):
-        root = tmp_path / "root"
-        monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
-        p = root / "knowledge-store.jsonl"
+        monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
+        p = tmp_path / "runs" / "posterior" / "knowledge-store.jsonl"
         p.parent.mkdir(parents=True, exist_ok=True)
         good = json.dumps({"schema": rp.SCHEMA, "state": "s", "arm": "a",
                            "ts": TS, "gamma": 1.0, "outcome": 1,
@@ -164,9 +162,8 @@ class TestStoreFaces:
                                                     monkeypatch):
         """The version wall: a row from a FOREIGN schema version is
         skipped loudly, never merged into the fold (no-backcompat)."""
-        root = tmp_path / "root"
-        monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
-        p = root / "knowledge-store.jsonl"
+        monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
+        p = tmp_path / "runs" / "posterior" / "knowledge-store.jsonl"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(
             {"schema": "posterior-store/9", "state": "s", "arm": "a",

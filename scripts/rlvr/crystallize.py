@@ -59,7 +59,7 @@ def _negative_duplicate(ws, claim: str, step_id: str, family: str) -> bool:
     """The replay wall: one negative per (class, family, claim, step)."""
     from rlvr import marl as _marl
     cls = _marl.signature_class(ws)
-    for row in _marl.read_negatives():
+    for row in _marl.read_negatives(ws):
         if (str(row.get("signature_class") or "") == cls
                 and str(row.get("method_family") or "") == family
                 and str(row.get("claim_ref") or "") == claim
@@ -68,7 +68,7 @@ def _negative_duplicate(ws, claim: str, step_id: str, family: str) -> bool:
     return False
 
 
-def _broadcast_duplicate(claim: str, family: str) -> bool:
+def _broadcast_duplicate(ws, claim: str, family: str) -> bool:
     """ONE broadcast per (claim, family) — the discriminant is the
     claim's method, so a later certified step on the same claim is a
     duplicate, never fresh prior mass (a per-step key would let an
@@ -76,9 +76,10 @@ def _broadcast_duplicate(claim: str, family: str) -> bool:
     (issue-1004 R2c review fix): the store read is the BANK face only
     (``load_rows`` excludes the breaker's credit-kind-marked ws credit
     series), so a bridged round credit can never suppress the solution
-    broadcast — exactly what the pre-move guarded-root file held."""
+    broadcast — exactly what the pre-move file held. The read is the
+    WORKSPACE's own store (cross-project off)."""
     from rlvr import strategy_store as _ss
-    for row in _ss.load_rows():
+    for row in _ss.load_rows(ws):
         if (str(row.get("claim") or "") == claim
                 and str(row.get("method_family") or "") == family):
             return True
@@ -137,7 +138,7 @@ def crystallize_settlement(ws, *, claim: str, step_id: str,
             certified = False
         if not certified:
             return dict(out, reason="not-certified")
-        if _broadcast_duplicate(str(claim), family):
+        if _broadcast_duplicate(ws, str(claim), family):
             return dict(out, reason="duplicate")
         rec = _marl.broadcast_solution(
             ws, method_family=family, credit=float(step_credit),
@@ -211,7 +212,8 @@ def revoke_claim(ws, claim: str) -> dict:
     file), resolved through ``consolidated_ledger.legacy_path``; after
     R4 the pre-move paths simply do not exist and the sweep no-ops.
     The rewrite is ROW-SELECTIVE and WORKSPACE-SCOPED: only THIS
-    workspace's rows drop (``workspace_id == ws.name``; rows WITHOUT
+    workspace's rows drop (``workspace_id == strategy_store.
+    workspace_id_of(ws)``; rows WITHOUT
     the column — the class-level marl negatives — were shared and
     unscoped pre-move by design, so they stay revocable from any
     workspace), and the broadcast predicate stays in the BANK
@@ -227,11 +229,12 @@ def revoke_claim(ws, claim: str) -> dict:
     refused at the boundary (it would match every unattributed row).
     Returns per-store removal counts."""
     from rlvr import consolidated_ledger as _cl
+    from rlvr import strategy_store as _ids  # noqa: PLC0415 — the id face
     cid = str(claim or "").strip()
     if not cid:
         return {"negatives_removed": 0, "broadcasts_removed": 0}
-    family = _cl.family_path(None, "knowledge")
-    mine = Path(ws).name if ws is not None else None
+    family = _cl.family_path(ws, "knowledge")
+    mine = _ids.workspace_id_of(ws) if ws is not None else None
 
     # R4-DELETES-THIS window sweep: the pre-move knowledge rels, from
     # the migration registry (guarded-root rels cross-task, ws-scoped
@@ -247,7 +250,7 @@ def revoke_claim(ws, claim: str) -> dict:
         window_rels = ()
     sweep = dict.fromkeys(
         (family,)
-        + tuple(_cl.legacy_path(None, "knowledge", rel)
+        + tuple(_cl.legacy_path(ws, "knowledge", rel)
                 for rel in window_rels if not rel.startswith("runs/"))
         + tuple(_cl.legacy_path(ws, "knowledge", rel)
                 for rel in window_rels if rel.startswith("runs/")))
@@ -256,7 +259,7 @@ def revoke_claim(ws, claim: str) -> dict:
         rid = str(row.get("workspace_id") or "")
         return rid == str(mine) if rid else True
 
-    with _cl.family_lock(None, "knowledge"):
+    with _cl.family_lock(ws, "knowledge"):
         removed_neg = sum(_rewrite_without(
             path, lambda r: str(r.get("claim_ref") or "") == cid
             and _scoped(r))

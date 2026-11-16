@@ -27,18 +27,20 @@ from rlvr.signal_guard import (  # noqa: E402
 
 
 def _seed_store(ws: Path, credits: list[float], monkeypatch) -> None:
-    """Seed the breaker's credit series into the knowledge family file
-    (the only face since the issue-1004 R3 schema cutover), under an
-    ISOLATED guarded root. Rows carry workspace_id + credit_kind: the
-    breaker's read keeps exactly the credit-series face's rows
-    (workspace-id + credit_kind filtered — cross-task settlement rows
-    are warm-pool evidence, never the breaker's series)."""
-    root = ws.parent / f"store-{ws.name}"
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
+    """Seed the breaker's credit series into the workspace's knowledge
+    family file (the only face since the issue-1004 R3 schema cutover;
+    workspace-local since issue-1005). Rows carry the workspace's
+    identity digest + credit_kind: the breaker's read keeps exactly the
+    credit-series face's rows (workspace-id + credit_kind filtered —
+    foreign settlement rows are warm-pool evidence, never the breaker's
+    series)."""
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
     from rlvr import consolidated_ledger as cl  # noqa: PLC0415
+    from rlvr import strategy_store as ss  # noqa: PLC0415
     for c in credits:
         assert cl.append(ws, "knowledge", {
-            "schema": "posterior-store/1", "workspace_id": ws.name,
+            "schema": "posterior-store/1",
+            "workspace_id": ss.workspace_id_of(ws),
             "credit_kind": "step", "credit": c})
 
 

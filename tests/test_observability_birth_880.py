@@ -491,7 +491,8 @@ class TestLessonWiring:
         import register_proven_gate as rpg
         lib = tmp / "lessons"
         lesson = _write_lesson(lib)
-        monkeypatch.setattr(lt, "_resolve_library", lambda library=None: lib)
+        monkeypatch.setattr(lt, "_resolve_library",
+                            lambda library=None, workspace=None: lib)
         ws = tmp / "ws"
         ws.mkdir()
         (ws / "analyses").mkdir()
@@ -514,7 +515,8 @@ class TestLessonWiring:
         import register_proven_gate as rpg
         lib = tmp / "lessons"
         lesson = _write_lesson(lib)
-        monkeypatch.setattr(lt, "_resolve_library", lambda library=None: lib)
+        monkeypatch.setattr(lt, "_resolve_library",
+                            lambda library=None, workspace=None: lib)
         ws = tmp / "ws"
         ws.mkdir()
         (ws / "analyses").mkdir()

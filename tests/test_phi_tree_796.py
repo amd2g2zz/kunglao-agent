@@ -350,7 +350,7 @@ def test_clawback_row_is_sealed_negative_face_and_mirrors_to_store(
     assert "seal" in row
     assert phi_tree.read_clawbacks(ws)[0]["id"] == row["id"]
     # the shared-store mirror: censored, zero credit, negative phi_delta
-    mirrored = [r for r in ss.load_rows(ws=None)
+    mirrored = [r for r in ss.load_rows(ws)
                 if r.get("status") == "phi-clawback"]
     assert len(mirrored) == 1
     assert mirrored[0]["censored"] is True
@@ -525,7 +525,7 @@ def test_l9_absorbed_verify_rows_are_censored_in_the_shared_store(
     res = rf.record_verify_outcome(ws, verdict="verified",
                                    boundary="verify", absorbed=True)
     assert res.get("appended") is True
-    rows = [r for r in ss.load_rows(ws=None)
+    rows = [r for r in ss.load_rows(ws)
             if r.get("arm_key") == rf.STORE_ARM]
     assert len(rows) == 1
     assert rows[0]["censored"] is True  # a kill-banked verdict never
@@ -534,6 +534,6 @@ def test_l9_absorbed_verify_rows_are_censored_in_the_shared_store(
     res2 = rf.record_verify_outcome(ws, verdict="verified",
                                     boundary="verify")
     assert res2.get("appended") is True
-    rows = [r for r in ss.load_rows(ws=None)
+    rows = [r for r in ss.load_rows(ws)
             if r.get("arm_key") == rf.STORE_ARM]
     assert rows[-1]["censored"] is False

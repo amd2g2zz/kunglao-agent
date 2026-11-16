@@ -448,7 +448,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     _u366_lib = lessons_library if lessons_library is not None else None
     try:
         from rlvr import reward as _rs366
-        _u366_before = _rs366.snapshot_lessons(_u366_lib)
+        _u366_before = _rs366.snapshot_lessons(_u366_lib, workspace)
     except Exception as exc:  # noqa: BLE001 — emission adapter degrades only
         warn("unified_reward_snapshot", f"{type(exc).__name__}: {exc}")
         _u366_before = None

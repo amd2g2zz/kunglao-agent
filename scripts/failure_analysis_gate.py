@@ -140,12 +140,26 @@ OUTCOME_VALUES = ("PROVEN", "VERIFIED", "REFUTED", "NEGATIVE")
 # Tuple constant on purpose (same grep-guard convention as OUTCOME_VALUES).
 SOURCE_VALUES = ("lesson-hit", "reference-hit", "web-hit", "novel-hypothesis")
 
-# #41: the lessons library is GLOBAL (cross-sample), never per-workspace —
-# default <skill>/references/lessons/ next to case-book.md. --library and
-# --reflect-queue override both paths so tests run entirely against tmp.
-LESSONS_DIR_DEFAULT = Path.home() / ".claude" / "skills" / "kunglao-agent" / "references" / "lessons"
-REFLECT_QUEUE_DEFAULT = Path.home() / ".claude" / "learnings-queue.json"
+# cross-project learning off: the lessons library and the
+# /reflect queue are WORKSPACE-LOCAL — a workspace's lessons and reflect
+# items live inside it (analyses/lessons/ + runs/learnings-queue.json);
+# no run ever reads or writes a global library outside the workspace.
+# --library / --reflect-queue override both paths so tools/tests can
+# point elsewhere explicitly.
+LESSONS_WS_REL = "analyses/lessons"
+REFLECT_QUEUE_WS_REL = "runs/learnings-queue.json"
 REFLECT_ITEM_TYPE = "failure-lesson-candidate"
+
+
+def lessons_dir(workspace) -> Path:
+    """The workspace's lessons library (the default for every library
+    face)."""
+    return Path(workspace) / LESSONS_WS_REL
+
+
+def reflect_queue_path(workspace) -> Path:
+    """The workspace's /reflect queue file (the default queue face)."""
+    return Path(workspace) / REFLECT_QUEUE_WS_REL
 
 
 from harness_common import utc_now_iso  # #863 Family F: single source (was a local def)
@@ -361,10 +375,10 @@ def check_claim(workspace: Path, claim_id: str, library: Path | None = None) -> 
         # the orchestrator's to-do list for unblocking.
         "missing_artifacts": _artifact_gaps(analysis),
         # #41: guide the orchestrator with up to 3 similar lessons from the
-        # global library (keyword overlap on statement + claim id).
+        # workspace's library (keyword overlap on statement + claim id).
         "similar_lessons": _score_lessons(
             f"{(claim.get('statement') or '')} {claim_id}",
-            Path(library) if library else LESSONS_DIR_DEFAULT),
+            Path(library) if library else lessons_dir(workspace)),
     }
 
 
@@ -496,7 +510,8 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
     # or a crashed search never blocks the record.
     if failure_time:
         ladder_query = " ".join(x for x in (identified_obstacle, assumption) if x)
-        candidates = _ladder_candidates(ladder_query, library)
+        candidates = _ladder_candidates(ladder_query, library,
+                                        workspace=workspace)
     else:
         ladder_query = prior.get("method_ladder_query", "")
         candidates = prior.get("candidates") or []
@@ -574,7 +589,7 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
         try:
             from lessons_telemetry import record_citation
             record_citation(
-                Path(library) if library else LESSONS_DIR_DEFAULT,
+                Path(library) if library else lessons_dir(workspace),
                 str(candidates[0].get("file") or "").removeprefix("lesson-")
                 .removesuffix(".md"),
                 workspace=workspace)
@@ -585,13 +600,16 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
 
 # ===================== #495 failure→knowledge transducer =====================
 
-def _ladder_candidates(query: str, library: Path | None) -> list[dict]:
-    """Method-ladder rung 1 (lessons): keyword search over the global library
-    with the failure's error signature. Same scoring interface as --search
-    (#41). FAIL-OPEN by contract: any failure (missing dir, unreadable files,
-    crashed scan) yields [] — the ladder must never block a record."""
+def _ladder_candidates(query: str, library: Path | None,
+                       workspace=None) -> list[dict]:
+    """Method-ladder rung 1 (lessons): keyword search over the
+    workspace's library with the failure's error signature. Same
+    scoring interface as --search (#41). FAIL-OPEN by contract: any
+    failure (missing dir, unreadable files, crashed scan) yields [] —
+    the ladder must never block a record."""
     try:
-        return _score_lessons(query, Path(library) if library else LESSONS_DIR_DEFAULT)
+        return _score_lessons(
+            query, Path(library) if library else lessons_dir(workspace))
     except Exception:  # noqa: BLE001 — #495 hard constraint: fail-open
         return []
 
@@ -823,7 +841,10 @@ def _append_reflect_queue(queue_path: Path, entries: list[dict]) -> int:
 
 def aggregate_lessons(workspace: Path, library: Path | None = None,
                       reflect_queue: Path | None = None) -> dict:
-    """Aggregate analyses/failure-*.yaml into the global lessons library.
+    """Aggregate analyses/failure-*.yaml into the WORKSPACE's lessons
+    library (cross-project learning off — the library lives inside the
+    workspace at analyses/lessons/; the /reflect queue at
+    runs/learnings-queue.json).
 
     Closed-loop only: PROVEN/VERIFIED always; NEGATIVE only when the #35
     ledger carries a red-team CONFIRMED OUTCOME row for the claim. Every
@@ -831,8 +852,9 @@ def aggregate_lessons(workspace: Path, library: Path | None = None,
     negative-unverified / no-outcome). Idempotent: an existing lesson file
     for the signature is skipped; queue items dedup on claim_id|reason.
     """
-    lib = Path(library) if library else LESSONS_DIR_DEFAULT
-    queue = Path(reflect_queue) if reflect_queue else REFLECT_QUEUE_DEFAULT
+    lib = Path(library) if library else lessons_dir(workspace)
+    queue = (Path(reflect_queue) if reflect_queue
+             else reflect_queue_path(workspace))
     claims, _ = _load_claims(workspace)
     claims_by_id = {c.get("id"): c for c in claims}
     try:
@@ -960,9 +982,13 @@ def _score_lessons(query: str, library: Path, limit: int = 3) -> list[dict]:
     return scored[:limit]
 
 
-def search_lessons(query: str, library: Path | None = None, limit: int = 3) -> list[dict]:
-    """CLI search over the lessons library (keywords/claim-tag, no embeddings)."""
-    return _score_lessons(query, Path(library) if library else LESSONS_DIR_DEFAULT, limit)
+def search_lessons(query: str, library: Path | None = None,
+                   limit: int = 3, workspace=None) -> list[dict]:
+    """CLI search over the lessons library (keywords/claim-tag, no
+    embeddings). The default library is the WORKSPACE's."""
+    return _score_lessons(query,
+                          Path(library) if library
+                          else lessons_dir(workspace), limit)
 
 
 def _failure_modes_recall() -> tuple[str, ...]:
@@ -1142,14 +1168,16 @@ def main(argv: list[str] | None = None) -> int:
                         help="issue 304 fix-as-guard: the anchor that must "
                              "greppably exist in the guard file")
     parser.add_argument("--lessons", action="store_true",
-                        help="aggregate analyses into the global lessons library (#41)")
+                        help="aggregate analyses into the workspace's "
+                             "lessons library (#41)")
     parser.add_argument("--search", metavar="KEYWORDS", default=None,
                         help="search the lessons library by keywords/claim-tag (#41)")
     parser.add_argument("--library", default=None,
                         help="lessons library dir "
-             "(default: executing install's references/lessons)")
+             "(default: the workspace's analyses/lessons)")
     parser.add_argument("--reflect-queue", default=None,
-                        help="/reflect human queue file (default: ~/.claude/learnings-queue.json)")
+                        help="/reflect human queue file "
+                             "(default: the workspace's runs/learnings-queue.json)")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     args = parser.parse_args(argv)
 
@@ -1166,7 +1194,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.search:
-        hits = search_lessons(args.search, library=args.library)
+        hits = search_lessons(args.search, library=args.library,
+                              workspace=workspace)
         if args.json:
             print(json.dumps(hits, indent=2, ensure_ascii=False))
         elif hits:

@@ -1,83 +1,68 @@
 # -*- coding: utf-8 -*-
 """tests/test_knowledge_family_move_1004.py — the knowledge family move
-(issue 1004 R2c).
+(issue 1004 R2c), updated workspace-local by issue-1005 (cross-project
+learning off).
 
-The guarded-root posterior store (strategy_store), the DTS Bernoulli
-store (posteriors), the degeneracy breaker's read face (signal_guard),
-the feature-conditioned prior table (feature_prior + the feature_mining
-CLI), and the MARL negative-knowledge store (marl) move their IO onto
-the consolidated knowledge family (``consolidated_ledger.append/read``):
-``knowledge-store.jsonl`` under the guarded cross-task root becomes the
-single live file, the per-module IO silos retire (the consolidated
-append's lock is the ONE guard) and public APIs stay byte-compatible.
-(Issue-1004 R3, the schema cutover, deleted the compat window this
-slice's dual-read pins served: read() is family-only now, chronology IS
-file order, and the R4 migrate fixture pins the global order instead.)
+The posterior store (strategy_store), the DTS Bernoulli store
+(posteriors), the degeneracy breaker's read face (signal_guard), the
+feature-conditioned prior table (feature_prior + the feature_mining
+CLI), and the MARL negative-knowledge store (marl) keep their IO on the
+consolidated knowledge family (``consolidated_ledger.append/read``) —
+ONE live file per WORKSPACE (``<ws>/runs/posterior/knowledge-store.jsonl``),
+the consolidated append's flock is the ONE guard, and no face resolves a
+store outside its workspace (the env override is honored only when it
+points inside; an outside path is refused loud and the workspace default
+is used).
 
 Pins defined here:
-  1. API compatibility  store_root / append_row /
-     append_store_row / append_workspace_credit_row / load_rows /
-     warm_pools / record / read / fold / check_degeneracy /
-     recent_credits / freeze_if_degenerate / default_table_path /
-     load_table / table_rows / pools_for_candidates / mine_run / mine /
+
+  1. API compatibility  store_root / append_row / append_store_row /
+     append_workspace_credit_row / load_rows / warm_pools / record /
+     read / fold / check_degeneracy / recent_credits /
+     freeze_if_degenerate / default_table_path / load_table /
+     table_rows / pools_for_candidates / mine_run / mine /
      neg_store_path / signature_class / read_negatives /
      record_negative / negative_pools / broadcast_solution signatures
-     unchanged; rows land in the family file carrying their EXISTING
-     registered stamps; the legacy rels are no longer written by
-     production code.
+     unchanged (ws takes the lead position where a store path is
+     needed); rows land in the workspace's family file carrying their
+     EXISTING registered stamps.
   2. Lock pin           only the consolidated ``.knowledge-store.lock``
-     (under the guarded root) appears on disk; the per-module lock rels
-     (runs/.posterior-store.lock, .marl-negative.lock) never do.
-  3. Cross-task pin     two DIFFERENT workspaces arming the same
-     guarded root read the same knowledge rows (the ws-insensitivity
-     the cross-task store is designed around), and the per-workspace
-     degeneracy series stays isolated (a foreign workspace's credits
-     never enter this workspace's breaker series).
-  4. Seal pin           the guarded store seals rows BEFORE the family
-     append (sign_row at write, unchanged); ``trusted_rows`` accepts
-     the sealed rows read back from the family file — an armed
-     workspace must not start refusing its own rows because the file
-     name changed (R5's workspace migration depends on this).
+     (under the workspace's store root) appears on disk.
+  3. Workspace-local pin  two DIFFERENT workspaces read DIFFERENT files
+     (cross-project off): a workspace's own rows never enter its warm
+     faces, and foreign-stamped rows staged INSIDE its store are the
+     only rows that do (the eval-arm donor shape). The degeneracy
+     series stays workspace-isolated.
+  4. Seal pin           the store seals rows BEFORE the family append
+     (sign_row at write, unchanged); ``trusted_rows`` accepts the
+     sealed rows read back from the family file.
   5. Stamp coexistence  the multi-schema family file keeps its reads
-     prefix-disciplined: a posterior-store-prefixed read admits only
-     posterior-store history (the R2b-verified pre-stamp rule), never
-     a marl-negative or feature-table row.
-  5. Legacy resolution  the MIGRATION-ONLY resolution: knowledge
-     source rels resolve under the guarded root
-     EXCEPT the ws-scoped runs/ rels (the historical ws-local
-     posterior-store series and the mined feature table) — the
-     documented exception legacy_path implements; store_root stays the
-     ONLY root resolver (consolidated_ledger._knowledge_root delegates,
-     no second resolver appears).
+     prefix-disciplined.
+  6. Root resolution    store_root is the ONLY root resolver: the
+     workspace default, the inside-workspace override honored, the
+     outside-workspace override refused loud (nothing outside is ever
+     touched).
   7. Miner family face  the feature_mining CLI's default output is the
-     family file with an idempotent dedupe-append (append-only — a
-     re-run appends nothing and never touches other schemas' rows);
-     an explicit --out keeps the deterministic single-file rebuild.
-  8. Read faces ride    the degeneracy breaker, the rl-posterior-moved
-     liveness fingerprint, and the eval_split_lint schema-aware
-     firewall face all read the family file (a dependent face left on
-     the legacy path would go permanently stale post-move — the R2b
-     lesson).
+     workspace's family file with an idempotent dedupe-append; an
+     explicit --out keeps the deterministic single-file rebuild.
+  8. Read faces ride    the rl-posterior-moved liveness fingerprint and
+     the eval_split_lint schema-aware firewall face both read the
+     family file.
   9. Writer tripwire    no production writer names a knowledge legacy
-     rel LITERAL inside a write-method call (a literal tripwire, not a
-     full data-flow wall: a variable-mediated writer would pass — the
-     sanctioned faces are the migration core + the R4 retire CLI).
+     rel LITERAL inside a write-method call.
  10. Population pins    the family file co-locates three
-     formerly-isolated posterior-store/1 populations (bank rows =
-     cross-task; credit series = ws-local; DTS rows = ws-local) — every
-     consumer sees exactly its pre-move population (review round 2):
-     load_rows excludes the credit-kind-marked credit series; DTS rows
-     carry workspace_id and read per-workspace isolated; a foreign
-     credit row cannot certify the l1_planner cross-task face, suppress
-     the solution broadcast, or move warm anchor mass; revoke is
-     workspace-scoped, stays out of the credit series, and its rewrites
-     run inside the consolidated flock; migrate archives the two
-     same-named posterior rels without collision; the breaker series
-     rides trusted_rows.
+     posterior-store/1 populations (bank rows; credit series = ws
+     credit_kind-marked; DTS rows = ws workspace_id-marked) —
+     load_rows excludes the credit series; warm pools admit only
+     foreign-stamped rows; a foreign credit row can never certify the
+     l1_planner cross-task face or suppress the solution broadcast;
+     revoke is workspace-scoped and its rewrites run inside the
+     consolidated flock; migrate archives the two same-named posterior
+     rels without collision; the breaker series rides trusted_rows.
 
-All fixtures are SYNTHETIC (privacy rule). Every family-IO test arms an
-ISOLATED guarded root via KUNGLAO_POSTERIOR_STORE — the repo's own
-patterns dir is never touched.
+All fixtures are SYNTHETIC (privacy rule). Every family-IO test works
+against its own tmp workspace — the repo's patterns dir and the host
+home are never touched.
 """
 from __future__ import annotations
 
@@ -108,26 +93,24 @@ MARL_STAMP = "marl-negative/1"
 FEATURE_STAMP = "feature-table/1"
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 
-#: the knowledge legacy rels this slice retires the writers of
+#: the knowledge legacy rels whose writers are retired (the literal
+#: tripwire list — unchanged by issue-1005)
 KNOWLEDGE_LEGACY_RELS = (
-    "posterior-store.jsonl",        # guarded root (cross-task store)
-    "marl-negative.jsonl",          # guarded root (negative knowledge)
+    "posterior-store.jsonl",        # pre-move guarded root
+    "marl-negative.jsonl",          # pre-move guarded root
     "runs/posterior-store.jsonl",   # ws-local (DTS rows + credit series)
     "runs/feature-table.jsonl",     # ws-local (mined feature table)
 )
 
 
-def _armed_root(tmp_path: Path, monkeypatch, name: str = "root") -> Path:
-    """An isolated guarded root for one test (the env override — the
-    single root resolver reads it at call time)."""
-    root = tmp_path / name
-    root.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv(STORE_ENV, str(root))
-    return root
+def _ws(tmp_path: Path, name: str = "ws") -> Path:
+    ws = tmp_path / name
+    ws.mkdir(parents=True, exist_ok=True)
+    return ws
 
 
-def _family_rows(root: Path) -> list[dict]:
-    p = root / "knowledge-store.jsonl"
+def _family_rows(ws) -> list[dict]:
+    p = cl.family_path(ws, "knowledge")
     if not p.is_file():
         return []
     return [json.loads(ln) for ln in
@@ -154,13 +137,30 @@ def _credit_row(ws_name: str, credit: float, claim: str) -> dict:
             "credit_kind": "step"}
 
 
+def _donor_bank_row(credit: float, claim: str = "",
+                    family: str = "graph", arm_key: str = "graph") -> dict:
+    """A foreign-stamped BANK row — the staged-donor shape an eval arm
+    materializes into a workspace's own store."""
+    row = {"schema": POSTERIOR_STAMP, "ts": "2026-11-08T00:00:00Z",
+           "workspace_id": "ws-donor", "arm_key": arm_key,
+           "method_family": family, "feature_key": "none",
+           "fingerprint": None, "status": "ok",
+           "credit": credit, "censored": False, "facts_citing": 0,
+           "propensity": None, "phi_delta": None,
+           "provenance": {"dispatch_id": claim}}
+    if claim:
+        row["claim"] = claim
+    return row
+
+
 # ---------- 1. API compatibility ----------
 
 class TestApiCompatibility:
     def test_public_signatures_unchanged(self):
         expect = {
-            (ss.__name__, "store_root"): [],
-            (ss.__name__, "append_row"): ["row"],
+            (ss.__name__, "store_root"): ["ws"],
+            (ss.__name__, "append_row"): ["ws", "row"],
+            (ss.__name__, "append_store_row"): ["ws"],
             (ss.__name__, "append_workspace_credit_row"): ["ws"],
             (ss.__name__, "load_rows"): ["ws"],
             (ss.__name__, "warm_pools"): ["ws", "families"],
@@ -178,9 +178,9 @@ class TestApiCompatibility:
                 ["feature_table", "features", "families"],
             (fm.__name__, "mine_run"): ["root", "run_dir"],
             (fm.__name__, "mine"): ["roots", "out"],
-            (marl.__name__, "neg_store_path"): [],
+            (marl.__name__, "neg_store_path"): ["ws"],
             (marl.__name__, "signature_class"): ["ws"],
-            (marl.__name__, "read_negatives"): [],
+            (marl.__name__, "read_negatives"): ["ws"],
             (marl.__name__, "record_negative"): ["ws"],
             (marl.__name__, "negative_pools"): ["ws", "families"],
             (marl.__name__, "broadcast_solution"): ["ws"],
@@ -217,43 +217,44 @@ class TestApiCompatibility:
             assert name in inspect.signature(
                 marl.broadcast_solution).parameters, name
 
-    def test_cross_task_store_row_lands_in_family_file(
+    def test_store_row_lands_in_the_workspace_family_file(
             self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        out = ss.append_store_row(method_family="graph", status="ok",
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        out = ss.append_store_row(ws, method_family="graph", status="ok",
                                   credit=1.0)
         assert out["appended"] is True
-        rows = _family_rows(root)
+        rows = _family_rows(ws)
         assert len(rows) == 1
         assert rows[0]["schema"] == POSTERIOR_STAMP == ss.STORE_SCHEMA
         assert rows[0]["method_family"] == "graph"
+        assert rows[0]["workspace_id"] == ss.workspace_id_of(ws)
         # the legacy rel is NOT written by production code anymore
-        assert not (root / "posterior-store.jsonl").exists()
+        assert not (ws / "posterior-store.jsonl").exists()
+        assert not (ws / "runs" / "posterior-store.jsonl").exists()
 
     def test_ws_credit_row_lands_in_family_file(self, tmp_path,
                                                 monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws-a"
-        ws.mkdir()
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path, "ws-a")
         out = ss.append_workspace_credit_row(
-            ws, method_family="graph", status="ROUND_CREDIT",
-            credit=1.0, claim="C-1", credit_kind="step")
+            ws, method_family="graph", status="ROUND_CREDIT", credit=1.0,
+            claim="C-1", credit_kind="step")
         assert out["appended"] is True
-        rows = _family_rows(root)
+        rows = _family_rows(ws)
         assert len(rows) == 1
         assert rows[0]["schema"] == POSTERIOR_STAMP
-        assert rows[0]["workspace_id"] == "ws-a"
+        assert rows[0]["workspace_id"] == ss.workspace_id_of(ws)
         assert rows[0]["credit_kind"] == "step"
         # the ws-local legacy rel is NOT written by production anymore
         assert not (ws / "runs" / "posterior-store.jsonl").exists()
 
     def test_dts_row_lands_in_family_file(self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         out = dts.record(ws, "sig", "graph", 1)
         assert out["appended"] is True
-        rows = _family_rows(root)
+        rows = _family_rows(ws)
         assert len(rows) == 1
         assert rows[0]["schema"] == POSTERIOR_STAMP == dts.SCHEMA
         assert rows[0]["state"] == "sig"
@@ -262,24 +263,41 @@ class TestApiCompatibility:
         assert not (ws / "runs" / "posterior-store.jsonl").exists()
 
     def test_marl_row_lands_in_family_file(self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         out = marl.record_negative(ws, method_family="frida",
                                    agent_type="worker",
                                    features={"lane": "apk"})
         assert out["appended"] is True
-        rows = _family_rows(root)
+        rows = _family_rows(ws)
         assert len(rows) == 1
         assert rows[0]["schema"] == MARL_STAMP == marl.NEG_SCHEMA
         assert rows[0]["method_family"] == "frida"
-        assert not (root / "marl-negative.jsonl").exists()
+        assert not (ws / "marl-negative.jsonl").exists()
 
-    def test_neg_store_path_is_the_family_file(self, tmp_path,
+    def test_neg_store_path_is_the_workspace_family_file(
+            self, tmp_path, monkeypatch):
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        assert marl.neg_store_path(ws) == cl.family_path(ws, "knowledge")
+        assert marl.neg_store_path(ws) == \
+            ws / "runs" / "posterior" / "knowledge-store.jsonl"
+
+    def test_workspace_less_store_faces_refuse(self, tmp_path,
                                                monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        assert marl.neg_store_path() == cl.family_path(None, "knowledge")
-        assert marl.neg_store_path() == root / "knowledge-store.jsonl"
+        """Cross-project off: a workspace-less knowledge resolution
+        cannot name a store — the read face reads nothing, the append
+        face appends nothing, both loud."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        try:
+            cl.family_path(None, "knowledge")
+            raise AssertionError("the rootless resolution must refuse")
+        except ValueError:
+            pass
+        assert cl.read(None, "knowledge") == []
+        out = ss.append_store_row(None, method_family="graph",
+                                  status="ok", credit=1.0)
+        assert out["appended"] is False
 
 
 # ---------- 2. the lock pin ----------
@@ -287,68 +305,70 @@ class TestApiCompatibility:
 class TestSingleGuardLock:
     def test_family_lock_is_the_only_lock_rel_on_disk(
             self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        ss.append_store_row(method_family="graph", status="ok", credit=1.0)
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        ss.append_store_row(ws, method_family="graph", status="ok",
+                            credit=1.0)
         ss.append_workspace_credit_row(ws, method_family="graph",
                                        status="ROUND_CREDIT", credit=0.5)
         dts.record(ws, "sig", "graph", 0)
         marl.record_negative(ws, method_family="frida")
         # the consolidated append's lock is the ONE guard, under the
-        # guarded root (NOT the workspace)
-        assert (root / ".knowledge-store.lock").exists()
-        assert not (ws / "runs" / ".knowledge-store.lock").exists()
+        # workspace's store root
+        assert (ws / "runs" / "posterior" / ".knowledge-store.lock") \
+            .exists()
         # no per-module lock rel ever appears
         for lock in ("runs/.posterior-store.lock", ".marl-negative.lock",
                      "runs/.marl-negative.lock"):
-            assert not (root / lock).exists(), lock
             assert not (ws / lock).exists(), lock
-        # the moved modules carry no lock machinery of their own
-        assert not hasattr(dts, "_locked_append")
-        assert not hasattr(dts, "_lock_path")
 
 
-# ---------- 3. the cross-task pin ----------
+# ---------- 3. the workspace-local pin ----------
 
-class TestCrossTask:
-    def test_two_workspaces_read_the_same_family_rows(
+class TestWorkspaceLocal:
+    def test_two_workspaces_never_share_the_family_rows(
             self, tmp_path, monkeypatch):
-        """The knowledge family ignores ws: two DIFFERENT workspaces
-        arming the same guarded root see the same rows — and a
-        workspace never warm-starts from its own rows (the
-        leave-one-out shape rides the shared file)."""
-        _armed_root(tmp_path, monkeypatch)
-        ws_a = tmp_path / "ws-a"
-        ws_b = tmp_path / "ws-b"
-        ws_a.mkdir()
-        ws_b.mkdir()
+        """Cross-project off: two DIFFERENT workspaces carry DIFFERENT
+        stores — ws B never sees ws A's row through any read face."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws_a = _ws(tmp_path, "ws-a")
+        ws_b = _ws(tmp_path, "ws-b")
         ss.append_store_row(ws_a, method_family="graph", status="ok",
                             credit=1.0)
-        rows_a = cl.read(ws_a, "knowledge", schema_prefix="posterior-store")
-        rows_b = cl.read(ws_b, "knowledge", schema_prefix="posterior-store")
-        assert rows_a == rows_b
-        assert len(rows_a) == 1
-        # leave-one-out: B sees A's row, A does not see its own
-        assert ss.load_rows(ws_b)[0]["workspace_id"] == "ws-a"
-        assert ss.load_rows(ws_a) == []
-        # the sampler's warm pools see the other workspace's mass
-        pools = ss.warm_pools(ws_b, ["graph"])
-        assert pools["graph"].rows == 1
+        assert cl.read(ws_b, "knowledge",
+                       schema_prefix="posterior-store") == []
+        assert ss.load_rows(ws_b) == []
+        assert ss.warm_pools(ws_b, ["graph"]) == {}
+        # the writer's own workspace sees it (the bank population)
+        assert len(ss.load_rows(ws_a)) == 1
+
+    def test_staged_donor_rows_feed_the_warm_faces_own_rows_do_not(
+            self, tmp_path, monkeypatch):
+        """Leave-one-out over the workspace's own store: foreign-stamped
+        rows staged INSIDE the workspace (the eval-arm donor shape) are
+        the only rows that warm; the workspace's own rows never pool."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        ss.append_store_row(ws, method_family="graph", status="ok",
+                            credit=1.0)                     # own row
+        _write_rows(cl.family_path(ws, "knowledge"),
+                    [_family_rows(ws)[0], _donor_bank_row(0.5)])
+        pools = ss.warm_pools(ws, ["graph"])
+        assert pools["graph"].rows == 1, \
+            "only the foreign-stamped donor row warms"
+        assert ss.warm_pools(_ws(tmp_path, "other"), ["graph"]) == {}
 
     def test_degeneracy_series_stays_workspace_isolated(
             self, tmp_path, monkeypatch):
         """A foreign workspace's credits never enter this workspace's
         breaker series (the five-identical trip is per workspace —
-        cross-task contamination would freeze one workspace's learning
-        on another's dead signal), and the cross-task settlement rows
-        (the scalar bank face — no credit_kind marker) are warm-pool
-        evidence, never the breaker's series."""
-        _armed_root(tmp_path, monkeypatch)
-        ws_a = tmp_path / "ws-a"
-        ws_b = tmp_path / "ws-b"
-        ws_a.mkdir()
-        ws_b.mkdir()
+        cross-workspace contamination would freeze one workspace's
+        learning on another's dead signal), and the bank face's rows
+        (no credit_kind marker) are warm-pool evidence, never the
+        breaker's series."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws_a = _ws(tmp_path, "ws-a")
+        ws_b = _ws(tmp_path, "ws-b")
         for _ in range(5):
             ss.append_workspace_credit_row(ws_b, method_family="graph",
                                            status="ROUND_CREDIT",
@@ -360,7 +380,7 @@ class TestCrossTask:
             is True
         assert sg.freeze_if_degenerate(ws_a, sg.recent_credits(ws_a)) \
             is False
-        # the cross-task face's rows (same workspace, no credit_kind)
+        # the bank face's rows (same workspace, no credit_kind)
         # never enter the series
         ss.append_store_row(ws_b, method_family="graph", status="ok",
                             credit=0.25)
@@ -372,37 +392,37 @@ class TestCrossTask:
 class TestSealInterplay:
     def test_store_row_sealed_before_the_family_append(
             self, tmp_path, monkeypatch):
-        """The guarded store seals at write TODAY — the move keeps the
-        seal: sign_row happens BEFORE the family append, and the sealed
-        row read back from the family file passes trusted_rows (an
-        armed workspace must not start refusing its own rows because
-        the file name changed)."""
+        """The store seals at write TODAY — the workspace-local move
+        keeps the seal: sign_row happens BEFORE the family append, and
+        the sealed row read back from the family file passes
+        trusted_rows."""
         key = tmp_path / "learning.key"
         key.write_bytes(b"k" * 48)
         monkeypatch.setattr(seal, "KEY_PATH", key)
         monkeypatch.setattr(seal, "_ANCHOR", {"build": None})
         assert seal.armed() is True
-        root = _armed_root(tmp_path, monkeypatch, name="store-root")
-        out = ss.append_row({"schema": ss.STORE_SCHEMA,
-                             "ts": "2026-11-08T00:00:00Z",
-                             "workspace_id": "ws-a",
-                             "arm_key": "graph",
-                             "method_family": "graph",
-                             "feature_key": "none",
-                             "fingerprint": None, "status": "ok",
-                             "credit": 1.0, "censored": False,
-                             "facts_citing": 0, "propensity": None,
-                             "phi_delta": None,
-                             "provenance": {"dispatch_id": ""}})
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        out = ss.append_row(ws, {"schema": ss.STORE_SCHEMA,
+                                 "ts": "2026-11-08T00:00:00Z",
+                                 "workspace_id": "ws-a",
+                                 "arm_key": "graph",
+                                 "method_family": "graph",
+                                 "feature_key": "none",
+                                 "fingerprint": None, "status": "ok",
+                                 "credit": 1.0, "censored": False,
+                                 "facts_citing": 0, "propensity": None,
+                                 "phi_delta": None,
+                                 "provenance": {"dispatch_id": ""}})
         assert out["appended"] is True
-        rows = _family_rows(root)
+        rows = _family_rows(ws)
         assert len(rows) == 1 and "seal" in rows[0]
         ok, why = seal.verify_row(rows[0])
         assert ok is True, why
         kept = seal.trusted_rows(rows, op="test.knowledge-family-move")
         assert kept == rows
         # the load face (trusted_rows inside) keeps the sealed row
-        assert len(ss.load_rows()) == 1
+        assert len(ss.load_rows(ws)) == 1
 
     def test_forged_family_row_dropped_by_the_read_face(
             self, tmp_path, monkeypatch):
@@ -411,9 +431,10 @@ class TestSealInterplay:
         monkeypatch.setattr(seal, "KEY_PATH", key)
         monkeypatch.setattr(seal, "_ANCHOR", {"build": None})
         assert seal.armed() is True
-        root = _armed_root(tmp_path, monkeypatch, name="store-root")
-        assert ss.append_store_row(method_family="graph", status="ok",
-                                   credit=1.0)["appended"]
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        assert ss.append_store_row(ws, method_family="graph",
+                                   status="ok", credit=1.0)["appended"]
         forged = {"schema": ss.STORE_SCHEMA, "ts": "2026-01-01T00:00:00Z",
                   "workspace_id": "evil", "arm_key": "graph",
                   "method_family": "graph", "feature_key": "none",
@@ -421,10 +442,10 @@ class TestSealInterplay:
                   "censored": False, "facts_citing": 0,
                   "propensity": None, "phi_delta": None,
                   "provenance": {"dispatch_id": ""}}
-        family = root / "knowledge-store.jsonl"
+        family = cl.family_path(ws, "knowledge")
         with family.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(forged) + "\n")
-        kept = ss.load_rows()
+        kept = ss.load_rows(ws)
         assert len(kept) == 1 and kept[0]["workspace_id"] != "evil"
 
 
@@ -433,10 +454,10 @@ class TestSealInterplay:
 class TestPrefixDiscipline:
     def test_family_file_multi_schema_reads_stay_disciplined(
             self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        ss.append_store_row(method_family="graph", status="ok", credit=1.0)
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        ss.append_store_row(ws, method_family="graph", status="ok",
+                            credit=1.0)
         marl.record_negative(ws, method_family="frida")
         posteriors = cl.read(ws, "knowledge",
                              schema_prefix="posterior-store")
@@ -446,10 +467,10 @@ class TestPrefixDiscipline:
 
     def test_liveness_counts_the_knowledge_family(
             self, tmp_path, monkeypatch):
-        _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        ss.append_store_row(method_family="graph", status="ok", credit=1.0)
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        ss.append_store_row(ws, method_family="graph", status="ok",
+                            credit=1.0)
         marl.record_negative(ws, method_family="frida")
         counts = cl.liveness(ws)
         assert counts["knowledge:posterior-store/1"] == 1
@@ -457,32 +478,51 @@ class TestPrefixDiscipline:
         assert counts["knowledge:feature-table/1"] == 0
 
 
-# ---------- 6. the guarded-root resolution ----------
+# ---------- 6. the workspace-store resolution ----------
 
-class TestGuardedRootSingleSource:
-    def test_knowledge_root_delegates_to_store_root(
+class TestStoreRootResolution:
+    def test_family_path_delegates_to_store_root(
             self, tmp_path, monkeypatch):
         """store_root is the ONLY root resolver: the consolidated
-        ledger's knowledge face delegates to it, so one env flip moves
-        both faces together."""
-        for name in ("root-one", "root-two"):
-            monkeypatch.setenv(STORE_ENV, str(tmp_path / name))
-            assert cl._knowledge_root() == ss.store_root()
-            assert cl.family_path(tmp_path / "ws", "knowledge") == \
-                ss.store_root() / "knowledge-store.jsonl"
+        ledger's knowledge face delegates to it, so one flip moves both
+        faces together (only ever toward a path inside the workspace)."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        assert cl.family_path(ws, "knowledge") == \
+            ss.store_root(ws) / "knowledge-store.jsonl"
+        inside = ws / "runs" / "alt-root"
+        monkeypatch.setenv(STORE_ENV, str(inside))
+        assert ss.store_root(ws) == inside
+        assert cl.family_path(ws, "knowledge") == \
+            inside / "knowledge-store.jsonl"
 
-    def test_ws_scoped_legacy_rels_resolve_under_the_workspace(
+    def test_outside_override_is_refused_and_touches_nothing(
             self, tmp_path, monkeypatch):
-        """The documented exception: the knowledge family's ws-scoped
-        runs/ rels (the historical ws-local posterior series + mined
-        feature table) resolve under the WORKSPACE; the guarded-root
-        rels stay under the guarded root."""
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
+        """An env override OUTSIDE the workspace is refused loud (the
+        named reason) and the workspace default is used — a run can
+        never read or write a store outside its workspace."""
+        monkeypatch.setenv(STORE_ENV, str(tmp_path / "outside-store"))
+        ws = _ws(tmp_path)
+        assert ss.store_root(ws) == ws / "runs" / "posterior"
+        assert not (tmp_path / "outside-store").exists()
+        assert ss.append_store_row(ws, method_family="graph",
+                                   status="ok", credit=1.0)["appended"]
+        assert list((tmp_path / "outside-store").glob("*")) == [] \
+            if (tmp_path / "outside-store").exists() else True
+        assert _family_rows(ws)
+
+    def test_legacy_rels_resolve_under_the_workspace(
+            self, tmp_path, monkeypatch):
+        """The migration-only resolution: every knowledge legacy rel
+        resolves ws-relative post-issue-1005 — the guarded-root rels
+        read absent under a real workspace (no cross-project carry-in
+        by design; the global store file is simply no longer touched)."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         assert cl.legacy_path(ws, "knowledge", "posterior-store.jsonl") \
-            == root / "posterior-store.jsonl"
+            == ws / "posterior-store.jsonl"
         assert cl.legacy_path(ws, "knowledge", "marl-negative.jsonl") \
-            == root / "marl-negative.jsonl"
+            == ws / "marl-negative.jsonl"
         assert cl.legacy_path(ws, "knowledge",
                               "runs/posterior-store.jsonl") \
             == ws / "runs" / "posterior-store.jsonl"
@@ -495,11 +535,12 @@ class TestGuardedRootSingleSource:
 
 def _mine_root(tmp: Path) -> Path:
     """A minimal mining root: one e2e run dir with a run-state.json and
-    the task_spec the extractor reads (SYNTHETIC)."""
+    the task_spec the extractor reads (SYNTHETIC). exist_ok: the tests
+    create the target workspace at the same path themselves."""
     run_dir = tmp / "runs" / "e2e" / "run-1"
-    run_dir.mkdir(parents=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
     ws = tmp / "ws"
-    ws.mkdir()
+    ws.mkdir(exist_ok=True)
     (run_dir / "run-state.json").write_text(json.dumps({
         "run_id": "run-1", "family": "apk", "unit": "t-1",
         "ws": str(ws), "task_dir": str(ws)}), encoding="utf-8")
@@ -508,39 +549,55 @@ def _mine_root(tmp: Path) -> Path:
 
 
 class TestMinerFamilyFace:
-    def test_default_out_is_the_family_file(self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        assert fm.default_out() == cl.family_path(None, "knowledge")
-        assert fm.default_out() == root / "knowledge-store.jsonl"
+    def test_default_out_is_the_workspace_family_file(
+            self, tmp_path, monkeypatch):
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        assert fm.default_out(ws) == cl.family_path(ws, "knowledge")
+        assert fm.default_out(ws) == \
+            ws / "runs" / "posterior" / "knowledge-store.jsonl"
+
+    def test_workspace_less_default_out_refuses(self):
+        try:
+            fm.default_out(None)
+            raise AssertionError("the rootless default must refuse")
+        except ValueError:
+            pass
 
     def test_mine_appends_to_the_family_file_idempotently(
             self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         mining = _mine_root(tmp_path)
-        out1 = fm.mine([mining], fm.default_out())
+        out1 = fm.mine([mining], fm.default_out(ws),
+                       family_face=True, workspace=ws)
         assert out1["rows"] == 1
-        rows = _family_rows(root)
+        rows = _family_rows(ws)
         assert len(rows) == 1
         assert rows[0]["schema"] == FEATURE_STAMP
         assert rows[0]["run_id"] == "run-1"
         # a re-run appends NOTHING (idempotent — the append-only
         # contract, never a rewrite of a multi-schema file)
-        out2 = fm.mine([mining], fm.default_out())
+        out2 = fm.mine([mining], fm.default_out(ws),
+                       family_face=True, workspace=ws)
         assert out2["rows"] == 1
-        assert _family_rows(root) == rows
+        assert _family_rows(ws) == rows
 
     def test_family_mine_preserves_other_schemas_rows(
             self, tmp_path, monkeypatch):
-        root = _armed_root(tmp_path, monkeypatch)
-        ss.append_store_row(method_family="graph", status="ok", credit=1.0)
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        ss.append_store_row(ws, method_family="graph", status="ok",
+                            credit=1.0)
         mining = _mine_root(tmp_path)
-        fm.mine([mining], fm.default_out())
-        kinds = [r["schema"] for r in _family_rows(root)]
+        fm.mine([mining], fm.default_out(ws),
+                family_face=True, workspace=ws)
+        kinds = [r["schema"] for r in _family_rows(ws)]
         assert kinds == [POSTERIOR_STAMP, FEATURE_STAMP]
 
     def test_explicit_out_keeps_the_deterministic_rebuild(
             self, tmp_path, monkeypatch):
-        _armed_root(tmp_path, monkeypatch)
+        monkeypatch.delenv(STORE_ENV, raising=False)
         mining = _mine_root(tmp_path)
         out_a = tmp_path / "table-a.jsonl"
         out_b = tmp_path / "table-b.jsonl"
@@ -564,12 +621,14 @@ class TestReadFacesRide:
             "liveness_gate_1004r2c", ROOT / "devkit" / "liveness_gate.py")
         lg = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(lg)
-        root = _armed_root(tmp_path, monkeypatch)
-        assert ss.append_store_row(method_family="graph", status="ok",
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        assert ss.append_store_row(ws, method_family="graph",
+                                   status="ok",
                                    credit=1.0)["appended"]
         fp_spec = next(f for f in lg.load_fingerprints()["fingerprints"]
                        if f["id"] == "rl-posterior-moved")
-        ok, detail = lg.evaluate_fingerprint(tmp_path / "ws", fp_spec)
+        ok, detail = lg.evaluate_fingerprint(ws, fp_spec)
         assert ok, detail
 
     def test_eval_split_lint_schema_face_admits_the_family_file(self):
@@ -651,105 +710,98 @@ class TestNoLegacyWrites:
 # ---------- 10. the review-fix pins (population + isolation + revoke) ----------
 
 class TestPopulationContract:
-    """The family file co-locates three formerly-isolated posterior-store
-    populations (bank rows = cross-task by design; credit series =
-    ws-local; DTS rows = ws-local). BEHAVIOR PRESERVATION: every
-    consumer sees exactly its pre-move population (the ``credit_kind``
-    marker + the per-row workspace_id are the uniform mechanism)."""
+    """The family file co-locates three posterior-store/1 populations
+    (bank rows; credit series = ws credit_kind-marked; DTS rows = ws
+    workspace_id-marked). Every consumer sees exactly its designated
+    population (the ``credit_kind`` marker + the per-row workspace_id
+    are the uniform mechanism)."""
 
     def test_load_rows_excludes_the_credit_series(self, tmp_path,
                                                   monkeypatch):
-        """load_rows' pre-move population was the guarded-root file's
-        BANK rows only — the ws credit series (the breaker's rows,
-        ``credit_kind``-marked) never lived there, and it stays
-        invisible to every load_rows consumer post-move."""
-        _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
+        """load_rows' population is the BANK rows only — the ws credit
+        series (the breaker's rows, ``credit_kind``-marked) never rides
+        the bank face, and it stays invisible to every load_rows
+        consumer."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         ss.append_workspace_credit_row(ws, method_family="graph",
                                        status="ROUND_CREDIT", credit=1.0,
                                        claim="C-1", credit_kind="step")
         ss.append_store_row(ws, method_family="graph", status="ok",
                             credit=0.5)
-        rows = ss.load_rows()
+        rows = ss.load_rows(ws)
         assert [r.get("credit_kind") for r in rows] == [None]
         assert rows[0]["status"] == "ok"
         # the credit rows still ride the file for their own reader
         assert any(r.get("credit_kind") == "step"
-                   for r in _family_rows(cl._knowledge_root()))
+                   for r in _family_rows(ws))
 
     def test_cross_task_face_cannot_be_certified_by_a_foreign_credit(
             self, tmp_path, monkeypatch):
-        """HIGH review fix: a foreign workspace's round credit for ITS
-        colliding claim id can never satisfy the l1_planner cross-task
-        answer face (pre-move the credit series was ws-local, invisible;
-        per-workspace claim-id collisions are systematic). The DESIGNED
-        cross-certification face — a solution broadcast bank row — still
-        fires."""
-        _armed_root(tmp_path, monkeypatch)
-        ws_a = tmp_path / "ws-a"
-        ws_b = tmp_path / "ws-b"
-        ws_a.mkdir()
-        ws_b.mkdir()
+        """A round-credit row (the breaker's ``credit_kind``-marked
+        face) can never satisfy the l1_planner cross-task answer face —
+        only a BANK row carrying the claim (the solution-broadcast
+        population) can; and with cross-project off the face admits
+        only FOREIGN-stamped rows staged in the workspace's own store."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         ss.append_workspace_credit_row(
-            ws_b, method_family="frida", status="ROUND_CREDIT",
+            ws, method_family="frida", status="ROUND_CREDIT",
             credit=0.8, claim="C-9", credit_kind="step")
-        assert l1_planner._cross_task_face(ws_a, "C-9") == []
+        # the credit row rides the workspace's file, stamped with the
+        # workspace's own id — still never certifies
+        assert l1_planner._cross_task_face(ws, "C-9") == []
         # the broadcast population (bank rows carrying claim) is the
-        # face's designed evidence — untouched
-        ss.append_store_row(ws_b, method_family="frida", status="ok",
-                            credit=1.0, claim="C-9")
-        face = l1_planner._cross_task_face(ws_a, "C-9")
+        # face's designed evidence — a foreign-stamped staged row fires
+        _write_rows(cl.family_path(ws, "knowledge"),
+                    _family_rows(ws)
+                    + [_donor_bank_row(1.0, claim="C-9", family="frida",
+                                       arm_key="frida|facts_snapshot|none|1")])
+        face = l1_planner._cross_task_face(ws, "C-9")
         assert len(face) == 1 and face[0]["source"] == "cross_task"
 
     def test_bridged_credit_cannot_suppress_the_broadcast(
             self, tmp_path, monkeypatch):
-        """HIGH review fix: the one-broadcast-per-(claim, family)
-        contract's dedupe rides the BANK population only — a bridged
-        round credit row (claim + method_family set) is not a broadcast
-        and never suppresses one."""
-        _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
+        """The one-broadcast-per-(claim, family) contract's dedupe rides
+        the BANK population only — a bridged round credit row (claim +
+        method_family set) is not a broadcast and never suppresses
+        one."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         ss.append_workspace_credit_row(ws, method_family="frida",
                                        status="ROUND_CREDIT", credit=0.5,
                                        claim="C-3", credit_kind="step")
         from rlvr.crystallize import _broadcast_duplicate
-        assert _broadcast_duplicate("C-3", "frida") is False
+        assert _broadcast_duplicate(ws, "C-3", "frida") is False
 
     def test_credit_series_changes_no_warm_anchor_mass(
             self, tmp_path, monkeypatch):
-        """HIGH review fix: warm_pools' composition is the BANK
-        population — a dense per-claim credit series from another
-        workspace adds ZERO anchor mass (pre-move it was ws-local
-        breaker telemetry, invisible to the pools)."""
-        _armed_root(tmp_path, monkeypatch)
-        ws_a = tmp_path / "ws-a"
-        ws_b = tmp_path / "ws-b"
-        ws_a.mkdir()
-        ws_b.mkdir()
+        """warm_pools' composition is the foreign-stamped BANK
+        population — a dense per-claim credit series adds ZERO anchor
+        mass (breaker telemetry, invisible to the pools)."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         for credit in (0.1, 0.2, 0.3, 0.4, 0.5):
             ss.append_workspace_credit_row(
-                ws_b, method_family="graph", status="ROUND_CREDIT",
+                ws, method_family="graph", status="ROUND_CREDIT",
                 credit=credit, claim=f"C-{credit}", credit_kind="step")
-        assert ss.warm_pools(ws_a, ["graph"]) == {}
-        # exactly one BANK row moves the pool — and only by its mass
-        ss.append_store_row(ws_b, method_family="graph", status="ok",
-                            credit=1.0)
-        pools = ss.warm_pools(ws_a, ["graph"])
+        assert ss.warm_pools(ws, ["graph"]) == {}
+        # exactly one foreign-stamped BANK row moves the pool — and
+        # only by its mass
+        _write_rows(cl.family_path(ws, "knowledge"),
+                    _family_rows(ws) + [_donor_bank_row(1.0)])
+        pools = ss.warm_pools(ws, ["graph"])
         assert pools["graph"].rows == 1
 
     def test_dts_rows_stay_workspace_isolated(self, tmp_path,
                                               monkeypatch):
-        """HIGH review fix (the read face): DTS rows carry their owning
-        workspace; two workspaces sharing one guarded root never fold
-        each other's posteriors. (The bit-exact pins in
-        test_rlvr_posteriors_428 pin the same property through values.)"""
-        _armed_root(tmp_path, monkeypatch)
-        ws_a = tmp_path / "ws-a"
-        ws_b = tmp_path / "ws-b"
-        ws_a.mkdir()
-        ws_b.mkdir()
+        """DTS rows carry their owning workspace; two workspaces (two
+        workspace-local files) never fold each other's posteriors. (The
+        bit-exact pins in test_rlvr_posteriors_428 pin the same
+        property through values.)"""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws_a = _ws(tmp_path, "ws-a")
+        ws_b = _ws(tmp_path, "ws-b")
         dts.record(ws_a, "shared", "shared", 1, gamma=0.5, ts=TS_CONST)
         dts.record(ws_a, "shared", "shared", 1, gamma=0.5, ts=TS_CONST)
         dts.record(ws_b, "shared", "shared", 0, gamma=0.5, ts=TS_CONST)
@@ -765,16 +817,14 @@ TS_CONST = "2026-11-09T00:00:00Z"
 
 
 class TestRevokeScoping:
-    def test_cross_ws_revoke_deletes_nothing_foreign(
+    def test_revoke_touches_only_its_own_workspace(
             self, tmp_path, monkeypatch):
-        """MED review fix: a revoke from workspace A never deletes
-        workspace B's rows under a claim-id collision (per-workspace
-        claim ids are systematic: C-1, C-2, ... in every workspace)."""
-        _armed_root(tmp_path, monkeypatch)
-        ws_a = tmp_path / "ws-a"
-        ws_b = tmp_path / "ws-b"
-        ws_a.mkdir()
-        ws_b.mkdir()
+        """A revoke from workspace A never touches workspace B's store
+        (the stores are different FILES now — the collision concern is
+        structurally gone; the pin is the surviving neighbor)."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws_a = _ws(tmp_path, "ws-a")
+        ws_b = _ws(tmp_path, "ws-b")
         for ws in (ws_a, ws_b):
             ss.append_store_row(ws, method_family="frida", status="ok",
                                 credit=1.0, claim="C-1")
@@ -783,48 +833,45 @@ class TestRevokeScoping:
                 credit=0.5, claim="C-1", credit_kind="step")
         out = crystallize_mod.revoke_claim(ws_a, "C-1")
         assert out["broadcasts_removed"] == 1
-        rows = _family_rows(cl._knowledge_root())
-        b_rows = [r for r in rows if r.get("workspace_id") == "ws-b"
-                  and str(r.get("claim") or "") == "C-1"]
-        assert len(b_rows) == 2, "ws B's rows must all survive"
+        # ws B's file is untouched — both of its rows survive
+        b_rows = _family_rows(ws_b)
+        assert len(b_rows) == 2
         out = crystallize_mod.revoke_claim(ws_b, "C-1")
         assert out["broadcasts_removed"] == 1
-        # both BANK rows revoked (each by its own workspace); the two
+        # both BANK rows revoked (each in its own store); the two
         # CREDIT rows survive — the credit series is outside revoke's
-        # pre-move reach, and nothing foreign was ever touched
-        rows = _family_rows(cl._knowledge_root())
-        rest = [r for r in rows if str(r.get("claim") or "") == "C-1"]
-        assert sorted(r.get("workspace_id") for r in rest) == \
-            ["ws-a", "ws-b"]
-        assert all(r.get("credit_kind") == "step" for r in rest)
+        # reach, and nothing foreign was ever touched
+        for ws in (ws_a, ws_b):
+            rows = _family_rows(ws)
+            rest = [r for r in rows if str(r.get("claim") or "") == "C-1"]
+            assert len(rest) == 1
+            assert rest[0].get("credit_kind") == "step"
 
     def test_credit_rows_are_never_revocable(self, tmp_path, monkeypatch):
-        """Revoke's pre-move reach never touched the credit series — the
+        """Revoke's reach never touched the credit series — the
         workspace-scoped broadcast predicate stays in the BANK
         population (credit-kind rows survive every revoke)."""
-        _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         ss.append_workspace_credit_row(ws, method_family="frida",
                                        status="ROUND_CREDIT", credit=0.5,
                                        claim="C-1", credit_kind="step")
         out = crystallize_mod.revoke_claim(ws, "C-1")
         assert out["broadcasts_removed"] == 0
-        assert [r for r in _family_rows(cl._knowledge_root())
+        assert [r for r in _family_rows(ws)
                 if r.get("credit_kind") == "step"]
 
     def test_revoke_rewrites_run_inside_the_family_lock(
             self, tmp_path, monkeypatch):
-        """MED review fix: the revocation rewrites run INSIDE the
-        consolidated flock (``consolidated_ledger.family_lock``) — a
-        concurrent append between a rewrite's read and its atomic write
-        can never be lost. Pinned deterministically through a lock spy
-        (a timing race would make a thread-stress pin flaky, and a
-        flaky pin is not a pin)."""
+        """The revocation rewrites run INSIDE the consolidated flock
+        (``consolidated_ledger.family_lock``) — a concurrent append
+        between a rewrite's read and its atomic write can never be
+        lost. Pinned deterministically through a lock spy (a timing
+        race would make a thread-stress pin flaky, and a flaky pin is
+        not a pin)."""
         from contextlib import contextmanager
-        _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
         for i in range(3):
             ss.append_store_row(ws, method_family="frida", status="ok",
                                 credit=1.0, claim="C-gone")
@@ -848,7 +895,7 @@ class TestRevokeScoping:
         assert events == ["enter", "inside", "exit"], (
             "the revocation rewrites must run inside the consolidated "
             "family lock")
-        rows = _family_rows(cl._knowledge_root())
+        rows = _family_rows(ws)
         kept = sorted(r.get("claim") or "" for r in rows
                       if str(r.get("claim") or "").startswith("C-keep"))
         assert kept == [f"C-keep-{i}" for i in range(4)]
@@ -858,15 +905,14 @@ class TestRevokeScoping:
 class TestMigrateArchiveNaming:
     def test_knowledge_rels_archive_without_collision(
             self, tmp_path, monkeypatch):
-        """LOW review fix: the knowledge family registers BOTH
-        posterior-store rels (guarded root + ws-local) — the same file
-        name. migrate() must archive them under DISTINCT names, never
-        land ``copied-unarchived`` (rows in the family file AND the rel
-        left on disk = a permanent double-count)."""
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        _write_rows(root / "posterior-store.jsonl", [
+        """The knowledge family registers BOTH posterior-store rels
+        (the pre-move guarded-root rel + the ws-local rel) — the same
+        file name. migrate() must archive them under DISTINCT names,
+        never land ``copied-unarchived`` (rows in the family file AND
+        the rel left on disk = a permanent double-count)."""
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        _write_rows(ws / "posterior-store.jsonl", [
             {"schema": POSTERIOR_STAMP, "ts": "2026-11-01T00:00:00Z",
              "workspace_id": "old", "arm_key": "g", "method_family": "g",
              "feature_key": "none", "fingerprint": None, "status": "ok",
@@ -892,7 +938,7 @@ class TestMigrateArchiveNaming:
             "runs/feature-table.jsonl": "absent",
             "runs/posterior-store.jsonl": "migrated"}
         # both rels gone from their pre-move locations
-        assert not (root / "posterior-store.jsonl").exists()
+        assert not (ws / "posterior-store.jsonl").exists()
         assert not (ws / "runs" / "posterior-store.jsonl").exists()
         # the family read returns each row EXACTLY once (no
         # double-count from a copied-unarchived rel)
@@ -910,23 +956,21 @@ class TestMigrateArchiveNaming:
 class TestBreakerSeriesSealed:
     def test_forged_credit_row_refused_from_the_series(
             self, tmp_path, monkeypatch):
-        """LOW review fix: the breaker series rides trusted_rows — an
-        armed workspace refuses a forged credit row naming it (the
-        shared family file widened the forgery blast radius; the wall
-        moves with it)."""
+        """The breaker series rides trusted_rows — an armed workspace
+        refuses a forged credit row naming it (the family file widened
+        the forgery blast radius; the wall moves with it)."""
         key = tmp_path / "learning.key"
         key.write_bytes(b"k" * 48)
         monkeypatch.setattr(seal, "KEY_PATH", key)
         monkeypatch.setattr(seal, "_ANCHOR", {"build": None})
         assert seal.armed() is True
-        root = _armed_root(tmp_path, monkeypatch)
-        ws = tmp_path / "ws"
-        ws.mkdir()
-        forged = _credit_row("ws", 0.25, "C-1")
+        monkeypatch.delenv(STORE_ENV, raising=False)
+        ws = _ws(tmp_path)
+        forged = _credit_row(ss.workspace_id_of(ws), 0.25, "C-1")
         forged.pop("seal", None)
-        _write_rows(root / "knowledge-store.jsonl", [forged])
+        _write_rows(cl.family_path(ws, "knowledge"), [forged])
         assert sg.recent_credits(ws, 5) == []
         # the honest face: a SEALED credit row of the same shape passes
         sealed = seal.sign_row(dict(forged))
-        _write_rows(root / "knowledge-store.jsonl", [sealed])
+        _write_rows(cl.family_path(ws, "knowledge"), [sealed])
         assert sg.recent_credits(ws, 5) == [0.25]

@@ -197,20 +197,23 @@ def _facts_face(ws: Path, claim: str) -> list[dict]:
 
 
 def _cross_task_face(ws: Path, claim: str) -> list[dict]:
-    """The cross-task posterior store: rows from OTHER workspaces whose
-    claim identity is THIS claim and whose settled credit is positive —
-    another engagement solved it (the #705 solution-broadcast face
-    carries the claim id). Never reads the ws's own rows (the store's
-    leave-one-out read). POPULATION (issue-1004 R2c review fix): the
-    store read is the BANK face only — the ws credit series (the
-    breaker's ``credit_kind``-marked rows) is excluded by
-    ``strategy_store.load_rows``, so a foreign workspace's round credit
-    for ITS colliding claim id can never certify THIS claim (exact
-    pre-move visibility: the credit series never lived in the
-    cross-task store)."""
+    """The cross-workspace posterior store: rows stamped with ANOTHER
+    workspace's id whose claim identity is THIS claim and whose settled
+    credit is positive — another engagement solved it (the #705
+    solution-broadcast face carries the claim id). Leave-one-out: never
+    the ws's own rows — and with cross-project learning off a
+    production store carries only own rows, so this face reads empty.
+    POPULATION (issue-1004 R2c review fix): the store read is the BANK
+    face only — the ws credit series (the breaker's
+    ``credit_kind``-marked rows) is excluded by
+    ``strategy_store.load_rows``, so a bridged round credit can never
+    certify THIS claim."""
     from rlvr import strategy_store as _store  # noqa: PLC0415
+    mine = _store.workspace_id_of(ws)
     out = []
     for row in _store.load_rows(ws):
+        if str(row.get("workspace_id") or "") == mine:
+            continue
         if str(row.get("claim") or "") != claim:
             continue
         credit = row.get("credit")

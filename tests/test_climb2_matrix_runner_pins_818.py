@@ -228,9 +228,15 @@ class TestLaunchShape:
                                    "KEEP": "yes"})
         assert "KUNGLAO_RECALL" not in env
         assert env["KEEP"] == "yes"
-        assert env[emr.STORE_ENV] == str(emr.store_dir_of(plan))
+        # the store is workspace-local (cross-project off): the matrix
+        # stages SEED/EXPORT dirs, never an outside-workspace store root
+        assert emr.STORE_ENV not in env
+        assert env[emr.SEED_STORE_ENV] == str(emr.store_dir_of(plan))
+        assert env[emr.EXPORT_STORE_ENV] == str(emr.store_dir_of(plan))
         bare = emr.child_env(self._plan(), {})
         assert emr.STORE_ENV not in bare
+        assert emr.SEED_STORE_ENV not in bare
+        assert emr.EXPORT_STORE_ENV not in bare
         # the arm's declared env wins last
         flagged = emr.child_env(self._plan(), {})
         assert flagged["KUNGLAO_FLAG"] == "1"

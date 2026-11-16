@@ -260,20 +260,52 @@ def test_tier_faces_for_the_feature_token(tmp_path: Path,
 # 3. cross-engagement (the keyed store substrate)
 # ===========================================================================
 
-def test_second_workspace_inherits_raised_density(
+def test_second_workspace_never_reads_another_workspace_store(
         tmp_path: Path, monkeypatch) -> None:
+    """Cross-project learning is off: a refutation recorded in alpha's
+    store never reaches beta's fold — beta reads only its own store,
+    and an absent store folds to the neutral multiplier."""
     alpha = _ws(tmp_path, "alpha")
     beta = _ws(tmp_path, "beta")
     _sig_patch(monkeypatch, "K shared")
     res = rf.record_verify_outcome(alpha, verdict="REFUTED",
                                    boundary="redteam")
     assert res.get("appended") is True
-    # beta: no local ledger at all — the inherited row raises the density
+    face_b = rf.fold(beta)
+    assert face_b["multiplier"] == 1.0, \
+        "beta must not inherit alpha's store rows (no cross-project read)"
+    assert face_b["mine"]["rate"] == 0.0
+
+
+def _restamp_store_rows_foreign(ws) -> None:
+    """Restamp every store row in `ws` as foreign (the staged-donor
+    shape an eval arm materializes) — the fold's other-bucket admits
+    foreign rows, the own-bucket dedupes them."""
+    from rlvr import strategy_store as _ss
+    store = _ss.store_root(ws) / "knowledge-store.jsonl"
+    rows = [json.loads(ln) for ln in
+            store.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    for r in rows:
+        r["workspace_id"] = "ws-donor"
+    store.write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+        encoding="utf-8")
+
+
+def test_staged_foreign_rows_raise_the_density(
+        tmp_path: Path, monkeypatch) -> None:
+    """The inheritance MECHANIC still folds foreign-stamped store rows
+    (the eval-arm staging face): a foreign REFUTED row in the
+    workspace's own store raises the density and the cadence."""
+    beta = _ws(tmp_path, "beta")
+    _sig_patch(monkeypatch, "K shared")
+    rf.record_verify_outcome(beta, verdict="REFUTED",
+                             boundary="redteam", signature="K shared")
+    _restamp_store_rows_foreign(beta)
     face_b = rf.fold(beta)
     assert face_b["buckets"]["K shared|redteam"]["refuted"] >= 1.0
     assert face_b["mine"]["rate"] > 0.0
     assert face_b["multiplier"] > 1.0
-    # the second workspace's own cadence face sees it too
     assert rf.cadence_multiplier(beta) > 1.0
 
 
@@ -293,13 +325,20 @@ def test_own_store_rows_never_double_count(tmp_path: Path,
 
 def test_cross_honest_rows_decay_the_inherited_density(
         tmp_path: Path, monkeypatch) -> None:
-    alpha = _ws(tmp_path, "alpha")
+    """Foreign-stamped honest rows decay a foreign refutation's raised
+    density (the mechanic, exercised on staged rows in one workspace)."""
     beta = _ws(tmp_path, "beta")
     _sig_patch(monkeypatch, "K shared")
-    rf.record_verify_outcome(alpha, verdict="REFUTED")
+
+    def _record(verdict):
+        rf.record_verify_outcome(beta, verdict=verdict,
+                                 signature="K shared")
+        _restamp_store_rows_foreign(beta)
+
+    _record("REFUTED")
     before = rf.fold(beta)["multiplier"]
-    rf.record_verify_outcome(alpha, verdict="verified")
-    rf.record_verify_outcome(alpha, verdict="verified")
+    _record("verified")
+    _record("verified")
     after = rf.fold(beta)["multiplier"]
     assert before > after >= 1.0
 
@@ -323,7 +362,7 @@ def test_record_reuses_the_credit_mapping(tmp_path: Path,
     ws = _ws(tmp_path, "alpha")
     rf.record_verify_outcome(ws, verdict="CONFIRMED")
     rf.record_verify_outcome(ws, verdict="REFUTED", boundary="redteam")
-    rows = ss.load_rows(ws=None)
+    rows = ss.load_rows(ws)
     mine = [r for r in rows if r.get("arm_key") == rf.STORE_ARM]
     assert [r["credit"] for r in mine] == [1.0, 0.0]
     assert mine[1]["status"] == "redteam"
@@ -552,9 +591,7 @@ def test_store_failure_fails_open_loud(tmp_path: Path,
                                        monkeypatch) -> None:
     _sig_patch(monkeypatch, "K1")
     ws = _ws(tmp_path, "alpha")
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "store-root"))
-    store_root = tmp_path / "store-root"
+    store_root = ws / "runs" / "posterior"
     store_root.mkdir(parents=True)
     (store_root / "knowledge-store.jsonl").write_text(
         "garbage line\n", encoding="utf-8")
@@ -562,7 +599,7 @@ def test_store_failure_fails_open_loud(tmp_path: Path,
     # skips the garbage and keeps the one well-formed row
     res = rf.record_verify_outcome(ws, verdict="REFUTED")
     assert res.get("appended") is True
-    rows = [r for r in ss.load_rows(ws=None)
+    rows = [r for r in ss.load_rows(ws)
             if r.get("arm_key") == rf.STORE_ARM]
     assert len(rows) == 1
     assert rows[0]["credit"] == 0.0
@@ -571,11 +608,13 @@ def test_store_failure_fails_open_loud(tmp_path: Path,
 def test_record_refuses_holdout_contaminated_rows(
         tmp_path: Path, monkeypatch) -> None:
     """The firewall rides the shared append face: a row whose serialized
-    form carries a holdout unit-id is refused, not appended."""
-    ws = _ws(tmp_path, "unit-nine")  # the workspace id carries the id
+    form carries a holdout unit-id is refused, not appended (the id
+    rides the row's feature signature — the workspace identity is a
+    path digest, never a unit id)."""
+    ws = _ws(tmp_path, "alpha")
     _sig_patch(monkeypatch, "K1")
     monkeypatch.setattr(ss, "holdout_unit_ids",
-                        lambda: {"unit-nine"}, raising=True)
+                        lambda: {"k1"}, raising=True)
     res = rf.record_verify_outcome(ws, verdict="REFUTED",
                                    signature="K1")
     assert res.get("appended") is False

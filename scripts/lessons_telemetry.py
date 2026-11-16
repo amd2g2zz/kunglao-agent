@@ -140,14 +140,19 @@ def compute_utility(citation_count: int, burn_count: int) -> float:
     return b / (c + 1)
 
 
-def _resolve_library(library: Path | str | None) -> Path:
-    """#752: the default derives from the EXECUTING install (any durable
-    ~/.claude/skills/<name>/ package resolves to itself; ephemeral
-    checkouts fall back to the production install) — no second hardcoded
-    'kunglao-agent' path may exist outside hook_activation."""
-    from hook_activation import canonical_install_root  # lazy sibling import
-    return (Path(library) if library is not None
-            else canonical_install_root() / "references" / "lessons")
+def _resolve_library(library: Path | str | None,
+                     workspace: Path | str | None = None) -> Path:
+    """The library is WORKSPACE-LOCAL (cross-project learning off): the
+    default is the workspace's analyses/lessons; an explicit ``library``
+    overrides. A call with neither cannot resolve a store and fails
+    loud — no global install path is consulted anymore."""
+    if library is not None:
+        return Path(library)
+    if workspace is None:
+        raise ValueError(
+            "lessons library requires a workspace — cross-project "
+            "learning is off, the library cannot resolve outside one")
+    return Path(workspace) / "analyses" / "lessons"
 
 
 def _resolve_workspace(workspace: Path | str | None) -> Path | None:
@@ -216,19 +221,22 @@ def _bump(library: Path, slug: str, counter_name: str, action: str,
 
 def record_citation(library: Path | str, slug: str, workspace: Path | str | None = None) -> dict:
     """Bump citation_count (lesson was surfaced as a candidate)."""
-    return _bump(_resolve_library(library), slug, "citation_count",
+    return _bump(_resolve_library(library, workspace), slug,
+                 "citation_count",
                  "lesson_citation", _resolve_workspace(workspace))
 
 
 def record_burn(library: Path | str, slug: str, workspace: Path | str | None = None) -> dict:
     """Bump burn_count (lesson's next_method was adopted as the new method)."""
-    return _bump(_resolve_library(library), slug, "burn_count",
+    return _bump(_resolve_library(library, workspace), slug,
+                 "burn_count",
                  "lesson_burn", _resolve_workspace(workspace))
 
 
 def record_match(library: Path | str, slug: str, workspace: Path | str | None = None) -> dict:
     """Bump match_count (lesson appeared in the result set with score > 0)."""
-    return _bump(_resolve_library(library), slug, "match_count",
+    return _bump(_resolve_library(library, workspace), slug,
+                 "match_count",
                  "lesson_match", _resolve_workspace(workspace))
 
 
@@ -240,7 +248,7 @@ def deprecate_lesson(library: Path | str, slug: str, reason: str,
     frontmatter gains deprecated=true, deprecated_reason, deprecated_at.
     Idempotent: re-deprecating keeps the ORIGINAL reason + at (audit
     discipline — never silently rewrite). Empty reason is rejected."""
-    lib = _resolve_library(library)
+    lib = _resolve_library(library, workspace)
     if not lib.exists():
         return {"ok": False, "reason": f"library not found: {lib}"}
     p = lib / f"lesson-{slug}.md"
@@ -279,19 +287,20 @@ def deprecate_lesson(library: Path | str, slug: str, reason: str,
             "deprecated_at": meta["deprecated_at"]}
 
 
-def is_deprecated(library: Path | str, slug: str) -> bool:
+def is_deprecated(library: Path | str, slug: str,
+                  workspace: Path | str | None = None) -> bool:
     """True iff the lesson file exists AND frontmatter has deprecated=true.
     Missing file is NOT deprecated (it never existed)."""
-    p = _resolve_library(library) / f"lesson-{slug}.md"
+    p = _resolve_library(library, workspace) / f"lesson-{slug}.md"
     if not p.exists():
         return False
     meta, _ = _load_frontmatter(p)
     return bool(meta) and meta.get("deprecated") is True
 
 
-def list_deprecated(library: Path | str) -> list[str]:
+def list_deprecated(library: Path | str, workspace=None) -> list[str]:
     """Slugs of all tombstoned lessons in the library (sorted)."""
-    lib = _resolve_library(library)
+    lib = _resolve_library(library, workspace)
     if not lib.exists():
         return []
     out: list[str] = []
@@ -303,10 +312,10 @@ def list_deprecated(library: Path | str) -> list[str]:
     return out
 
 
-def active_lessons(library: Path | str) -> list[Path]:
+def active_lessons(library: Path | str, workspace=None) -> list[Path]:
     """Paths to NON-deprecated lessons (the live search surface). Order:
     deterministic — sorted by name."""
-    lib = _resolve_library(library)
+    lib = _resolve_library(library, workspace)
     if not lib.exists():
         return []
     out: list[Path] = []

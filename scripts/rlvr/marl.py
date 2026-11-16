@@ -18,9 +18,12 @@ This module is the three-face transfer protocol the ruling demands:
      ``negative_pools`` below. A failed tool chain records under
      ``(signature_class, agent_type, method_family)``, where the CLASS
      is a digest over the workspace's mined STRUCTURAL feature tokens —
-     never the instance signature, never a case identity. Two workspaces
-     with the same structural shape collide and share the dead end; two
-     instances of the same binary at different loop phases do not.
+     never the instance signature, never a case identity. The record
+     lives in the WORKSPACE's own store (cross-project off: no shared
+     dead-end inheritance across projects/workspaces); instances of the
+     same binary at different loop phases do not collide (the class
+     abstraction still scopes the record, and a same-workspace
+     re-analysis of the same shape inherits its own dead ends).
      Read back as failure mass that raises the arm's β (a dead end is a
      failure pseudo-count, never a deletion — the mean need not fall for
      a cell whose own failures already sit below the anchor mean); it is
@@ -28,11 +31,11 @@ This module is the three-face transfer protocol the ruling demands:
      additive receipt block under the one SHRINK_CAP.
 
   3. **Solution broadcast (METHOD level)** — ``broadcast_solution``: a
-     PROVEN claim's METHOD enters the shared posterior store. The
-     answer text NEVER rides the row — the ``answer`` kwarg is accepted
-     and DELIBERATELY DROPPED so a careless caller cannot leak it
-     through this face. Other agents may use the broadcast as a prior
-     but must still verify (verification credit ≠ solve credit).
+     PROVEN claim's METHOD enters the workspace's own posterior store.
+     The answer text NEVER rides the row — the ``answer`` kwarg is
+     accepted and DELIBERATELY DROPPED so a careless caller cannot leak
+     it through this face. Later rounds may use the broadcast as a
+     prior but must still verify (verification credit ≠ solve credit).
 
 Every write is fail-open telemetry (a store failure never breaks the
 producer); every read degrades to the inert empty face with one
@@ -54,13 +57,14 @@ NEG_SCHEMA = "marl-negative/1"
 UNKNOWN_CLASS = "unknown"
 
 
-def neg_store_path() -> Path:
-    """The SHARED negative-knowledge store — the knowledge family file
-    under the guarded root (issue-1004 R2c; the only face since the
-    issue-1004 R3 schema cutover). Shared, not per-workspace: the whole
-    point of class-level negative knowledge is that workspace B
-    inherits workspace A's dead end for the SAME structural class."""
-    return _cl.family_path(None, "knowledge")
+def neg_store_path(ws) -> Path:
+    """The workspace's negative-knowledge store — the knowledge family
+    file under the workspace's own store root (issue-1004 R2c; the
+    only face since the issue-1004 R3 schema cutover). Workspace-local:
+    cross-project learning is off, so a
+    workspace's dead ends are recorded and read inside its own
+    workspace only — no shared-root inheritance across projects."""
+    return _cl.family_path(ws, "knowledge")
 
 
 def _class_of(ws=None, *, features=None) -> str:
@@ -98,11 +102,11 @@ def signature_class(ws=None, *, features=None) -> str:
     return _class_of(ws, features=features)
 
 
-def _read_neg_rows() -> list[dict]:
-    """Tolerant read: schema-filtered rows, oldest first (the knowledge
-    family read — the guarded-root legacy rel first, then the family
-    file: chronology). Missing file → [], corrupt lines skip."""
-    return [r for r in _cl.read(None, "knowledge",
+def _read_neg_rows(ws) -> list[dict]:
+    """Tolerant read: schema-filtered rows, oldest first (the
+    workspace's knowledge family read). Missing file → [], corrupt
+    lines skip."""
+    return [r for r in _cl.read(ws, "knowledge",
                                 schema_prefix="marl-negative")
             if isinstance(r, dict)]
 
@@ -120,11 +124,11 @@ def _tool_chain_token(tool_chain) -> str | None:
         return None
 
 
-def read_negatives() -> list[dict]:
+def read_negatives(ws=None) -> list[dict]:
     """The public tolerant read face — schema-filtered rows, oldest
     first, missing file → []. The write-back dedupe and the revocation
     scan read through here so they never re-implement the parse."""
-    return _read_neg_rows()
+    return _read_neg_rows(ws)
 
 
 def record_negative(ws, *, method_family: str,
@@ -157,7 +161,7 @@ def record_negative(ws, *, method_family: str,
     for key, val in (("claim_ref", claim_ref), ("step_ref", step_ref)):
         if val:
             row[key] = str(val)
-    appended = _cl.append(None, "knowledge", row)
+    appended = _cl.append(ws, "knowledge", row)
     return {"appended": bool(appended), "reason": None if appended
             else "write-failed", "signature_class": cls, "row": row}
 
@@ -166,11 +170,12 @@ def negative_pools(ws, families, *, agent_type: str | None = None,
                    signature_class: str | None = None) -> dict:
     """The read face — class-level dead ends as failure-mass pools.
 
-    Pooled ACROSS agent types within the class (the whole point: when one
-    agent learns a dead end the others inherit it). ``agent_type`` is an
-    optional narrowing filter, never the default. ``signature_class``
-    overrides the workspace's own class — the cross-workspace read (a
-    different workspace of the same class reads the same dead ends).
+    Pooled ACROSS agent types within the class (when one agent learns a
+    dead end the others inherit it). ``agent_type`` is an optional
+    narrowing filter, never the default. ``signature_class`` overrides
+    the workspace's own class — a re-analysis of the same structural
+    shape reads its own dead ends through the override face. Rows come
+    from the WORKSPACE's own negative store (cross-project off).
 
     Returns {family → FeaturePool(success=0.0, failure=λ·fails, rows)} —
     the sampler's duck type. A dead end is pure failure mass: it raises
@@ -180,7 +185,7 @@ def negative_pools(ws, families, *, agent_type: str | None = None,
     try:
         cls = signature_class or (_class_of(ws)
                                   if ws is not None else UNKNOWN_CLASS)
-        rows = _read_neg_rows()
+        rows = _read_neg_rows(ws)
         wanted = set(families)
         from rlvr import meta_arms as _ma  # noqa: PLC0415 — the temper
         acc: dict[str, tuple[float, int]] = {}
@@ -216,7 +221,9 @@ def broadcast_solution(ws, *, method_family: str, credit,
                        fingerprint: str | None = None,
                        dispatch_id: str | None = None) -> dict:
     """The SOLUTION BROADCAST face: a PROVEN claim's METHOD enters the
-    shared posterior store so other agents can warm-start from it.
+    workspace's own posterior store so later rounds of the SAME
+    analysis can warm-start from it (cross-project off — the broadcast
+    no longer crosses workspaces).
 
     Method-only by construction: the row carries the method family, the
     proving agent, the claim ID and the credit. The optional ``answer``

@@ -71,8 +71,6 @@ def test_declared_family_records_propensity_1_and_rides_candidates(
     from rlvr import priors
     (ws / "task_spec.yaml").write_text("family: static-replay\n")
     priors.seed_intake_prior(ws, families=[FAMILY])
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "store"))
     ctx = _ctx(ws, FAMILY)
     request, _handle = checkpoints._launch_dispatch(ctx, "C-004", set())
     assert request.method_family == FAMILY, "the declared family wins"
@@ -97,7 +95,7 @@ def test_declared_family_records_propensity_1_and_rides_candidates(
     trans = [r for r in ir.read_transitions(ws)
              if r.get("dispatch_id") == "C-004"]
     assert trans and trans[-1].get("propensity") is None
-    rows = strategy_store.load_rows(ws=None)
+    rows = strategy_store.load_rows(ws)
     assert rows and rows[-1]["propensity"] is None
     assert rows[-1]["arm_key"] == f"{FAMILY}|facts_snapshot|none|1", \
         "the store row is keyed by the dispatch's 4-dim arm_key"
@@ -106,8 +104,6 @@ def test_declared_family_records_propensity_1_and_rides_candidates(
 
 def test_sampler_failure_still_records_propensity_1(tmp_path, monkeypatch):
     ws = _ws(tmp_path)
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "store"))
     ctx = _ctx(ws, FAMILY)
     monkeypatch.setattr(checkpoints, "_sample_envelope_family",
                         lambda *a, **k: ("", None))
@@ -127,8 +123,6 @@ def test_undeclared_path_still_uses_the_mc_propensity(tmp_path, monkeypatch):
     from rlvr import priors
     (ws / "task_spec.yaml").write_text("family: static-replay\n")
     priors.seed_intake_prior(ws, families=[FAMILY])
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "store"))
     ctx = _ctx(ws, "")  # no declaration -> the sampler decides
     request, _handle = checkpoints._launch_dispatch(ctx, "C-004", set())
     assert request.method_family, "the sampler picked a family"
@@ -145,8 +139,6 @@ def test_settle_unmatched_dispatch_writes_no_store_row(
     """No pending q-cell dispatch row -> no family attribution -> the
     honest gap: no store row, never a fabricated bucket."""
     ws = _ws(tmp_path)
-    store = tmp_path / "store"
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(store))
     ctx = _ctx(ws, "")
     monkeypatch.setattr(checkpoints, "_sample_envelope_family",
                         lambda *a, **k: ("", None))
@@ -156,5 +148,5 @@ def test_settle_unmatched_dispatch_writes_no_store_row(
         llm_faces.ActRecord(claim="C-404", mode="auto", outcome="TIMEOUT",
                             detail={}),
         set(), {"acts": []})
-    assert strategy_store.load_rows(ws=None) == [], \
+    assert strategy_store.load_rows(ws) == [], \
         "unmatched settlements never fabricate store rows"

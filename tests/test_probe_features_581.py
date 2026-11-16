@@ -480,22 +480,33 @@ class TestTolerantFold:
 
     def test_warm_pools_fold_by_family_not_by_feature_key(self, tmp_path,
                                                           monkeypatch):
-        """Old-store rows written under pre-bump feature keys still warm
-        the new-key workspace: the store read face is family-keyed, so
-        the richer key cold-starts through pooling (the deliberate
-        compat face), never through a key match that can no longer
-        hit."""
-        store = tmp_path / "store"
-        monkeypatch.setenv(strategy_store.STORE_ENV, str(store))
+        """Donor rows written under pre-bump feature keys still warm the
+        new-key workspace: the store read face is family-keyed, so the
+        richer key cold-starts through pooling (the deliberate compat
+        face), never through a key match that can no longer hit. The
+        donor rows are staged INSIDE the workspace's own store with a
+        foreign id (cross-project off)."""
+        ws_new = tmp_path / "ws-new"
         for credit in (1.0, 0.0):
-            assert strategy_store.append_store_row(
-                tmp_path / "ws-old", method_family="static-decompile",
-                status="settled", credit=credit,
-                feature_key="legacy-key-0000")["appended"] is True
+            assert strategy_store.append_row(ws_new, {
+                "schema": strategy_store.STORE_SCHEMA,
+                "ts": "2026-10-07T00:00:00Z",
+                "workspace_id": "ws-donor-old-key",
+                "arm_key": "static-decompile|facts_snapshot|none|1",
+                "method_family": "static-decompile",
+                "feature_key": "legacy-key-0000",
+                "fingerprint": "fp000011112222",
+                "status": "settled",
+                "credit": credit,
+                "censored": False,
+                "facts_citing": 0,
+                "propensity": None,
+                "phi_delta": None,
+                "provenance": {"dispatch_id": "C-001"},
+            })["appended"] is True
         # a workspace whose mined features carry the new probe tokens
-        _write_die(tmp_path / "ws-new", 7.6)
-        pools = strategy_store.warm_pools(tmp_path / "ws-new",
-                                          ["static-decompile"])
+        _write_die(ws_new, 7.6)
+        pools = strategy_store.warm_pools(ws_new, ["static-decompile"])
         assert "static-decompile" in pools
         assert pools["static-decompile"].rows == 2
 

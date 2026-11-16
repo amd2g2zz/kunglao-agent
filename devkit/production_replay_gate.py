@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import tempfile
 from pathlib import Path
@@ -48,7 +47,6 @@ from typing import Callable
 
 DEVKIT_ROOT = Path(__file__).resolve().parent
 DEFAULT_SHAPES = DEVKIT_ROOT / "production_shapes"
-STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 SCHEMA = "production-shape/1"
 REQUIRED_KEYS = ("id", "synthetic", "source", "shape", "events",
                  "expectations")
@@ -136,37 +134,23 @@ def _inv003_posterior_family_key(ws: Path, fixture: dict) -> tuple[bool, str]:
     arm-NULL broadcast shape and ACCEPT the arm-keyed control — the
     INV-003 family-level upgrade (#807), asserted both ways.
 
-    issue-1004 R2c staging: the fingerprint reads the knowledge family
-    file under the guarded root (``@knowledge/`` resolution), so the
-    assertion stages an ISOLATED knowledge root per replay (env
-    override, restored afterwards) and materializes the fixture's
-    ``knowledge-store.jsonl`` artifact into it — a replay can never
-    touch the real guarded root."""
+    cross-project-off staging: the knowledge family file is
+    WORKSPACE-LOCAL (cross-project learning is off), so the fixture's
+    ``knowledge-store.jsonl`` artifact materializes INSIDE the scratch
+    workspace's own store root and no store env override is staged —
+    a replay can never touch another workspace's store."""
     import liveness_gate as lg  # devkit sibling, lazy import
 
     spec = next(f for f in lg.load_fingerprints()["fingerprints"]
                 if f["id"] == "rl-posterior-moved")
     rows = (fixture.get("artifacts") or {}).get(KNOWLEDGE_ARTIFACT) or []
-    ok = detail = None
-    with tempfile.TemporaryDirectory(prefix="inv003-root-") as kroot:
-        # the declared switch is READ through the runtime-switches face
-        # (#985 contract); the scratch-root assignment below is test
-        # staging (a write, not a read)
-        sys.path.insert(0, str(DEVKIT_ROOT.parent / "scripts"))
-        import runtime_switches  # noqa: PLC0415 — lazy (devkit mirror)
-        prev = runtime_switches.get_str(STORE_ENV).strip()
-        os.environ[STORE_ENV] = kroot
-        try:
-            if rows:
-                (Path(kroot) / KNOWLEDGE_ARTIFACT).write_text(
-                    "".join(json.dumps(r, ensure_ascii=False) + "\n"
-                            for r in rows), encoding="utf-8")
-            ok, detail = lg.evaluate_fingerprint(ws, spec)
-        finally:
-            if prev:
-                os.environ[STORE_ENV] = prev
-            else:
-                os.environ.pop(STORE_ENV, None)
+    if rows:
+        root = Path(ws) / "runs" / "posterior"
+        root.mkdir(parents=True, exist_ok=True)
+        (root / KNOWLEDGE_ARTIFACT).write_text(
+            "".join(json.dumps(r, ensure_ascii=False) + "\n"
+                    for r in rows), encoding="utf-8")
+    ok, detail = lg.evaluate_fingerprint(ws, spec)
     expected = fixture.get("expectations", {}).get("rl-posterior-moved",
                                                    "PASS")
     want = expected == "PASS"

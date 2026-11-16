@@ -159,18 +159,16 @@ def test_posterior_sentinel_is_family_level(lg, tmp_path, monkeypatch):
     satisfy rl-posterior-moved — key-less posterior movement is exactly
     the decorative case the sentinel exists to catch. The same store
     with ONE arm-keyed row passes: family attribution is the signal.
-    Both shapes seed through the REAL faces into the knowledge family
-    file (issue-1004 R2c), each on its own isolated guarded root (the
-    family file is cross-task — per-case roots keep the evaluations
-    independent).
+    Both shapes seed through the REAL faces into the workspace's own
+    knowledge family file (workspace-local since issue-1005 — each case
+    gets its own workspace, so the evaluations stay independent).
     """
     import rlvr.strategy_store as ss772
     spec = next(f for f in lg.load_fingerprints()["fingerprints"]
                 if f["id"] == "rl-posterior-moved")
 
     def _seed_and_check(name: str, seed, expect_ok: bool) -> None:
-        monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                           str(tmp_path / f"root-{name}"))
+        monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
         ws = tmp_path / name
         ws.mkdir()
         seed(ws)
@@ -179,7 +177,7 @@ def test_posterior_sentinel_is_family_level(lg, tmp_path, monkeypatch):
 
     # case-level movement: the row carries NO arm attribution
     def _bare(ws):
-        ss772.append_row({
+        ss772.append_row(ws, {
             "schema": "posterior-store/1", "ts": "2026-11-09T00:00:00Z",
             "workspace_id": "ws", "arm_key": "", "method_family": "",
             "feature_key": "none", "fingerprint": None, "status": "ok",

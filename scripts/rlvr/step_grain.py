@@ -361,7 +361,7 @@ def settle_step(ws, session_id: str, outcome: str = "completed",
                     ws, claim=str(pending["claim"]),
                     since_ts=since_ts, until=now_dt)
                 evidence_items = items
-                step_credit_value = _sc.step_credit(items)
+                step_credit_value = _sc.step_credit(items, ws=ws)
                 bank = _qc.observe_step_credit(
                     ws, pending["claim"], step_credit_value,
                     step_ref=step_row["step_id"])

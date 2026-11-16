@@ -103,9 +103,9 @@ def test_store_rows_carry_phi_delta_and_pools_apply_it(
         tmp_path, monkeypatch):
     """Both consumption faces move together: the store row records
     phi_delta and the warm-pool masses use the tiebroken credit."""
-    root = tmp_path / "store"
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
-    strategy_store.append_row({
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    strategy_store.append_row(ws, {
         "schema": strategy_store.STORE_SCHEMA,
         "ts": "2026-10-07T00:00:00Z",
         "workspace_id": "ws-donor",
@@ -121,9 +121,9 @@ def test_store_rows_carry_phi_delta_and_pools_apply_it(
         "phi_delta": 0.2,
         "provenance": {"dispatch_id": "C-004"},
     })
-    rows = strategy_store.load_rows(ws=None)
+    rows = strategy_store.load_rows(ws)
     assert rows[0]["phi_delta"] == 0.2
-    pools = strategy_store.warm_pools(tmp_path / "ws", [
+    pools = strategy_store.warm_pools(ws, [
         "kdf-chain-reconstruction"])
     pool = pools["kdf-chain-reconstruction"]
     from rlvr import meta_arms  # noqa: PLC0415

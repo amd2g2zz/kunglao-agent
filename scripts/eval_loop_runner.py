@@ -956,7 +956,60 @@ def init_workspace(task_dir: Path, work_root: Path,
         raise RuntimeError(
             f"kunglao-init failed rc={proc.returncode} for {task_dir.name}: "
             f"{(proc.stderr or proc.stdout or '')[-1500:]}")
+    _seed_ws_store(ws)
     return ws
+
+
+#: eval arm isolation faces (learning stores are workspace-local, so an
+#: eval matrix seeds/exports the workspace's OWN store instead of
+#: pointing an env override at an external dir — the env override
+#: outside the workspace would be refused by the store resolver):
+#: KUNGLAO_EVAL_SEED_STORE names a dir whose
+#: knowledge-store.jsonl is COPIED INTO the fresh workspace's store at
+#: init (the warm arm's starting state); KUNGLAO_EVAL_STORE_EXPORT
+#: names a dir the workspace's store file is copied back to at run end
+#: (the per-arm accumulating scope). Both are eval-only staging faces:
+#: the run reads/writes only its workspace's store.
+SEED_STORE_ENV = "KUNGLAO_EVAL_SEED_STORE"
+EXPORT_STORE_ENV = "KUNGLAO_EVAL_STORE_EXPORT"
+WS_STORE_FILE = Path("runs") / "posterior" / "knowledge-store.jsonl"
+
+
+def _seed_ws_store(ws: Path) -> None:
+    """Copy the declared seed store INTO the fresh workspace's own store
+    (the warm arm). Fail-open with a loud stderr note: a broken seed
+    must never kill a staged run — the arm then simply starts cold."""
+    import runtime_switches  # noqa: PLC0415 — declared-switch read face
+    src_root = runtime_switches.get_str(SEED_STORE_ENV).strip()
+    if not src_root:
+        return
+    src = Path(src_root) / "knowledge-store.jsonl"
+    dst = ws / WS_STORE_FILE
+    try:
+        if src.is_file():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+    except OSError as exc:
+        print(f"[eval_loop_runner] store seed failed: {exc}", flush=True)
+
+
+def export_ws_store(ws: Path) -> None:
+    """Copy the workspace's store file OUT to the declared export dir
+    (the per-arm accumulating scope — the next cell seeds from it).
+    Fail-open with a loud stderr note: an export failure loses only the
+    accumulation, never the run's own learning."""
+    import runtime_switches  # noqa: PLC0415 — declared-switch read face
+    dst_root = runtime_switches.get_str(EXPORT_STORE_ENV).strip()
+    if not dst_root:
+        return
+    src = Path(ws) / WS_STORE_FILE
+    dst = Path(dst_root) / "knowledge-store.jsonl"
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.is_file():
+            shutil.copy2(src, dst)
+    except OSError as exc:
+        print(f"[eval_loop_runner] store export failed: {exc}", flush=True)
 
 
 def init_cc_default_workspace(task_dir: Path,
@@ -2349,6 +2402,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     print(f"VERDICT {tdir.name} {res['verdict']} "
           f"(loop: {status}, decision={metrics['decision']}"
           f"{', gap_redo' if gap_redo['ran'] else ''})")
+    export_ws_store(ws)
     return row
 
 

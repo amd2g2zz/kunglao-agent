@@ -13,7 +13,8 @@ is the core:
     runs/experience.jsonl   WHAT HAPPENED    (the learning feed)
     runs/settlement.jsonl   HOW IT CLOSED    (the credit)
     runs/telemetry.jsonl    WHAT WAS OBSERVED (audit)
-    knowledge-store.jsonl   WHAT IS KNOWN    (cross-task, guarded root)
+    runs/posterior/knowledge-store.jsonl  WHAT IS KNOWN (workspace-local
+                                          store — cross-project off)
 
 Row contracts (unchanged, now enforced HERE):
 
@@ -50,16 +51,20 @@ from kunglao_log import iter_jsonl, warn  # canonical warn: ONE implementation
 
 FAMILIES = ("experience", "settlement", "telemetry", "knowledge")
 
-#: family -> consolidated file (ws-relative, except knowledge — see below)
+#: family -> consolidated file (all ws-relative — the knowledge family
+#: is workspace-local too: every learning store resolves inside the
+#: workspace, under strategy_store.WS_STORE_REL)
 CONSOLIDATED: dict[str, str] = {
     "experience": "runs/experience.jsonl",
     "settlement": "runs/settlement.jsonl",
     "telemetry": "runs/telemetry.jsonl",
-    "knowledge": "knowledge-store.jsonl",  # under the guarded cross-task root
+    "knowledge": "runs/posterior/knowledge-store.jsonl",
 }
 
-#: the knowledge family's rel (resolved under the guarded root, not ws/)
-KNOWLEDGE_REL = CONSOLIDATED["knowledge"]
+#: the knowledge family's file name (resolved under the workspace's
+#: store root — rel-based read faces resolve it through
+#: strategy_store.store_root)
+KNOWLEDGE_REL = "knowledge-store.jsonl"
 
 #: family -> every registered stamp. Two origins, one contract:
 #:   - schemas BORN in a consolidated file (no pre-consolidation series);
@@ -149,57 +154,45 @@ REGISTERED: dict[str, tuple[str, ...]] = {
 
 NO_SCHEMA = "(no-schema)"
 
-#: the guarded cross-task root's env override (mirrors
-#: strategy_store.STORE_ENV — the root single source is strategy_store)
+#: the store root's env override (mirrors strategy_store.STORE_ENV —
+#: the resolver single source is strategy_store.store_root; the override
+#: is honored only when it points inside the workspace)
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 
 
-def _knowledge_root() -> Path:
-    """The guarded cross-task root: strategy_store.store_root() when
-    importable (the single source), else the same two-step mirror
-    (env override, then this package's patterns dir)."""
-    try:
-        from rlvr import strategy_store as _ss  # noqa: PLC0415 — lazy (cycle)
-        return _ss.store_root()
-    except Exception as exc:  # noqa: BLE001 — fail-open mirror, loud
-        warn("rlvr.consolidated_ledger",
-             f"strategy_store root unavailable ({type(exc).__name__}: "
-             f"{exc}) — environment-mirror fallback")
-        import runtime_switches  # noqa: PLC0415 — fallback path only
-        env = runtime_switches.get_str(STORE_ENV).strip()
-        if env:
-            return Path(env)
-        return Path(__file__).resolve().parent / "patterns"
-
-
 def family_path(ws, family: str) -> Path:
-    """The consolidated file for one family. knowledge ignores ws (the
-    store is cross-task by design — same file for every workspace)."""
+    """The consolidated file for one family. Every family is
+    workspace-relative: the knowledge family lives under the
+    workspace's own store root (cross-project off — a run touches no
+    learning store outside its workspace), delegated to
+    ``strategy_store.store_root(ws)`` (the single root resolver — an
+    inside-workspace env override moves the family file with it). A
+    workspace-less knowledge resolution cannot name a store and fails
+    loud (the rootless shared-root faces retired with cross-project
+    learning)."""
+    if ws is None and family == "knowledge":
+        raise ValueError(
+            "knowledge family requires a workspace — cross-project "
+            "learning is off, the store cannot resolve outside one")
     if family == "knowledge":
-        return _knowledge_root() / KNOWLEDGE_REL
+        from rlvr import strategy_store as _ss  # noqa: PLC0415 — lazy (cycle)
+        return _ss.store_root(ws) / KNOWLEDGE_REL
     return Path(ws) / CONSOLIDATED[family]
 
 
 def legacy_path(ws, family: str, rel: str) -> Path:
-    """One MIGRATION-SOURCE rel (the R4 retire CLI's resolution face —
-    the live read faces never touch these paths since the issue-1004 R3
-    schema cutover). Knowledge rels resolve under the guarded root
-    EXCEPT the ws-scoped ``runs/`` rels (the historical ws-local
-    posterior series and the mined feature table — they lived per
-    workspace, so they resolve per workspace); every other family's
-    rels are ws-relative. A ``None`` ws (the cross-task faces — marl,
-    the rootless store read) cannot name a workspace, so the ws-scoped
-    rels degrade to the guarded root's own sibling. That sibling does
-    not exist under the real guarded root, so the degraded rel reads
-    empty — pointing KUNGLAO_POSTERIOR_STORE at a directory that happens
-    to hold a workspace's ``runs/`` tree would alias that workspace's
-    series into the rootless resolution (an operator misconfiguration,
-    not a guarded state)."""
-    if family == "knowledge":
-        if rel.startswith("runs/"):
-            return Path(ws if ws is not None else _knowledge_root()) / rel
-        return _knowledge_root() / rel
-    return Path(ws) / rel
+    """One MIGRATION-SOURCE rel. All rels resolve ws-relative: the
+    knowledge family is workspace-local, so the guarded-root rels of
+    the pre-cross-project era resolve under the workspace as well —
+    which reads absent (a workspace never carried the global store
+    inside it), making the migration a no-op for them (no cross-project
+    carry-in by design; the global store file itself is simply no
+    longer touched). A ``None`` ws cannot name a workspace: the
+    ws-scoped ``runs/`` rels degrade to the module dir's sibling — that
+    sibling does not exist as a workspace, so the degraded rel reads
+    empty."""
+    return Path(ws if ws is not None else
+                Path(__file__).resolve().parent) / rel
 
 
 def _lock_path(p: Path) -> Path:
@@ -322,7 +315,12 @@ def append(ws, family: str, row: dict) -> bool:
              f"row not JSON-serializable for {family!r} "
              f"({type(exc).__name__}: {exc}) — not appended")
         return False
-    return _locked_append(family_path(ws, family), data)
+    try:
+        return _locked_append(family_path(ws, family), data)
+    except ValueError as exc:  # workspace-less knowledge store — loud
+        warn("rlvr.consolidated_ledger.append",
+             f"{family!r}: {exc} — not appended")
+        return False
 
 
 def _read_rows(p: Path) -> list[dict]:
@@ -366,7 +364,13 @@ def read(ws, family: str, *,
              f"unknown family {family!r} — no rows read")
         return []
     prefixes = None if schema_prefix is None else _prefixes(schema_prefix)
-    return [row for row in _read_rows(family_path(ws, family))
+    try:
+        path = family_path(ws, family)
+    except ValueError as exc:  # workspace-less knowledge store — loud
+        warn("rlvr.consolidated_ledger.read",
+             f"{family!r}: {exc} — no rows read")
+        return []
+    return [row for row in _read_rows(path)
             if _stamp_kept(row, prefixes)]
 
 
