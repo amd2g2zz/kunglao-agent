@@ -122,7 +122,7 @@ def test_sampler_failure_still_records_propensity_1(tmp_path, monkeypatch):
     assert receipt["candidates"] == {}
 
 
-def test_undeclared_path_still_uses_the_mc_propensity(tmp_path, monkeypatch):
+def test_undeclared_path_stamps_the_exact_selection_law(tmp_path, monkeypatch):
     ws = _ws(tmp_path)
     from rlvr import priors
     (ws / "task_spec.yaml").write_text("family: static-replay\n")
@@ -134,8 +134,9 @@ def test_undeclared_path_still_uses_the_mc_propensity(tmp_path, monkeypatch):
     assert request.method_family, "the sampler picked a family"
     receipt = _envelopes(ws)[-1]["envelope"]
     assert receipt.get("propensity") is not None
+    assert receipt.get("probability_source") == "selection_law_exact"
     assert not receipt.get("declared"), \
-        "the sampled path keeps its MC propensity, never the forced 1.0"
+        "the sampled path keeps its exact selection-law propensity, never the forced 1.0"
     assert q_cells.JSONLQStore(ws).observations(), \
         "the dispatch row is recorded either way"
 
