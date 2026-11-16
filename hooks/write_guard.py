@@ -737,6 +737,52 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
     return violations
 
 
+#: the harness-written learning surfaces (the anti-forgery face): a
+#: worker writing these directly would either forge settlement inputs
+#: or clobber a sealed harness doc, so on an ARMED learning channel the
+#: write is refused — the sanctioned writers are the runner/writer CLIs
+#: named in the block reason. Unarmed (no provisioning key) the face is
+#: byte-identical to the legacy allow.
+_SEALED_SURFACE_BLOCK = (
+    "runs/oracle-status.json",
+)
+_SEALED_SURFACE_RE = re.compile(
+    r"^runs/settlement-verdict-[A-Za-z0-9._-]+\.json$")
+
+
+def sealed_surface_block(ws: Path, rel: Path) -> str | None:
+    """The anti-forgery judgment for one Write/Edit target: None = allow
+    (or not this face), str = the block reason naming the sanctioned
+    writer. Only an ARMED learning channel refuses — the unarmed face
+    must stay byte-identical (CI posture). The seal module being
+    unimportable degrades to ALLOW with a loud sidecar warn (the
+    self-health posture: a crashed gate must not stop the mission; the
+    read-face seal still refuses the forged bytes downstream)."""
+    rel_posix = rel.as_posix()
+    if rel_posix not in _SEALED_SURFACE_BLOCK \
+            and not _SEALED_SURFACE_RE.match(rel_posix):
+        return None
+    try:
+        from rlvr.learning_seal import armed as _armed
+    except Exception as exc:  # noqa: BLE001 — self-health: demote loudly
+        gate_policy.warn_sidecar(
+            ws, "write_guard", "self_health",
+            f"sealed-surface gate unimportable ({type(exc).__name__}: "
+            f"{exc}) — write faces on {rel_posix} are not adjudicated",
+            exit_code=0)
+        return None
+    if not _armed():
+        return None
+    return (
+        f"{rel_posix} is a harness-written learning surface (anti-"
+        "forgery): direct worker writes are refused on an armed "
+        "channel. The sanctioned writers are the harness CLIs — "
+        "settlement verdicts land via `python3 <skill_root>/scripts/"
+        "kunglao.py seal verdict-write <workspace> <claim> < doc.json`, "
+        "oracle status via the oracle runner face; anything else lands "
+        "unsealed and is refused at the settlement read face.")
+
+
 def _emit_block(ws: Path | None, payload: dict, artifact: str, detail: str) -> None:
     """Every enforcement action is observable (#532 item 5 / E-1/E-2).
 
@@ -866,6 +912,14 @@ def main() -> int:
             print(detail, file=sys.stderr)
             _emit_block(ws, payload, rel_sf.as_posix(), detail)
             _dbg("exit BLOCK rc=2 — status-first gate (#57 gate 4)")
+            return RC_BLOCK
+        seal_block = sealed_surface_block(ws, rel_sf)
+        if seal_block:
+            detail = f"write_guard: BLOCK — anti-forgery gate: {seal_block}"
+            print(detail, file=sys.stderr)
+            _emit_block(ws, payload, rel_sf.as_posix(), detail)
+            _dbg("exit BLOCK rc=2 — sealed learning surface "
+                 "(anti-forgery face)")
             return RC_BLOCK
     if carrier is None:
         _dbg("exit ALLOW rc=0 — target is not one of the four carriers")

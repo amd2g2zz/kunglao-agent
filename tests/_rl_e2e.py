@@ -266,7 +266,9 @@ def close_round(ws: Path, claim: str, session: str) -> None:
 
 def rule_round(ws: Path, claim: str, *, credit: float,
                oracle_verdict: str) -> None:
-    """The mocked settler ruling + the verification record the mint needs."""
+    """The mocked settler ruling + the verification record the mint needs.
+    The ruling lands through the SANCTIONED verdict writer (armed, only a
+    harness-sealed verdict settles)."""
     from rlvr import settlement_wire as wire
     parked = wire.load_parked(ws, claim)
     if parked is None:
@@ -280,9 +282,7 @@ def rule_round(ws: Path, claim: str, *, credit: float,
                      "evidence": evidence}],
         "trajectory_credit": credit,
     }
-    (ws / "runs" / f"settlement-verdict-{claim}.json").write_text(
-        json.dumps(verdict, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8")
+    wire.write_sealed_verdict(ws, claim, verdict)
     word = "verified" if oracle_verdict == "pass" else "refuted"
     (ws / "runs" / f"verification-{claim}.md").write_text(
         f"verdict: {word}\n", encoding="utf-8")

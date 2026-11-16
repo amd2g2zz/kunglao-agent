@@ -70,6 +70,7 @@ from pathlib import Path
 
 from kunglao_log import warn
 from rlvr import consolidated_ledger as cl
+from rlvr import learning_seal as _seal
 from rlvr import settlement_scorer as bss
 
 #: the parked blind input doc (the writer's face — matches the
@@ -82,6 +83,9 @@ ACT_REL = "runs/settlement-act-{claim}.json"
 
 #: the act-outcome sidecar's schema stamp
 ACT_SCHEMA = "settlement-act/1"
+
+#: the verdict doc's schema stamp (the writer's landing wall)
+VERDICT_SCHEMA = "settlement-verdict/1"
 
 #: the wire row stamp — the liveness fingerprint's ledger evidence
 WIRE_SCHEMA = "settlement-wire/1"
@@ -343,8 +347,67 @@ def load_parked(ws, claim) -> dict | None:
 
 
 def load_verdict(ws, claim) -> dict | None:
+    """The verdict doc's read face. Armed, only a SEAL-VALID doc
+    resolves: the sanctioned writer (``write_sealed_verdict``) signs at
+    write, so a verdict file that carries no valid seal was written by
+    someone else — a worker-forged ruling is refused (None + ONE loud
+    warn) and the claim stays pending, never settled from a
+    worker-writable file. Unarmed the doc passes unchanged (byte-
+    identical legacy face)."""
     p = Path(ws) / verdict_rel(claim)
-    return _load_json(p) if p.is_file() else None
+    doc = _load_json(p) if p.is_file() else None
+    if doc is None:
+        return None
+    if not _seal.armed():
+        return doc
+    ok, why = _seal.verify_row(doc)
+    if ok:
+        return doc
+    warn("rlvr.settlement_wire.load_verdict",
+         f"{verdict_rel(claim)} refused: not a harness-written verdict "
+         f"({why}) — nothing settles from a worker-writable file; the "
+         f"ruling must land through the sanctioned writer")
+    return None
+
+
+def write_sealed_verdict(ws, claim, doc) -> dict:
+    """THE SANCTIONED VERDICT WRITER — the face that turns a settler
+    ruling into the canonical verdict file. The doc rides stdin-shaped
+    caller input, so the landing wall is strict: a JSON mapping with the
+    ``settlement-verdict/1`` stamp, a claim field matching the parked
+    claim, and a non-empty grader identity (credit without a named
+    grader does not settle). Any caller-supplied ``seal`` block is
+    dropped — the harness seal is minted HERE, from the channel key
+    (armed; unarmed the doc lands unsealed, byte-identical to the
+    legacy file the channel rides). The write is atomic
+    (tmp + replace) at ``verdict_rel(claim)``. Raises ValueError on any
+    wall miss — the caller (settler face or CLI) refuses loudly."""
+    ws = Path(ws)
+    rel = verdict_rel(claim)  # also the claim-safety gate
+    if not isinstance(doc, dict):
+        raise ValueError("verdict doc must be a JSON mapping")
+    if str(doc.get("schema") or "") != VERDICT_SCHEMA:
+        raise ValueError(
+            f"verdict doc schema must be {VERDICT_SCHEMA!r}, got "
+            f"{str(doc.get('schema') or '')!r}")
+    if str(doc.get("claim") or "") != str(claim):
+        raise ValueError(
+            f"verdict doc claim {str(doc.get('claim') or '')!r} does not "
+            f"match the parked claim {str(claim)!r}")
+    if not str(doc.get("identity") or "").strip():
+        raise ValueError(
+            "verdict doc carries no grader identity — nothing settles "
+            "from an anonymous ruling")
+    body = {k: v for k, v in doc.items() if k != "seal"}
+    sealed = _seal.sign_row(body)
+    blob = json.dumps(sealed, ensure_ascii=False, sort_keys=True) + "\n"
+    p = ws / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(blob, encoding="utf-8")
+    tmp.replace(p)
+    return {"path": rel, "sealed": bool(sealed.get("seal")),
+            "doc": sealed}
 
 
 def load_act_outcome(ws, claim) -> str:
