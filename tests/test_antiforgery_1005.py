@@ -669,13 +669,10 @@ def test_init_refuses_loudly_when_provisioning_fails(tmp_path):
     ws = tmp_path / "ws-init3"
     home = tmp_path / "home-init3"
     home.mkdir()
-    ro = home / ".claude"
-    ro.mkdir()
-    ro.chmod(0o500)                          # unwritable key directory
-    try:
-        proc = _init_run(ws, home)
-    finally:
-        ro.chmod(0o700)
+    # a regular file blocking the key directory: ENOTDIR for ANY user —
+    # a chmod-based unwritable directory is bypassed by a root runner
+    (home / ".claude").write_text("not a directory")
+    proc = _init_run(ws, home)
     assert proc.returncode != 0
     assert "provisioning failed" in proc.stderr
     # nothing scaffolded: the refusal precedes the workspace writes
