@@ -72,29 +72,27 @@ def _store_rows(ws_id: str, n_fail: int) -> list[dict]:
     } for i in range(1, n_fail + 1)]
 
 
-@pytest.fixture
-def store_root(tmp_path, monkeypatch):
-    """An isolated posterior store holding warm rows from ANOTHER
-    workspace (the leave-one-out shape: the workspace-under-test's own
-    rows never enter its warm start)."""
-    root = tmp_path / "posterior-store"
-    root.mkdir()
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
+def _seed_donor(ws):
+    """Stage warm rows from ANOTHER workspace into the
+    workspace-under-test's own store (the leave-one-out shape: own rows
+    never pool; foreign-stamped rows do). The store is workspace-local
+    (cross-project off) — a donor's rows reach a workspace only as
+    staged fixture data inside it."""
     for row in _store_rows("ws-donor", 4):
-        strategy_store.append_row(row)
-    return root
+        strategy_store.append_row(ws, row)
 
 
 # --------------------------------------------------------------- 1. warm start
 
 def test_second_workspace_starts_warm_nonflat_and_traceable(
-        tmp_path, store_root):
+        tmp_path):
     """A fresh workspace's FIRST candidates are non-flat: the warm family
     borrows anchor mass from the store (alpha+beta > 2), the cold family
     stays the wide Beta(1,1) (alpha == beta == 1), and the warm family's
     receipt block names the exact store rows (traceable)."""
     ws = tmp_path / "ws-second"
     ws.mkdir()
+    _seed_donor(ws)
     from rlvr import priors
     (ws / "task_spec.yaml").write_text("family: static-replay\n")
     priors.seed_intake_prior(ws, families=[FAM_WARM, FAM_COLD])
@@ -115,9 +113,10 @@ def test_second_workspace_starts_warm_nonflat_and_traceable(
 
 # ------------------------------------------------- 2. never writes local cells
 
-def test_warm_read_never_writes_local_cells(tmp_path, store_root):
+def test_warm_read_never_writes_local_cells(tmp_path):
     ws = tmp_path / "ws-warm"
     ws.mkdir()
+    _seed_donor(ws)
     checkpoints._sample_envelope_family(ws)
     log = ws / "runs" / "q-cell-log.jsonl"
     assert not log.exists() or not log.read_text(encoding="utf-8").strip(), \
@@ -183,8 +182,11 @@ def test_old_logs_without_arm_key_fold_unchanged():
 
 # ------------------------------------------------------------ 4. λ tempering
 
-def test_warm_pools_are_lambda_tempered(tmp_path, store_root):
-    pools = strategy_store.warm_pools(tmp_path / "ws-any", [FAM_WARM])
+def test_warm_pools_are_lambda_tempered(tmp_path):
+    ws = tmp_path / "ws-any"
+    ws.mkdir()
+    _seed_donor(ws)
+    pools = strategy_store.warm_pools(ws, [FAM_WARM])
     pool = pools[FAM_WARM]
     assert pool.rows == 4
     assert pool.failure == pytest.approx(meta_arms.LAMBDA * 4.0), \
@@ -194,23 +196,46 @@ def test_warm_pools_are_lambda_tempered(tmp_path, store_root):
 
 # ------------------------------------------------------- 5. root resolution
 
-def test_store_root_env_override_and_default(monkeypatch):
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", "/tmp/ws2-alt-root")
-    assert strategy_store.store_root() == Path("/tmp/ws2-alt-root")
+def test_store_root_resolves_inside_the_workspace(tmp_path, monkeypatch):
+    """issue-1005: the root is the workspace's own store dir; an env
+    override INSIDE the workspace is honored, one OUTSIDE is refused
+    (cross-project off) and the workspace default is used."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
     monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
-    assert strategy_store.store_root() == \
-        Path(strategy_store.__file__).resolve().parent / "patterns"
+    assert strategy_store.store_root(ws) == ws / "runs" / "posterior"
+    inside = ws / "runs" / "alt"
+    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(inside))
+    assert strategy_store.store_root(ws) == inside
+    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
+                       str(tmp_path / "outside-store"))
+    assert strategy_store.store_root(ws) == ws / "runs" / "posterior"
 
 
-def test_store_read_tolerant_on_missing_and_corrupt(tmp_path, monkeypatch):
-    root = tmp_path / "nope"
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
-    assert strategy_store.load_rows(ws=None) == []
-    root.mkdir()
-    (root / "knowledge-store.jsonl").write_text(
+def test_workspace_ids_do_not_collide_for_same_named_workspaces(tmp_path):
+    """The workspace identity digest separates same-named workspaces in
+    different parents (the former directory-name identity aliased
+    them)."""
+    a = tmp_path / "a" / "ws"
+    b = tmp_path / "b" / "ws"
+    a.mkdir(parents=True)
+    b.mkdir(parents=True)
+    assert strategy_store.workspace_id_of(a) != \
+        strategy_store.workspace_id_of(b)
+    assert strategy_store.workspace_id_of(a) == \
+        strategy_store.workspace_id_of(a)
+
+
+def test_store_read_tolerant_on_missing_and_corrupt(tmp_path):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    assert strategy_store.load_rows(ws) == []
+    store = ws / "runs" / "posterior"
+    store.mkdir(parents=True)
+    (store / "knowledge-store.jsonl").write_text(
         "{not json}\n"
         + json.dumps({"schema": "posterior-store/1",
                       "workspace_id": "w"}) + "\n",
         encoding="utf-8")
-    rows = strategy_store.load_rows(ws=None)
+    rows = strategy_store.load_rows(ws)
     assert len(rows) == 1, "corrupt rows skip, valid rows survive"

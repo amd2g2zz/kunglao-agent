@@ -190,7 +190,7 @@ files:
   scripts/fact_contradiction_gate.py:
     r1: 1
   scripts/failure_analysis_gate.py:
-    r1: 43
+    r1: 42
   scripts/feature_mining.py:
     r1: 4
   scripts/feedback.py:
@@ -278,7 +278,7 @@ files:
   scripts/kunglao_wait.py:
     r1: 6
   scripts/lessons_telemetry.py:
-    r1: 3
+    r1: 2
   scripts/lint_facts.py:
     r1: 26
   scripts/liveness_policy.py:
@@ -586,7 +586,7 @@ files:
   tests/chain_test_harness.py:
     r1: 5
   tests/conftest.py:
-    r1: 3
+    r1: 2
   tests/experiment_difficulty_15.py:
     r1: 1
   tests/fixtures/experiments/ex3_bucket_calibration.py:

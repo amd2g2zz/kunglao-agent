@@ -52,31 +52,25 @@ def _resolve_ledger(ws: Path, ledger: str) -> Path | None:
     if ledger == "runs/logs/latest":
         return _latest_log(ws)
     if ledger.startswith("@knowledge/"):
-        return _knowledge_ledger(ledger.split("/", 1)[1])
+        return _knowledge_ledger(ws, ledger.split("/", 1)[1])
     return ws / ledger
 
 
-def _knowledge_ledger(rel: str) -> Path | None:
-    """The knowledge family's guarded-root face (the ``@knowledge/``
-    ledger prefix — the cross-task store is not ws-relative,
-    issue-1004 R2c). The root single source is
-    ``rlvr.strategy_store.store_root``; on an import failure the same
-    two-step mirror applies (declared switch override, then the rlvr
-    patterns dir) — never a second resolver. The override is read
-    through the runtime-switches face (the #985 contract: declared
-    switches are never raw-read)."""
+def _knowledge_ledger(ws: Path, rel: str) -> Path:
+    """The knowledge family's workspace-local face (the ``@knowledge/``
+    ledger prefix — the store root is the WORKSPACE's, the single
+    source is ``rlvr.strategy_store.store_root(ws)``; on an import
+    failure the ws-relative default mirror applies — never a second
+    resolver logic). The workspace-less guard lives in store_root's
+    contract."""
     try:
         sys.path.insert(0, str(SCRIPTS))
         from rlvr import strategy_store  # noqa: PLC0415 — lazy (devkit)
-        return strategy_store.store_root() / rel
+        return strategy_store.store_root(ws) / rel
     except Exception as exc:  # noqa: BLE001 — mirror, loud in the detail
         print(f"liveness: knowledge root unavailable ({exc!r}) — "
-              f"env/patterns mirror", file=sys.stderr)
-        import runtime_switches  # noqa: PLC0415 — lazy (devkit mirror)
-        env = runtime_switches.get_str("KUNGLAO_POSTERIOR_STORE").strip()
-        if env:
-            return Path(env) / rel
-        return SCRIPTS / "rlvr" / "patterns" / rel
+              f"workspace-local mirror", file=sys.stderr)
+        return Path(ws) / "runs" / "posterior" / rel
 
 
 def _rows(path: Path) -> list[dict]:

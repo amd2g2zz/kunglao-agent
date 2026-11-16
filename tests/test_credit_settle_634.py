@@ -128,17 +128,17 @@ def test_bank_writes_the_cross_task_store_row(tmp_path):
     from rlvr import strategy_store
     ws = _case_ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     src.run(ws)
-    rows = [r for r in strategy_store.load_rows(ws=None)
+    rows = [r for r in strategy_store.load_rows(ws)
             if str((r.get("provenance") or {}).get("dispatch_id")) == _did(ws, "C-9")]
     assert len(rows) == 1, "the settled dispatch must key exactly one row"
     row = rows[0]
     assert row["method_family"] == "static-symbolic"
     assert row["arm_key"] == "static-symbolic|facts_snapshot|none|0"
     assert row["status"] == "ROUND_CREDIT"
-    assert row["workspace_id"] == ws.name
+    assert row["workspace_id"] == strategy_store.workspace_id_of(ws)
     # the replay adds no second row (the first-settlement clock)
     src.run(ws)
-    again = [r for r in strategy_store.load_rows(ws=None)
+    again = [r for r in strategy_store.load_rows(ws)
              if str((r.get("provenance") or {}).get("dispatch_id")) == _did(ws, "C-9")]
     assert len(again) == 1
 
@@ -155,7 +155,7 @@ def test_unmatched_dispatch_writes_no_store_row(tmp_path):
     ws = _ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     out = src.run(ws)
     assert out["settled"] == 1  # the ledger row still settles
-    assert strategy_store.load_rows(ws=None) == []
+    assert strategy_store.load_rows(ws) == []
 
 
 def test_case_settlement_leg_updates_linked_case_posteriors(tmp_path):

@@ -43,7 +43,9 @@ TOOLS = ["upx", "strings"]
 
 @pytest.fixture(autouse=True)
 def _isolated_store(tmp_path, monkeypatch):
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(tmp_path / "store"))
+    # the store is workspace-local (cross-project off); a leaked env
+    # override must never redirect it
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
 
 
 def _ws(tmp_path: Path) -> Path:
@@ -72,8 +74,8 @@ def _facts_index(ws: Path, claim: str, status: str = "PROVEN") -> None:
         encoding="utf-8")
 
 
-def _neg_rows() -> list[dict]:
-    return [r for r in marl.read_negatives()
+def _neg_rows(ws) -> list[dict]:
+    return [r for r in marl.read_negatives(ws)
             if str(r.get("claim_ref") or "")]
 
 
@@ -85,7 +87,7 @@ def test_blocked_step_records_attributed_negative(tmp_path):
     out = crystallize.crystallize_settlement(
         ws, claim="C-007", step_id="step-1", outcome="blocked")
     assert out["negative"] is True
-    rows = _neg_rows()
+    rows = _neg_rows(ws)
     assert len(rows) == 1
     row = rows[0]
     assert row["method_family"] == FAM
@@ -113,7 +115,7 @@ def test_settlement_replay_is_idempotent(tmp_path):
         ws, claim="C-007", step_id="step-1", outcome="blocked")
     assert again["negative"] is False
     assert again["reason"] == "duplicate"
-    assert len(_neg_rows()) == 1
+    assert len(_neg_rows(ws)) == 1
 
 
 # ---- 2. the certified completion broadcasts the method ---------------------
@@ -126,7 +128,7 @@ def test_completed_certified_step_broadcasts_method(tmp_path):
         ws, claim="C-003", step_id="step-9", outcome="completed",
         step_credit=0.8)
     assert out["broadcast"] is True
-    rows = [r for r in strategy_store.load_rows()
+    rows = [r for r in strategy_store.load_rows(ws)
             if str(r.get("claim") or "") == "C-003"]
     assert len(rows) == 1
     row = rows[0]
@@ -145,7 +147,7 @@ def test_broadcast_requires_banked_credit(tmp_path):
         ws, claim="C-003", step_id="step-9", outcome="completed",
         step_credit=None)
     assert out["broadcast"] is False
-    assert not [r for r in strategy_store.load_rows()
+    assert not [r for r in strategy_store.load_rows(ws)
                 if str(r.get("claim") or "") == "C-003"]
 
 
@@ -157,7 +159,7 @@ def test_completed_without_certified_answer_writes_nothing(tmp_path):
         ws, claim="C-003", step_id="step-9", outcome="completed",
         step_credit=0.5)
     assert out["broadcast"] is False
-    assert strategy_store.load_rows() == []
+    assert strategy_store.load_rows(ws) == []
 
 
 def test_no_usage_row_writes_nothing(tmp_path):
@@ -166,7 +168,7 @@ def test_no_usage_row_writes_nothing(tmp_path):
         ws, claim="C-404", step_id="step-1", outcome="blocked")
     assert out["negative"] is False
     assert out["reason"] == "no-method"
-    assert marl.read_negatives() == []
+    assert marl.read_negatives(ws) == []
 
 
 # ---- 3. revocation ----------------------------------------------------------
@@ -184,18 +186,18 @@ def test_revoke_claim_removes_only_claim_rows(tmp_path):
     crystallize.crystallize_settlement(
         ws, claim="C-003", step_id="step-3", outcome="completed",
         step_credit=0.9)
-    keep_neg = next(r for r in marl.read_negatives()
+    keep_neg = next(r for r in marl.read_negatives(ws)
                     if r.get("claim_ref") == "C-008")
-    keep_bcast = [r for r in strategy_store.load_rows()
+    keep_bcast = [r for r in strategy_store.load_rows(ws)
                   if r.get("claim") == "C-003"]
 
     out = crystallize.revoke_claim(ws, "C-007")
     assert out["negatives_removed"] == 1
-    remaining = {r.get("claim_ref") for r in marl.read_negatives()}
+    remaining = {r.get("claim_ref") for r in marl.read_negatives(ws)}
     assert remaining == {"C-008"}
-    assert [r for r in strategy_store.load_rows()
+    assert [r for r in strategy_store.load_rows(ws)
             if r.get("claim") == "C-003"] == keep_bcast
-    assert keep_neg in marl.read_negatives()
+    assert keep_neg in marl.read_negatives(ws)
 
 
 def test_revoke_claim_no_rows_is_noop(tmp_path):
@@ -203,10 +205,10 @@ def test_revoke_claim_no_rows_is_noop(tmp_path):
     _usage(ws, "C-007")
     crystallize.crystallize_settlement(
         ws, claim="C-007", step_id="step-1", outcome="blocked")
-    neg_before = marl.read_negatives()
+    neg_before = marl.read_negatives(ws)
     out = crystallize.revoke_claim(ws, "C-999")
     assert out == {"negatives_removed": 0, "broadcasts_removed": 0}
-    assert marl.read_negatives() == neg_before
+    assert marl.read_negatives(ws) == neg_before
 
 
 def test_revoke_claim_removes_the_broadcast(tmp_path):
@@ -216,11 +218,11 @@ def test_revoke_claim_removes_the_broadcast(tmp_path):
     crystallize.crystallize_settlement(
         ws, claim="C-003", step_id="step-1", outcome="completed",
         step_credit=0.8)
-    assert len([r for r in strategy_store.load_rows()
+    assert len([r for r in strategy_store.load_rows(ws)
                 if r.get("claim") == "C-003"]) == 1
     out = crystallize.revoke_claim(ws, "C-003")
     assert out["broadcasts_removed"] == 1
-    assert [r for r in strategy_store.load_rows()
+    assert [r for r in strategy_store.load_rows(ws)
             if r.get("claim") == "C-003"] == []
 
 
@@ -245,11 +247,11 @@ def test_legacy_rows_without_provenance_still_read(tmp_path):
     legacy = {"schema": marl.NEG_SCHEMA, "ts": "2026-10-17T00:00:00Z",
               "signature_class": marl.UNKNOWN_CLASS, "agent_type": None,
               "method_family": FAM, "tool_chain": "upx", "fails": 1}
-    neg_path = marl.neg_store_path()
+    neg_path = marl.neg_store_path(ws)
     neg_path.parent.mkdir(parents=True, exist_ok=True)
     with neg_path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(legacy) + "\n")
-    rows = marl.read_negatives()
+    rows = marl.read_negatives(ws)
     assert len(rows) == 1 and rows[0].get("claim_ref") is None
     assert FAM in marl.negative_pools(ws, [FAM])
 
@@ -267,7 +269,7 @@ def test_settle_step_wires_the_writeback(tmp_path):
     receipt = step_grain.settle_step(ws, "sess-1", outcome="blocked")
     assert receipt is not None
     expected_step = step_grain.step_id_for("sess-1", 0)
-    rows = _neg_rows()
+    rows = _neg_rows(ws)
     assert len(rows) == 1
     assert rows[0]["step_ref"] == expected_step
     assert rows[0]["claim_ref"] == "C-007"
@@ -288,7 +290,7 @@ def test_second_certified_step_is_a_broadcast_duplicate(tmp_path):
         step_credit=0.3)
     assert first["broadcast"] is True
     assert second["broadcast"] is False and second["reason"] == "duplicate"
-    assert len([r for r in strategy_store.load_rows()
+    assert len([r for r in strategy_store.load_rows(ws)
                 if r.get("claim") == "C-003"]) == 1
 
 
@@ -300,7 +302,7 @@ def test_zero_credit_broadcast_withheld(tmp_path):
         ws, claim="C-003", step_id="step-1", outcome="completed",
         step_credit=0.0)
     assert out["broadcast"] is False and out["reason"] == "no-credit"
-    assert strategy_store.load_rows() == []
+    assert strategy_store.load_rows(ws) == []
 
 
 def test_revoke_empty_claim_is_inert(tmp_path):
@@ -308,10 +310,10 @@ def test_revoke_empty_claim_is_inert(tmp_path):
     _usage(ws, "C-007")
     crystallize.crystallize_settlement(
         ws, claim="C-007", step_id="step-1", outcome="blocked")
-    before = marl.read_negatives()
+    before = marl.read_negatives(ws)
     out = crystallize.revoke_claim(ws, "")
     assert out == {"negatives_removed": 0, "broadcasts_removed": 0}
-    assert marl.read_negatives() == before
+    assert marl.read_negatives(ws) == before
 
 
 def test_flipped_register_withholds_rebroadcast(tmp_path):
@@ -326,7 +328,7 @@ def test_flipped_register_withholds_rebroadcast(tmp_path):
         ws, claim="C-003", step_id="step-1", outcome="completed",
         step_credit=0.8)
     assert out["broadcast"] is False and out["reason"] == "not-certified"
-    assert strategy_store.load_rows() == []
+    assert strategy_store.load_rows(ws) == []
 
 
 # ---- 6. the production outcome derivation -----------------------------------
@@ -368,9 +370,9 @@ def test_amendment_flip_revokes_derived_rows(tmp_path):
     _usage(ws, "C-007")
     crystallize.crystallize_settlement(
         ws, claim="C-007", step_id="step-1", outcome="blocked")
-    assert len(_neg_rows()) == 1
+    assert len(_neg_rows(ws)) == 1
 
     out = src.reconcile_case_settlements(ws)
     assert out["case_amendments"] == 1
-    assert _neg_rows() == []
+    assert _neg_rows(ws) == []
     assert out.get("revoked_claims") == ["C-007"]

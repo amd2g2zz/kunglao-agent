@@ -87,13 +87,13 @@ def _ws(tmp_path: Path) -> Path:
     return ws
 
 
-def _seed_warm_store(monkeypatch, tmp_path: Path, n: int = 4) -> Path:
-    """A posterior store whose rows make FAM_WARM non-flat at read."""
-    root = tmp_path / "posterior-store"
-    root.mkdir()
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
+def _seed_warm_store(ws, monkeypatch, n: int = 4) -> None:
+    """Stage donor rows into the WORKSPACE's own posterior store so
+    FAM_WARM reads non-flat (cross-project off: the store is
+    workspace-local, the donor rows carry a foreign id)."""
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
     for i in range(1, n + 1):
-        strategy_store.append_row({
+        strategy_store.append_row(ws, {
             "schema": strategy_store.STORE_SCHEMA,
             "ts": "2026-10-08T00:00:00Z",
             "workspace_id": "ws-donor",
@@ -109,7 +109,6 @@ def _seed_warm_store(monkeypatch, tmp_path: Path, n: int = 4) -> Path:
             "phi_delta": None,
             "provenance": {"dispatch_id": f"C-{i:03d}"},
         })
-    return root
 
 
 def _ctx(ws: Path, declared: str):
@@ -151,7 +150,7 @@ def test_uniform_scheduler_flattens_prior_and_posterior(
     day-one flat shape — every candidate p_llm 1.0, every posterior the
     wide Beta(1,1), no learned receipt block, the scheduler marker on."""
     ws = _ws(tmp_path)
-    _seed_warm_store(monkeypatch, tmp_path)
+    _seed_warm_store(ws, monkeypatch)
     monkeypatch.setenv("KUNGLAO_SCHEDULER", "uniform")
     family, receipt = checkpoints._sample_envelope_family(ws)
     assert family in method_families.registered_tokens()
@@ -176,7 +175,7 @@ def test_learned_face_is_nonflat_without_the_env(tmp_path, monkeypatch):
     receipt above is the scheduler's doing, not an accident of the
     fixture."""
     ws = _ws(tmp_path)
-    _seed_warm_store(monkeypatch, tmp_path)
+    _seed_warm_store(ws, monkeypatch)
     _fam, receipt = checkpoints._sample_envelope_family(ws)
     cands = receipt["candidates"]
     assert any(c["p_llm"] != 1.0 for c in cands.values()), \
@@ -189,7 +188,7 @@ def test_learned_face_is_nonflat_without_the_env(tmp_path, monkeypatch):
 def test_any_other_scheduler_value_keeps_the_learned_face(
         tmp_path, monkeypatch):
     ws = _ws(tmp_path)
-    _seed_warm_store(monkeypatch, tmp_path)
+    _seed_warm_store(ws, monkeypatch)
     monkeypatch.setenv("KUNGLAO_SCHEDULER", "dts")
     _fam, receipt = checkpoints._sample_envelope_family(ws)
     cands = receipt["candidates"]
@@ -203,7 +202,7 @@ def test_uniform_scheduler_records_the_uniform_propensity(
     envelope records propensity 1/K — the exchangeable draw's marginal
     action probability, the OPE raw material."""
     ws = _ws(tmp_path)
-    _seed_warm_store(monkeypatch, tmp_path)
+    _seed_warm_store(ws, monkeypatch)
     monkeypatch.setenv("KUNGLAO_SCHEDULER", "uniform")
     ctx = _ctx(ws, "")
     request, _handle = checkpoints._launch_dispatch(ctx, "C-004", set())
@@ -222,7 +221,7 @@ def test_declared_family_still_wins_under_the_uniform_scheduler(
     """A declared proposal is the behavior policy itself — even under
     the uniform scheduler the declaration wins and pi = 1.0."""
     ws = _ws(tmp_path)
-    _seed_warm_store(monkeypatch, tmp_path)
+    _seed_warm_store(ws, monkeypatch)
     monkeypatch.setenv("KUNGLAO_SCHEDULER", "uniform")
     ctx = _ctx(ws, FAM_COLD)
     request, _handle = checkpoints._launch_dispatch(ctx, "C-004", set())

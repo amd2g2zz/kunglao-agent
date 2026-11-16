@@ -195,14 +195,16 @@ def _ledger_rows(ws) -> list[dict]:
 
 
 def _store_rows(ws) -> tuple[list[dict], list[dict]]:
-    """Split the keyed store's refutation rows into (other, mine): rows
-    from OTHER workspaces are cross-engagement evidence; the workspace's
-    OWN store rows duplicate its ledger and never score."""
+    """Split the workspace store's refutation rows into (other, mine):
+    rows stamped with another workspace's id are cross-engagement
+    evidence (an eval arm's staged fixtures — production stores carry
+    only own rows, cross-project off); the workspace's OWN store rows
+    duplicate its ledger and never score."""
     from rlvr import strategy_store  # noqa: PLC0415 — lazy (import cost)
     mine_id = strategy_store.workspace_id_of(ws)
     other: list[dict] = []
     own: list[dict] = []
-    for row in strategy_store.load_rows(ws=None):
+    for row in strategy_store.load_rows(ws):
         if not isinstance(row, dict) \
                 or str(row.get("arm_key") or "") != STORE_ARM:
             continue
@@ -340,7 +342,7 @@ def record_verify_outcome(ws, *, verdict: str, boundary: str = "",
             "phi_delta": None,
             "provenance": {"dispatch_id": ""},
         }
-        return strategy_store.append_row(row)
+        return strategy_store.append_row(ws, row)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("refutation_fold.record",
              f"{type(exc).__name__}: {exc}")

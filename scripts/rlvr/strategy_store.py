@@ -64,14 +64,14 @@ from rlvr import q_cells
 from rlvr.compose import method_family_of_row  # the settled-row face
 
 # --------------------------------------------------------------------------
-# the cross-task posterior store (#545, WS2) — append-only JSONL, keyed
+# the posterior store (#545, WS2) — append-only JSONL, keyed
 # (family, arm_key, feature_key, fingerprint), living in the knowledge
 # family file (``knowledge-store.jsonl``, issue-1004 R2c) under the
-# guarded prior_store_root (eval/v1/split.yaml prior_store_roots →
-# scripts/rlvr/patterns). The store is repo-code territory: the OWNER
-# RULING (2026-10-07) keeps everything under eval/ WRITE-FORBIDDEN — this
-# module only ever READS split.yaml (the holdout firewall's filter face),
-# never writes anything under eval/.
+# WORKSPACE-LOCAL store root (``<ws>/runs/posterior``, the owner ruling
+# keeps every learning store inside its workspace — no
+# cross-project carry-in, no shared-root read). The store file is
+# workspace data: this module only ever READS eval/v1/split.yaml (the
+# holdout firewall's filter face), never writes anything under eval/.
 #
 # Write face: the e2e settlement hook (e2e/checkpoints._settle_dispatch_outcome)
 # appends one row per settled dispatch — holdout-filtered BEFORE append,
@@ -88,31 +88,68 @@ from rlvr.compose import method_family_of_row  # the settled-row face
 
 STORE_SCHEMA = "posterior-store/1"
 #: the knowledge family file (``consolidated_ledger.family_path``) under
-#: THIS module's guarded root — the root single source is ``store_root``
+#: THIS module's root — the root single source is ``store_root``
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
+#: the workspace-local store root rel (store_root(ws) resolves here;
+#: rel-based faces — source_reliability, the devkit ``@knowledge/``
+#: ledger prefix — resolve their files under this dir)
+WS_STORE_REL = "runs/posterior"
 
 #: the refutation fold's store arm (its rows ride the same keyed store —
-#: the cross-workspace verify stream — and are never method proposals).
+#: the verify stream — and are never method proposals).
 #: The fallback candidate channel excludes them by arm key; the
 #: registered-vocabulary intersect is the second wall. The literal
 #: mirrors rlvr.refutation_fold.STORE_ARM (pinned equal by test).
 _REFUTATION_ARM = "refutation"
 
 
-def store_root() -> Path:
-    """The store root: declared switch override, else the skill-dir
-    patterns path (the guarded prior_store_root)."""
+def _inside(child: Path, parent: Path) -> bool:
+    """Whether ``child`` is ``parent`` itself or lives under it
+    (both real-path resolved; non-existent tails resolve lexically)."""
+    c = child.expanduser().resolve()
+    p = parent.expanduser().resolve()
+    return c == p or p in c.parents
+
+
+def store_root(ws) -> Path:
+    """The store root — resolves INSIDE the workspace
+    (``<ws>/runs/posterior``). The declared switch override
+    (KUNGLAO_POSTERIOR_STORE) is honored ONLY when it points inside the
+    workspace (an eval arm relocating the store deeper within its own
+    staged workspace); an override outside the workspace is REFUSED
+    loud — the owner ruling keeps every learning store
+    workspace-local, so a run can never read or write another
+    project's memory — and the workspace-local default is used
+    instead (nothing is touched at the refused path)."""
     import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    ws_root = Path(ws).expanduser().resolve()
+    default = ws_root / WS_STORE_REL
     env = runtime_switches.get_str(STORE_ENV).strip()
     if env:
-        return Path(env)
-    return Path(__file__).resolve().parent / "patterns"
+        override = Path(env).expanduser()
+        if _inside(override, ws_root):
+            return override.resolve()
+        warn("strategy_store.store_root",
+             f"{STORE_ENV}={env} points outside workspace {ws_root} — "
+             f"refused (cross-project learning is off, every learning "
+             f"store must resolve inside the workspace); using {default}")
+    resolved_default = default.resolve()
+    if not _inside(resolved_default, ws_root):
+        raise ValueError(
+            f"{default} resolves outside workspace {ws_root} (a symlink "
+            f"may be planted at the store root) — refused: every "
+            f"learning store must resolve inside the workspace")
+    return resolved_default
 
 
 def workspace_id_of(ws) -> str:
-    """The cross-task identity of a workspace: its directory name (stable
-    across the run's lifetime, human-traceable, never an eval unit id)."""
-    return Path(ws).name
+    """The cross-task identity of a workspace: a digest over the
+    resolved absolute path (stable across the workspace's lifetime,
+    same-named workspaces in different parents never collide — the
+    former ``Path(ws).name`` identity aliased them). Same length
+    convention as the feature key (12 hex)."""
+    return hashlib.sha256(
+        str(Path(ws).expanduser().resolve()).encode("utf-8")).hexdigest()[:12]
 
 
 def holdout_unit_ids() -> set[str]:
@@ -164,14 +201,16 @@ def _holdout_hit(row: dict) -> str | None:
                  if u in payload), None)
 
 
-def append_row(row: dict) -> dict:
+def append_row(ws, row: dict) -> dict:
     """Filter-and-append one store row. THE HOLDOUT FILTER PRECEDES THE
     APPEND: any row whose serialized form carries a holdout unit-id is
     refused with a loud warn (the same predicate eval_split_lint
-    enforces — belt and suspenders). The row rides the knowledge family
-    file (issue-1004 R2c) — the seal (``sign_row``) precedes the family
-    append, unchanged from the pre-move write face. Fail-open
-    telemetry: a store failure never breaks settlement."""
+    enforces — belt and suspenders). The row rides the workspace's
+    knowledge family file (issue-1004 R2c) — the seal (``sign_row``)
+    precedes the family append, unchanged from the pre-move write face.
+    A workspace-less call cannot resolve a store (cross-project off)
+    and fails-open telemetry: nothing appended, one warn.
+    Fail-open telemetry: a store failure never breaks settlement."""
     try:
         hit = _holdout_hit(row)
         if hit is not None:
@@ -179,9 +218,12 @@ def append_row(row: dict) -> dict:
                  f"holdout unit-id {hit!r} refused — the firewall "
                  f"filter precedes the append")
             return {"appended": False, "reason": f"holdout-filter:{hit}"}
-        # the knowledge family ignores ws (the store is cross-task by
-        # design); the consolidated append's lock is the single guard
-        ok = _cl.append(None, "knowledge", _seal.sign_row(row))
+        if ws is None:
+            warn("strategy_store.append_row",
+                 "no workspace — a store row cannot be written outside "
+                 "a workspace (cross-project learning is off)")
+            return {"appended": False, "reason": "no-workspace"}
+        ok = _cl.append(ws, "knowledge", _seal.sign_row(row))
         return {"appended": bool(ok),
                 "reason": None if ok else "write-failed"}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
@@ -276,7 +318,7 @@ def append_store_row(ws=None, *, method_family: str, status: str,
              "credit_kind is the ws credit-series population marker - "
              "a store row carrying it is EXCLUDED from load_rows (the "
              "bank read); use the credit-series face instead")
-    return append_row(_build_store_row(
+    return append_row(ws, _build_store_row(
         ws, method_family=method_family, status=status, credit=credit,
         censored=censored, facts_citing=facts_citing,
         propensity=propensity, phi_delta=phi_delta,
@@ -323,25 +365,27 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
         return {"appended": False, "reason": f"error:{type(exc).__name__}"}
 
 
-def load_rows(ws=None) -> list[dict]:
-    """The tolerant read: schema-filtered rows, oldest first (the
-    knowledge family read — the ONE face since the issue-1004 R3
-    cutover; the pre-move rels retire with the R4 CLI); when ``ws`` is
-    given, rows from THAT workspace are excluded (the leave-one-out
-    shape — a workspace never warm-starts from its own rows). Missing
-    store = [], corrupt lines skip, unknown schemas skip.
+def load_rows(ws) -> list[dict]:
+    """The tolerant read of the WORKSPACE's own store: schema-filtered
+    rows, oldest first (the knowledge family read — the ONE face since
+    the issue-1004 R3 cutover; the pre-move rels retire with the R4
+    CLI). The store file is workspace data (cross-project off), so the
+    bank population is exactly what this workspace wrote (plus any
+    foreign-stamped rows an eval arm staged into it); the leave-one-out
+    consumers (warm pools, the store prior, the l1 cross-task face)
+    apply the workspace-id exclusion on top. Missing store = [],
+    corrupt lines skip, unknown schemas skip.
 
     POPULATION CONTRACT (issue-1004 R2c review fix): the family file
-    co-locates the CROSS-TASK bank rows (this face's pre-move
-    population — the guarded-root store) with the ws credit series (the
-    breaker's ``append_workspace_credit_row`` rows, whose non-empty
+    co-locates the bank rows with the ws credit series (the breaker's
+    ``append_workspace_credit_row`` rows, whose non-empty
     ``credit_kind`` column is the face's marker). The credit rows are
-    EXCLUDED here so every consumer of this face sees exactly what the
-    pre-move guarded-root file held; the credit series' only reader is
+    EXCLUDED here so every consumer of this face sees exactly the bank
+    population; the credit series' only reader is
     ``rlvr.signal_guard.recent_credits``, which reads the family
     directly. warm pools, the store prior, the solution-broadcast
     dedupe, the l1_planner cross-task face, and the refutation fold
-    therefore keep their pre-move composition (a dense per-claim credit
+    therefore keep their composition (a dense per-claim credit
     series is breaker telemetry, never store knowledge)."""
     try:
         rows = [r for r in _cl.read(ws, "knowledge",
@@ -352,23 +396,22 @@ def load_rows(ws=None) -> list[dict]:
         return []
     rows = [r for r in rows if not r.get("credit_kind")]
     rows = _seal.trusted_rows(rows, op="strategy_store.load_rows")
-    if ws is not None:
-        mine = workspace_id_of(ws)
-        rows = [r for r in rows
-                if str(r.get("workspace_id") or "") != mine]
     return rows
 
 
 def warm_pools(ws, families) -> dict:
-    """The read face — cross-task rows as LAMBDA-tempered anchor pools.
-
-    Every OTHER workspace's settled store row contributes
-    LAMBDA · tiebroken_credit mass to its family's pool (the tempering
-    convention of meta_arms.hierarchical_prior, applied at the store
-    face; the #548 tiebreaker rides the credit). NEVER full weight,
-    NEVER a local-cell write. Returns {family → FeaturePool} (the
-    sampler's duck type) — families without pool rows are absent (a
-    zero-mass pool is a no-op at the anchor).
+    """The read face — cross-workspace rows as LAMBDA-tempered anchor
+    pools. Rows stamped with another workspace's id contribute
+    LAMBDA · tiebroken_credit mass to their family's pool (the
+    tempering convention of meta_arms.hierarchical_prior, applied at
+    the store face; the #548 tiebreaker rides the credit). NEVER full
+    weight, NEVER a local-cell write. Leave-one-out: the workspace's
+    OWN rows never pool — and with cross-project learning off a
+    production store carries only own rows, so the pools read empty
+    (the honest cold start; an eval arm can stage foreign-stamped
+    fixture rows to measure the warm face). Returns {family →
+    FeaturePool} (the sampler's duck type) — families without pool
+    rows are absent (a zero-mass pool is a no-op at the anchor).
 
     #705 agent-level credit: rows carrying ``credit_kind:
     "verification"`` are EXCLUDED — verification confirms existing
@@ -376,6 +419,9 @@ def warm_pools(ws, families) -> dict:
     evidence is verification credit warms from nothing. Absent
     credit_kind is the solve path (bit-identical)."""
     rows = load_rows(ws=ws)
+    mine = workspace_id_of(ws)
+    rows = [r for r in rows
+            if str(r.get("workspace_id") or "") != mine]
     if not rows:
         return {}
     wanted = set(families)
@@ -769,14 +815,15 @@ class PosteriorStrategyStore:
         return _share(_registered_only(weights))
 
     def _store_prior(self) -> dict[str, float]:
-        """The cross-task fallback candidate channel: families the keyed
-        store holds settled rows for (OTHER workspaces only — the
+        """The cross-workspace fallback candidate channel: families the
+        keyed store holds settled rows for (OTHER workspaces only — the
         leave-one-out shape), weighted by their row share, intersected
-        with the registered vocabulary. Empty when the store is empty or
-        unreadable: the honest cold start stays silence, never a
-        fabricated lead — and every sampled candidate then carries the
-        additive posterior_store receipt block through the warm pools,
-        so the fallback draw stays traceable to its rows."""
+        with the registered vocabulary. With cross-project learning off
+        a production store carries only own rows, so this reads empty —
+        the honest cold start stays silence, never a fabricated lead —
+        and every sampled candidate then carries the additive
+        posterior_store receipt block through the warm pools, so the
+        fallback draw stays traceable to its rows."""
         try:
             counts = self._store_family_counts()
         except Exception as exc:  # noqa: BLE001 — fail-open at the seam
@@ -786,13 +833,17 @@ class PosteriorStrategyStore:
         return _share(_registered_only(counts))
 
     def _store_family_counts(self) -> dict[str, int]:
-        """Row counts per method family over the cross-task store's
-        settled rows (the workspace's own rows excluded by the read
-        face). The refutation fold's rows ride the same store under
-        their own arm key — never proposals, excluded here."""
+        """Row counts per method family over the store's settled rows
+        from OTHER workspaces (the leave-one-out exclusion — a
+        workspace never proposes from its own rows). The refutation
+        fold's rows ride the same store under their own arm key — never
+        proposals, excluded here."""
+        mine = workspace_id_of(self.ws)
         counts: dict[str, int] = {}
         for row in load_rows(ws=self.ws):
             if not isinstance(row, dict):
+                continue
+            if str(row.get("workspace_id") or "") == mine:
                 continue
             if str(row.get("arm_key") or "") == _REFUTATION_ARM:
                 continue

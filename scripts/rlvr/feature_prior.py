@@ -105,9 +105,9 @@ def enabled() -> bool:
 
 def default_table_path(ws) -> Path:
     """The mined-table location (presence = Part A output): the
-    knowledge family file under the guarded cross-task root
-    (issue-1004 R2c). ``ws`` is accepted and ignored — the family is
-    ws-insensitive by design."""
+    knowledge family file under the WORKSPACE's own store root
+    (issue-1004 R2c; cross-project off — the table is workspace
+    data)."""
     from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
     return _cl.family_path(ws, "knowledge")
 
