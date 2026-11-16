@@ -76,6 +76,7 @@ from pathlib import Path
 
 from kunglao_log import emit as _klog_emit
 from kunglao_log import warn
+from rlvr import learning_seal as _seal
 
 #: the posterior-mean floor — floored, never deleted (PARK posture;
 #: same value as termination.ARM_FLOOR, never imported across faces).
@@ -231,6 +232,9 @@ def arm_fold(ws, agent: str | None = None) -> dict[str, dict]:
     """Per-recipe solve-credit counts from the q-cell observation rows
     (the consolidated experience feed — the #678 trusted chain; the
     fold reads MECHANICALLY recorded rows, never a worker narrative).
+    The fold is the sampling-weight authority, so it rides the learner
+    read face: armed, ONLY seal-valid rows fold — a forged recipe row
+    never moves a sampling weight.
     A row carrying ``credit_kind: verification`` is recorded but never
     learned from (#705). Keys: every registered arm (zeros
     when unseen — arms are never absent from the table); with ``agent``
@@ -239,7 +243,9 @@ def arm_fold(ws, agent: str | None = None) -> dict[str, dict]:
     out = {rid: _zero_counts() for rid in ARMS_BY_ID}
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415 — lazy (cycle wall)
-        for row in _qc.JSONLQStore(ws).observations():
+        rows = _seal.trusted_rows(_qc.JSONLQStore(ws).observations(),
+                                  op="recipe_arms.arm_fold")
+        for row in rows:
             if not isinstance(row, dict) or row.get("source") != "settlement":
                 continue
             rid = row.get("recipe_id")

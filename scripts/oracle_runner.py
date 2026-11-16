@@ -1140,10 +1140,15 @@ def run(cases_dir, client_path, *, mutation: bool = False) -> dict:
 
 def write_status(ws, report: dict) -> Path:
     """Atomic write of the convergence-convention verdict file. `cases` rows
-    are narrowed to the three fields the DRAIN probe reads."""
+    are narrowed to the three fields the DRAIN probe reads. The doc is
+    sealed at write (the learning-channel seal, additive ``seal`` key
+    only): armed, the learning faces refuse an unsealed status file, so
+    the canonical writer is the only shape the Φ oracle dim accepts.
+    Unarmed the doc lands byte-identical to the legacy shape."""
+    from rlvr.learning_seal import sign_row  # noqa: PLC0415 — lazy sibling
     path = Path(ws).joinpath(*STATUS_REL)
     path.parent.mkdir(parents=True, exist_ok=True)
-    doc = {
+    doc = sign_row({
         "schema": SCHEMA_ID,
         "cases": {cid: {"status": r["status"],
                         "pending_entries": r["pending_entries"],
@@ -1152,7 +1157,7 @@ def write_status(ws, report: dict) -> Path:
         "low_discriminativity": list(
             (report.get("mutation") or {}).get("low_discriminativity") or []),
         "counts": report["counts"],
-    }
+    })
     return atomic_write_text(
         path, json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
 
