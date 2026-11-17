@@ -122,10 +122,15 @@ def test_child_env_store_face_follows_store_mode(tmp_path):
                                    store_mode="per-arm"))
     per_arm_2 = mx.child_env(_plan(tmp_path, unit="u-2",
                                    store_mode="per-arm"))
-    assert per_run[mx.STORE_ENV] == str(tmp_path / "a-cold" / "u-1"
-                                        / "store")
-    assert per_arm_1[mx.STORE_ENV] == str(tmp_path / "a-cold" / "store")
-    assert per_arm_2[mx.STORE_ENV] == per_arm_1[mx.STORE_ENV]
+    # the store is workspace-local (cross-project off): the matrix
+    # stages SEED/EXPORT dirs the child copies in/out of its workspace
+    assert per_run[mx.SEED_STORE_ENV] == \
+        str(tmp_path / "a-cold" / "u-1" / "store")
+    assert per_run[mx.EXPORT_STORE_ENV] == per_run[mx.SEED_STORE_ENV]
+    assert per_arm_1[mx.SEED_STORE_ENV] == \
+        str(tmp_path / "a-cold" / "store")
+    assert per_arm_2[mx.SEED_STORE_ENV] == per_arm_1[mx.SEED_STORE_ENV]
+    assert mx.STORE_ENV not in per_run
 
 
 # ---- (c) materialization ---------------------------------------------------

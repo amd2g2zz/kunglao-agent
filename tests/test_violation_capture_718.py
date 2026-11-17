@@ -125,8 +125,8 @@ def test_perl_and_python_rewrite_idioms_captured(tmp_path):
          "'verify_status: passes'))\""),
         "sed -i '' 's/answers_question: q1/answers_question: q2/' notes/N-2.md",
     ]
-    for cmd in cases:
-        ws = _ws(tmp_path / f"case{hash(cmd) % 9999}")
+    for i, cmd in enumerate(cases):
+        ws = _ws(tmp_path / f"case{i}")
         payload = json.dumps({"cwd": str(ws),
                               "tool_input": {"command": cmd},
                               "tool_response": {"stdout": "", "stderr": ""}})

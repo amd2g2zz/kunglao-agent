@@ -227,22 +227,39 @@ def test_default_settlement_row_emits_no_kind_column(tmp_path):
 
 
 def test_verification_only_family_warms_nothing(tmp_path, monkeypatch):
-    """The cross-task store warms only from solve credit: a family whose
-    only settled evidence is verification credit warms from nothing."""
-    store_dir = tmp_path / "store"
-    store_dir.mkdir()
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(store_dir))
-    other = tmp_path / "other-ws"          # a DIFFERENT workspace's row
-    other.mkdir()
+    """The store warms only from solve credit: a family whose only
+    settled evidence is verification credit warms from nothing. The
+    donor rows are staged INTO the workspace-under-test's own store
+    with a foreign id (cross-project off — no shared-root read)."""
+    mine = tmp_path / "mine"
+    mine.mkdir()
 
-    strategy_store.append_store_row(other, method_family=FAM,
-                                    status="proven", credit=1.0,
-                                    credit_kind="verification")
-    assert strategy_store.warm_pools(tmp_path / "mine", [FAM]) == {}
+    def _donor(method_family, credit, kind=None):
+        row = {
+            "schema": strategy_store.STORE_SCHEMA,
+            "ts": "2026-10-07T00:00:00Z",
+            "workspace_id": "ws-donor",   # foreign-stamped staging row
+            "arm_key": f"{method_family}|facts_snapshot|none|1",
+            "method_family": method_family,
+            "feature_key": "none",
+            "fingerprint": "fp000011112222",
+            "status": "proven",
+            "credit": credit,
+            "censored": False,
+            "facts_citing": 0,
+            "propensity": None,
+            "phi_delta": None,
+            "provenance": {"dispatch_id": "C-001"},
+        }
+        if kind:
+            row["credit_kind"] = kind
+        strategy_store.append_row(mine, row)
 
-    strategy_store.append_store_row(other, method_family="structural-anchoring",
-                                    status="proven", credit=1.0)
-    pools = strategy_store.warm_pools(tmp_path / "mine",
+    _donor(FAM, 1.0, kind="verification")
+    assert strategy_store.warm_pools(mine, [FAM]) == {}
+
+    _donor("structural-anchoring", 1.0)
+    pools = strategy_store.warm_pools(mine,
                                       [FAM, "structural-anchoring"])
     assert FAM not in pools                # verification-only → no warm
     assert "structural-anchoring" in pools  # solve credit warms
@@ -252,11 +269,12 @@ def test_verification_only_family_warms_nothing(tmp_path, monkeypatch):
 
 def test_negative_knowledge_recorded_at_class_level(tmp_path, monkeypatch):
     """Failed tool chains record per (signature_class, agent_type) —
-    never per instance. Another workspace of the SAME class inherits the
-    dead end; a different class does not see it."""
+    never per instance. A re-analysis of the SAME class in the SAME
+    workspace inherits the dead end; a different class does not see it;
+    and (cross-project off) a DIFFERENT workspace inherits nothing."""
     store_dir = tmp_path / "store"
     store_dir.mkdir()
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(store_dir))
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     # real feature-table/1 shapes (the token projector keys)
@@ -294,11 +312,11 @@ def test_negative_knowledge_recorded_at_class_level(tmp_path, monkeypatch):
     assert FAM not in marl.negative_pools(ws, [FAM], agent_type="verifier",
                                           signature_class=cls_a)
 
-    # a DIFFERENT workspace of the SAME class inherits the dead end
+    # a DIFFERENT workspace reads nothing — cross-project learning is
+    # off, the negative never leaves its workspace's own store
     ws2 = tmp_path / "ws2"
     (ws2 / "runs").mkdir(parents=True)
-    pools_ws2 = marl.negative_pools(ws2, [FAM], signature_class=cls_a)
-    assert pools_ws2[FAM].failure > 0
+    assert marl.negative_pools(ws2, [FAM], signature_class=cls_a) == {}
 
 
 def test_negative_pool_raises_beta_and_rides_receipt(tmp_path,
@@ -381,24 +399,24 @@ def test_planning_entry_consults_negative_knowledge(tmp_path, monkeypatch):
 # ---- 5. solution broadcast (method, never the answer) ----------------------
 
 def test_solution_broadcast_method_not_answer(tmp_path, monkeypatch):
-    """A PROVEN claim's METHOD enters the shared posterior; the answer
-    text never rides the row."""
-    store_dir = tmp_path / "store"
-    store_dir.mkdir()
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(store_dir))
+    """A PROVEN claim's METHOD enters the workspace's own posterior
+    store; the answer text never rides the row."""
+    ws = tmp_path / "ws"
+    (ws / "runs").mkdir(parents=True)
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
 
     answer = "0x7fdeadbeef is the license-check branch"
-    out = marl.broadcast_solution(tmp_path / "ws", method_family=FAM,
+    out = marl.broadcast_solution(ws, method_family=FAM,
                                   agent_type="analyst", claim="C-042",
                                   credit=1.0, answer=answer)
     assert out["appended"], out
 
-    blob = (store_dir / "knowledge-store.jsonl").read_text(
-        encoding="utf-8")   # issue-1004 R2c: rows land in the family file
+    blob = (ws / "runs" / "posterior" / "knowledge-store.jsonl").read_text(
+        encoding="utf-8")   # the ws-local family file is the live store
     assert FAM in blob                        # the method is shared
     assert answer not in blob                 # the answer is NOT
 
-    rows = strategy_store.load_rows()
+    rows = strategy_store.load_rows(ws)
     hit = [r for r in rows if r.get("method_family") == FAM]
     assert hit and hit[0].get("agent_type") == "analyst"
     assert hit[0].get("claim") == "C-042"

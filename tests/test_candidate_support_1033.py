@@ -237,14 +237,28 @@ def test_case_learning_reweights_supported_family_without_adding_support(workspa
 
 
 def test_cross_task_learning_warms_only_current_support(workspace: Path, tmp_path: Path):
-    donor = tmp_path / "donor"
-    donor.mkdir()
-    strategy_store.append_store_row(donor, method_family="static-decompile",
-                                    status="DONE", credit=1.0,
-                                    arm_key="static-decompile|facts_snapshot|none|1")
-    strategy_store.append_store_row(donor, method_family="obfuscation-peeling",
-                                    status="DONE", credit=1.0,
-                                    arm_key="obfuscation-peeling|facts_snapshot|none|1")
+    """Foreign-stamped rows staged in the workspace's own store (the
+    cross-project-off staging shape) warm only the current support's
+    families."""
+    def _donor(family: str) -> None:
+        strategy_store.append_row(workspace, {
+            "schema": strategy_store.STORE_SCHEMA,
+            "ts": "2026-11-14T00:00:00Z",
+            "workspace_id": "ws-donor",
+            "arm_key": f"{family}|facts_snapshot|none|1",
+            "method_family": family,
+            "feature_key": "none",
+            "fingerprint": "fp000011112222",
+            "status": "DONE",
+            "credit": 1.0,
+            "censored": False,
+            "facts_citing": 0,
+            "propensity": None,
+            "phi_delta": None,
+            "provenance": {"dispatch_id": f"C-{family}"},
+        })
+    _donor("static-decompile")
+    _donor("obfuscation-peeling")
     receipt = strategy_store.PosteriorStrategyStore(workspace).method_sample("aaaaaaaaaaaa")
     assert receipt["candidates"]["static-decompile"]["posterior_store"]["rows"] == 1
     assert "obfuscation-peeling" not in receipt["candidates"]

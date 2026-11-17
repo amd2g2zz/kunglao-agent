@@ -32,10 +32,10 @@ from rlvr import strategy_store  # noqa: E402
 FAM = "kdf-chain-reconstruction"
 
 
-def _seed_store(root: Path, ws_id: str, n: int) -> None:
-    root.mkdir(parents=True, exist_ok=True)
+def _seed_store(ws: Path, ws_id: str, n: int) -> None:
+    ws.mkdir(parents=True, exist_ok=True)
     for i in range(1, n + 1):
-        strategy_store.append_row({
+        strategy_store.append_row(ws, {
             "schema": strategy_store.STORE_SCHEMA,
             "ts": "2026-10-07T00:00:00Z",
             "workspace_id": ws_id,
@@ -66,20 +66,25 @@ def test_cutting_the_store_degrades_to_uniform(tmp_path, monkeypatch):
     from rlvr import priors
     (ws / "task_spec.yaml").write_text("family: static-replay\n")
     priors.seed_intake_prior(ws, families=[FAM])
-    warm_root = tmp_path / "store-warm"
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(warm_root))
-    _seed_store(warm_root, "ws-donor", 4)
+    _seed_store(ws, "ws-donor", 4)
     _fam, warm_receipt = checkpoints._sample_envelope_family(ws)
     assert warm_receipt is not None
     assert not _flat(warm_receipt["candidates"]), \
-        "warm store must engage the anchor at the first dispatch"
+        "warm rows staged in the workspace must engage the anchor at the " \
+        "first dispatch"
 
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(tmp_path / "empty"))
-    _fam2, cut_receipt = checkpoints._sample_envelope_family(ws)
+    # the cut face: with the staged rows removed the read degrades to the
+    # exact pre-WS2 flat prior (a fresh workspace carries an empty store)
+    ws2 = tmp_path / "ws-cut"
+    ws2.mkdir()
+    from rlvr import priors as _p2
+    (ws2 / "task_spec.yaml").write_text("family: static-replay\n")
+    _p2.seed_intake_prior(ws2, families=[FAM])
+    _fam2, cut_receipt = checkpoints._sample_envelope_family(ws2)
     assert cut_receipt is not None
     assert _flat(cut_receipt["candidates"]), \
-        "cutting the store must degrade the first dispatch to uniform " \
-        "(the L2 ablation prediction)"
+        "an empty workspace store must degrade the first dispatch to " \
+        "uniform (the L2 ablation prediction)"
 
 
 def test_missing_store_root_reads_as_empty(tmp_path, monkeypatch):
@@ -88,18 +93,16 @@ def test_missing_store_root_reads_as_empty(tmp_path, monkeypatch):
     from rlvr import priors
     (ws / "task_spec.yaml").write_text("family: static-replay\n")
     priors.seed_intake_prior(ws, families=[FAM])
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "never-created"))
     _fam, receipt = checkpoints._sample_envelope_family(ws)
     assert receipt is not None and _flat(receipt["candidates"])
 
 
-def test_corrupt_store_rows_skip_and_count(tmp_path, monkeypatch, caplog):
-    root = tmp_path / "store-corrupt"
-    root.mkdir()
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
+def test_corrupt_store_rows_skip_and_count(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    ws.mkdir()
     from rlvr import consolidated_ledger as _cl
-    store_file = _cl.family_path(None, "knowledge")
+    store_file = _cl.family_path(ws, "knowledge")
+    store_file.parent.mkdir(parents=True, exist_ok=True)
     store_file.write_text("{broken json}\n", encoding="utf-8")
-    assert strategy_store.load_rows(ws=None) == [], \
+    assert strategy_store.load_rows(ws) == [], \
         "a corrupt store is an honest empty, never an exception"

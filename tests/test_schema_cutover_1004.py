@@ -163,14 +163,12 @@ class TestFamilyOnlyReads:
         assert cl.read(ws, "experience") == [live]
 
     def test_knowledge_rels_leak_nothing(self, tmp_path, monkeypatch):
-        root = tmp_path / "root"
-        root.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setenv(cl.STORE_ENV, str(root))
+        monkeypatch.delenv(cl.STORE_ENV, raising=False)
         ws = _ws(tmp_path)
-        _seed(root / "posterior-store.jsonl",
+        _seed(ws / "posterior-store.jsonl",
               [{"schema": "posterior-store/1", "ts": TS,
                 "workspace_id": "old"}])
-        _seed(root / "marl-negative.jsonl",
+        _seed(ws / "marl-negative.jsonl",
               [{"schema": "marl-negative/1", "ts": TS,
                 "method_family": "old"}])
         _seed(ws / "runs" / "posterior-store.jsonl",
@@ -357,13 +355,12 @@ class TestRevocationTransitiveOverMigration:
         """The R3→R4 window: a revoke must stay transitive over
         everything migration can resurrect — a row revoked out of the
         pre-move file must not ride the R4 append back into the live
-        family read."""
+        family read (pre-move rels resolve ws-relative since the store
+        went workspace-local)."""
         from rlvr import crystallize as crystallize_mod  # noqa: PLC0415
-        root = tmp_path / "root"
-        root.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setenv(cl.STORE_ENV, str(root))
+        monkeypatch.delenv(cl.STORE_ENV, raising=False)
         ws = _ws(tmp_path)
-        _seed(root / "marl-negative.jsonl", [
+        _seed(ws / "marl-negative.jsonl", [
             {"schema": "marl-negative/1", "ts": TS,
              "claim_ref": "C-9", "method_family": "old",
              "fails": 1},
@@ -375,7 +372,7 @@ class TestRevocationTransitiveOverMigration:
         # the revoked row is gone from the PRE-MOVE file; the survivor
         # stays
         left = [json.loads(ln)
-                for ln in (root / "marl-negative.jsonl")
+                for ln in (ws / "marl-negative.jsonl")
                 .read_text(encoding="utf-8").splitlines() if ln.strip()]
         assert [r["claim_ref"] for r in left] == ["C-keep"]
         # migration appends what is left — the revoked claim NEVER

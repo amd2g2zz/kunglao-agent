@@ -123,9 +123,13 @@ DEFAULT_CONFIG = REPO_ROOT / "docs" / "design" / "ws5-five-arms.yaml"
 DEFAULT_OUT = REPO_ROOT / "runs" / "ws5-matrix"
 DEFAULT_OUT_REL = "runs/ws5-matrix"
 
-# the cross-task posterior store (the WS2 carrier): the env var the loop
-# reads the store root through, and the store file name inside it
+# the posterior store (the WS2 carrier) is WORKSPACE-LOCAL now (cross-
+# project learning off): the loop reads its own workspace's store, so
+# the matrix never points KUNGLAO_POSTERIOR_STORE at a staging dir —
+# it stages SEED/EXPORT dirs the child copies in/out of its workspace
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
+SEED_STORE_ENV = "KUNGLAO_EVAL_SEED_STORE"
+EXPORT_STORE_ENV = "KUNGLAO_EVAL_STORE_EXPORT"
 #: the knowledge family file (issue-1004 R2c) — the only live store rel
 #: since the issue-1004 R3 schema cutover
 FAMILY_STORE_FILE = "knowledge-store.jsonl"
@@ -138,7 +142,8 @@ STRIPPED_ENV = ("KUNGLAO_RECALL", "KUNGLAO_EXPANSION",
                 "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_SCHEDULER",
                 "KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK",
-                "KUNGLAO_DIRECTION", "KUNGLAO_PLAYBOOK")
+                "KUNGLAO_DIRECTION", "KUNGLAO_PLAYBOOK",
+                SEED_STORE_ENV, EXPORT_STORE_ENV)
 
 VALID_FACES = ("loop", "cc-default", "cc-warm-context")
 VALID_STORES = ("none", "cold", "warm")
@@ -452,10 +457,13 @@ def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
 # ---- child construction (pure — the launch shape the tests pin) ----------
 
 def store_dir_of(plan: RunPlan) -> Path:
-    """The store dir this cell reads/writes. per-run: the cell's own
-    isolated <run_dir>/store. per-arm: the shared <arm>/store dir (the
-    run_dir's parent — one store across the arm's unit sequence, still
-    structurally isolated across arms)."""
+    """The store STAGING dir this cell seeds from / exports to. per-run:
+    the cell's own isolated <run_dir>/store. per-arm: the shared
+    <arm>/store dir (the run_dir's parent — one store across the arm's
+    unit sequence, still structurally isolated across arms). The child
+    never reads/writes this dir directly: the store is WORKSPACE-LOCAL
+    (cross-project off), so the child copies the staging file into its
+    workspace at init and back out at run end."""
     if plan.store_mode == "per-arm":
         return plan.run_dir.parent / "store"
     return plan.run_dir / "store"
@@ -464,15 +472,18 @@ def child_env(plan: RunPlan, base: dict | None = None, *,
               operator_root: str | None = None) -> dict:
     """The child runner's environment: inherited state MINUS the
     ablation faces, plus the arm's declared env (which wins), plus the
-    store face (cold = a materialized empty dir, warm = an isolated
-    copy of the warm store, none = unset). Deterministic and pure —
+    seed/export faces (cold = no seed, the workspace starts with an
+    empty store; warm = an isolated staging copy of the warm store the
+    child copies INTO its workspace at init; the export face lets the
+    per-arm scope accumulate). Deterministic and pure —
     materialization happens separately at launch time."""
     env = dict(base if base is not None else os.environ)
     for name in STRIPPED_ENV:
         env.pop(name, None)
-    env.pop(STORE_ENV, None)
+    env.pop(STORE_ENV, None)  # an outside-workspace store would be refused
     if plan.store_kind in ("cold", "warm"):
-        env[STORE_ENV] = str(store_dir_of(plan))
+        env[SEED_STORE_ENV] = str(store_dir_of(plan))
+        env[EXPORT_STORE_ENV] = str(store_dir_of(plan))
     if plan.corpus == "operator":
         if not operator_root:
             raise ConfigError(
@@ -710,6 +721,22 @@ def _launch_one(plan: RunPlan, *, budget_usd: float, wall_cap_s: float,
         row["workspace"] = loop.get("workspace")
         row["results_ref"] = str(sorted(
             plan.run_dir.glob("eval-results-*.json"))[-1])
+        # per-arm accumulation: copy the workspace's OWN store back into
+        # the arm's staging dir so the sequence's next cell seeds from the
+        # accumulated rows (the store is workspace-local; the staging dir
+        # is only the handoff between cells)
+        if plan.store_mode == "per-arm" and row["workspace"]:
+            try:
+                ws_store = Path(row["workspace"]) / "runs" / "posterior" \
+                    / FAMILY_STORE_FILE
+                if ws_store.is_file():
+                    dst_dir = store_dir_of(plan)
+                    dst_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ws_store,
+                                 dst_dir / FAMILY_STORE_FILE)
+            except OSError as exc:
+                print(f"[eval_matrix_runner] store export failed: {exc}",
+                      flush=True)
     return row
 
 

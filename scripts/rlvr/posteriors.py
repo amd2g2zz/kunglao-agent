@@ -281,9 +281,10 @@ def read(ws) -> list[dict]:
     The read rides the knowledge family (issue-1004 R2c) — the only
     face since the issue-1004 R3 schema cutover — PER-WORKSPACE
     ISOLATED: rows carrying another workspace's ``workspace_id`` are
-    skipped, so two workspaces sharing a guarded root never fold each
-    other's posteriors (the pre-move ws-local store contract)."""
-    mine = Path(ws).name
+    skipped (rows carry the strategy_store workspace digest now; rows
+    WITHOUT the column are the pre-digest history)."""
+    from rlvr import strategy_store as _ss  # noqa: PLC0415 — the id face
+    mine = _ss.workspace_id_of(ws)
     out: list[dict] = []
     for row in _cl.read(ws, "knowledge", schema_prefix="posterior-store"):
         if not isinstance(row, dict) or row_schema_lint(row):
@@ -311,10 +312,10 @@ def record(ws, state: str, arm: str, outcome, *, gamma=None,
       write default anywhere). The adaptive engine loop threads its own
       per-event γ (``next_gamma(outcome)``). The decay itself is applied
       at the fold/read face, never in the file.
-    The row rides the knowledge family file (issue-1004 R2c) — the
-    consolidated append's stamp contract + flock are the write wall —
-    carrying its owning workspace (per-workspace posterior isolation at
-    the read face). Loud result dict, no raise."""
+    The row rides the workspace's knowledge family file (issue-1004
+    R2c) — the consolidated append's stamp contract + flock are the
+    write wall — carrying its owning workspace digest (per-workspace
+    posterior isolation at the read face). Loud result dict, no raise."""
     ws = Path(ws)
     state = str(state or "").strip()
     arm = str(arm or "").strip()
@@ -329,9 +330,10 @@ def record(ws, state: str, arm: str, outcome, *, gamma=None,
             "gamma", default_schedule().gamma() if gamma is None else gamma)
     except ValueError as exc:
         return {"appended": False, "reason": str(exc)}
+    from rlvr import strategy_store as _ss  # noqa: PLC0415 — the id face
     ok = _cl.append(ws, "knowledge",
                     _row(state, arm, ts or _utc_now(), g, outcome, adds,
-                         ws.name))
+                         _ss.workspace_id_of(ws)))
     return {"appended": bool(ok),
             "reason": None if ok else "write failed"}
 

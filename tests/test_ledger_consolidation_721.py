@@ -273,9 +273,11 @@ def test_cli_migrates_reports_and_reads_liveness(tmp_path, monkeypatch,
     assert cli.main([str(ws), "--families", "bogus"]) == 2
 
 
-def test_knowledge_family_rides_the_guarded_root(tmp_path, monkeypatch):
-    monkeypatch.setenv(cl.STORE_ENV, str(tmp_path / "root"))
-    p = cl.family_path(tmp_path / "ws", "knowledge")
-    assert p == tmp_path / "root" / "knowledge-store.jsonl"
+def test_knowledge_family_rides_the_workspace_store_root(
+        tmp_path, monkeypatch):
+    monkeypatch.delenv(cl.STORE_ENV, raising=False)
+    ws = tmp_path / "ws"
+    p = cl.family_path(ws, "knowledge")
+    assert p == ws / "runs" / "posterior" / "knowledge-store.jsonl"
     from rlvr import strategy_store as ss  # noqa: PLC0415 — the pin
-    assert p == ss.store_root() / "knowledge-store.jsonl"
+    assert p == ss.store_root(ws) / "knowledge-store.jsonl"

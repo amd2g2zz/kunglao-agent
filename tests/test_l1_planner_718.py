@@ -511,20 +511,27 @@ def test_action_vocabulary_is_the_ruling_list():
 
 
 def test_knowledge_query_reads_the_cross_task_store(tmp_path, monkeypatch):
-    """The cross-task face (T5): a strategy_store row carrying THIS
-    claim's identity from another workspace is knowledge (mid-strength),
-    and the ws's own rows are never read (the store's leave-one-out
-    read)."""
+    """The cross-task face (T5): a FOREIGN-stamped store row carrying
+    THIS claim's identity is knowledge (mid-strength), and the ws's own
+    rows are never read (leave-one-out over the workspace's own store).
+    The foreign row is staged INSIDE the workspace's store with another
+    workspace's id (cross-project learning is off — a production store
+    carries only own rows, so the face reads empty there; the staged
+    shape is the eval-arm donor)."""
     from rlvr import strategy_store as st
 
-    monkeypatch.setenv(st.STORE_ENV, str(tmp_path / "store"))
-    other = tmp_path / "other-ws"
-    other.mkdir()
-    out = st.append_store_row(other, method_family="static-symbolic",
-                              status="ROUND_CREDIT", credit=1.0,
-                              dispatch_id="C-733", claim="C-733")
-    assert out["appended"] is True
+    monkeypatch.delenv(st.STORE_ENV, raising=False)
     ws = _ws(tmp_path, [{"id": "C-733", "status": "OPEN"}])
+    assert st.append_row(ws, {
+        "schema": st.STORE_SCHEMA, "ts": "2026-10-07T00:00:00Z",
+        "workspace_id": "ws-donor",
+        "arm_key": "static-symbolic|facts_snapshot|none|1",
+        "method_family": "static-symbolic", "feature_key": "none",
+        "fingerprint": None, "status": "ROUND_CREDIT", "credit": 1.0,
+        "censored": False, "facts_citing": 0, "propensity": None,
+        "phi_delta": None,
+        "provenance": {"dispatch_id": "C-733"}, "claim": "C-733",
+    })["appended"] is True
     kc = lp.knowledge_query(ws, "C-733")
     assert kc["solved"] and kc["source"] == "cross_task"
     assert kc["strength"] == pytest.approx(lp.CROSS_TASK_STRENGTH)
