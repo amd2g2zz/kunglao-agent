@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""tests/test_sampled_binds_794.py — #794 R2: sampled-binds-to-dispatch.
+"""tests/test_sampled_binds_794.py — the sampler draw is recorded evidence.
 
-Production counterexample (logs panel 2026-10-23): 17/17 sample_deviation
-rows joined to a dispatch that ran the DECLARED family, never the SAMPLED
-one — the sampler never bound. This card pins the invariant: the sampler's
-draw is the dispatch contract.
+Record-only sampling posture: the dispatch envelope's declaration is the
+policy; the gate's own draw is evidence on the record, never a gate.
 
   - declared == sampled            -> pass (unchanged);
-  - declared != sampled, SILENT    -> REJECT (the 17/17 shape: an override
-    with no recorded decision is exactly "sampling never binds");
-  - declared != sampled, reasoned  -> pass ONLY with a coherent deviation:
-    propensity > 0 (a probability-0 draw is invalid for IPS — #792 family;
-    the declared family was never in the policy's support);
+  - declared != sampled, SILENT    -> pass, and the deviation is recorded
+    (family_override with the reason slot explicitly null + one
+    ``sample_deviation`` event — the 17/17 production shape can never
+    recur silently because the pair is on the row);
+  - declared != sampled, reasoned  -> pass, and the ``agent-reasoning:``
+    line rides the deviation record;
+  - an undeclared dispatch adopts the gate's own draw as its
+    declaration when the sampler has material; a cold sampler leaves
+    the honest gap (no family fabricated);
+  - the task contract stays a REJECT: a sampled dynamic-trace under a
+    ``dynamic_re: forbidden`` task_spec still refuses (the constraint
+    runs after the adoption);
   - the off-registry other(...) escape keeps the #432 quarantine face.
 
 Synthetic fixtures throughout (public repo): the sampler view is
@@ -55,6 +60,14 @@ def _full_prompt(family: str, extra: str = '') -> str:
     return f'{prompt}\n{extra}' if extra else prompt
 
 
+def _undeclared_prompt(extra: str = '') -> str:
+    """The envelope declares no method_family — the undeclared face."""
+    env = {'version': 1, 'claim': 'C-001', 'tier': 1,
+           'tools': ['grep'], 'agent': 'w-test'}
+    prompt = json.dumps({'kunglao_dispatch': env}) + '\nfacts-snapshot: 1 facts'
+    return f'{prompt}\n{extra}' if extra else prompt
+
+
 def _seed_history(ws: Path, family: str, n: int = 3) -> None:
     from rlvr import q_cells
     for i in range(n):
@@ -93,40 +106,56 @@ def _detail(row: dict) -> dict:
     return det or {}
 
 
-# ---------- 1. the 17/17 shape: silent deviation REJECTS ----------------
+# ---------- 1. the 17/17 shape: silent deviation passes, recorded --------
 
-def test_silent_deviation_rejected_sampled_family_is_the_exit(
-        tmp_path, capsys):
-    """The production 17/17 replay: the prior holds only static-decompile
-    (the sampler's only candidate), the envelope declares dynamic-trace
-    with NO recorded override — the dispatch must REJECT naming the
-    sampled family, and no usage row / deviation row may paper over it."""
+def test_silent_deviation_is_allowed_and_recorded(tmp_path, capsys):
+    """The production 17/17 replay, record-only posture: the prior holds
+    only static-decompile (the sampler's only candidate), the envelope
+    declares dynamic-trace with NO recorded override — the dispatch
+    passes and the row records the pair (family_override with the
+    reason slot explicitly null) plus one ``sample_deviation`` event, so
+    a silent deviation can never recur invisibly."""
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
     rc = sinks.pre_check(
         _dispatch_payload(_full_prompt('dynamic-trace')), _min_paths(ws))
     err = capsys.readouterr().err
-    assert rc == 2, (
-        f"RED (#794 R2): the silent deviation passed (rc={rc}) — the "
-        f"sampler did not bind; err={err[-300:]}")
-    assert 'static-decompile' in err, "guidance must name the sampled exit"
-    assert _usage_rows(ws) == [], "a rejected dispatch records no row"
-    assert _events(ws, 'sample_deviation') == []
+    assert rc == 0, f"the recorded deviation must pass: rc={rc}, err={err[-300:]}"
+    row = _usage_rows(ws)[-1]
+    assert row['method_family'] == 'dynamic-trace'
+    assert row['sampled_family'] == 'static-decompile'
+    assert row['family_override'] is True
+    assert row['override_source'] == 'declared'
+    assert row['override_reason'] is None
+    evs = _events(ws, 'sample_deviation')
+    assert len(evs) == 1
+    det = _detail(evs[0])
+    assert det['declared'] == 'dynamic-trace'
+    assert det['sampled'] == 'static-decompile'
+    assert det['reason'] is None
 
 
-def test_reasoned_deviation_with_zero_propensity_rejected(tmp_path, capsys):
-    """An agent-reasoning line alone does not buy a deviation whose
-    propensity is 0.0 — the declared family was never a candidate, so the
-    "decision" is incoherent for IPS (#792 propensity-coherence family)."""
+def test_reasoned_deviation_records_the_reason(tmp_path, capsys):
+    """A deviation whose declared family was never a sampler candidate
+    (the p=0 shape) passes under the record-only posture, and the
+    ``agent-reasoning:`` line rides both the row and the event — the
+    decision is recorded, never refused, never silent."""
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
     prompt = _full_prompt(
         'dynamic-trace',
         extra='agent-reasoning: dynamic claims fit this binary better')
     rc = sinks.pre_check(_dispatch_payload(prompt), _min_paths(ws))
-    err = capsys.readouterr().err
-    assert rc == 2, f"RED (#794 R2): the p=0 deviation passed (rc={rc})"
-    assert 'propensity' in err
+    assert rc == 0, capsys.readouterr().err
+    row = _usage_rows(ws)[-1]
+    assert row['family_override'] is True
+    assert row['override_source'] == 'agent-reasoning'
+    assert row['override_reason'] == ('dynamic claims fit this binary '
+                                      'better')
+    evs = _events(ws, 'sample_deviation')
+    assert len(evs) == 1
+    det = _detail(evs[0])
+    assert det['reason'] == 'dynamic claims fit this binary better'
 
 
 # ---------- 2. the coherent recorded deviation passes --------------------
@@ -166,7 +195,70 @@ def test_coherent_reasoned_deviation_passes_and_records(
     assert det['reason'] and 'obfuscated loader' in det['reason']
 
 
-# ---------- 3. the unchanged faces ---------------------------------------
+# ---------- 3. the undeclared face: adopt the draw, or the honest gap ----
+
+def test_undeclared_with_cold_sampler_passes_without_a_fabricated_family(
+        tmp_path, capsys):
+    """No declaration + no sampler material -> the honest gap: the
+    dispatch passes, no family is fabricated anywhere (no observation
+    row, no method_family on the lifecycle record, no deviation)."""
+    ws = tmp_path / 'ws'
+    rc = sinks.pre_check(
+        _dispatch_payload(_undeclared_prompt()), _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+    assert _usage_rows(ws) == []
+    dispatches = _events(ws, 'dispatch')
+    assert len(dispatches) == 1
+    assert 'method_family=' not in (dispatches[0].get('detail') or '')
+    assert _events(ws, 'sample_deviation') == []
+    assert not (ws / 'runs' / 'method-family-quarantine.jsonl').exists()
+
+
+def test_undeclared_adopts_the_sampled_family_as_declaration(
+        tmp_path, capsys):
+    """No declaration + sampler material -> the gate's own draw becomes
+    the dispatch's declaration: the dispatch passes and the adopted
+    family is on the lifecycle record (countable, replay-indexable);
+    the adopted draw is not a deviation (no sample_deviation) and the
+    envelope-only observation row stays honest (nothing declared, no
+    row)."""
+    ws = tmp_path / 'ws'
+    _seed_history(ws, 'static-decompile')
+    rc = sinks.pre_check(
+        _dispatch_payload(_undeclared_prompt()), _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+    dispatches = _events(ws, 'dispatch')
+    assert len(dispatches) == 1
+    assert 'method_family=static-decompile' in dispatches[0].get('detail', '')
+    assert _events(ws, 'sample_deviation') == []
+
+
+# ---------- 4. the kept boundary: the task contract still refuses --------
+
+def test_forbidden_dynamic_sample_still_rejects(tmp_path, capsys,
+                                                monkeypatch):
+    """The record-only posture never overrides the task contract: an
+    undeclared dispatch whose adopted draw is dynamic-trace under a
+    ``dynamic_re: forbidden`` task_spec still REJECTS — the constraint
+    check runs after the adoption, and dispatching forbidden dynamic RE
+    would violate the contract itself."""
+    ws = tmp_path / 'ws'
+    paths = _min_paths(ws)
+    paths['task_spec'].write_text(
+        'constraints:\n  dynamic_re: forbidden\n', encoding='utf-8')
+    monkeypatch.setattr(
+        sinks, '_gate_sample',
+        lambda ws_: {'family': 'dynamic-trace', 'propensity': 0.5,
+                     'prior_source': 'history'})
+    rc = sinks.pre_check(
+        _dispatch_payload(_undeclared_prompt()), paths)
+    err = capsys.readouterr().err
+    assert rc == 2, f"the forbidden draw must still reject: rc={rc}"
+    assert 'forbids dynamic_re' in err
+    assert _usage_rows(ws) == [], "a rejected dispatch records no row"
+
+
+# ---------- 5. the unchanged faces ---------------------------------------
 
 def test_matched_declaration_still_passes(tmp_path, capsys):
     ws = tmp_path / 'ws'
@@ -179,7 +271,7 @@ def test_matched_declaration_still_passes(tmp_path, capsys):
 
 def test_cold_sampler_still_fails_open(tmp_path, capsys):
     """No prior material -> the honest all-None gap -> no deviation, no
-    reject: cold-start dispatches are not the bind contract's business."""
+    reject: cold-start dispatches are not the record contract's business."""
     ws = tmp_path / 'ws'
     rc = sinks.pre_check(
         _dispatch_payload(_full_prompt('dynamic-trace')), _min_paths(ws))

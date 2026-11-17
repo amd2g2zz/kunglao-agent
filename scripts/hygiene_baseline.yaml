@@ -942,7 +942,7 @@ files:
   tests/test_dispatch_contract.py:
     r1: 1
   tests/test_dispatch_executor_773.py:
-    r1: 4
+    r1: 3
   tests/test_dispatch_gate_237_passthrough.py:
     r1: 4
   tests/test_dispatch_intent_105.py:
@@ -1507,7 +1507,7 @@ files:
   tests/test_query_formulation_487.py:
     r1: 5
   tests/test_ranker_determinism_792.py:
-    r1: 9
+    r1: 7
   tests/test_rc1_checkpoints_hardening_601.py:
     r1: 6
   tests/test_recall_inject.py:
@@ -1693,7 +1693,7 @@ files:
   tests/test_sample_govern_430.py:
     r1: 2
   tests/test_sampled_binds_794.py:
-    r1: 4
+    r1: 3
   tests/test_sanction_datetime_47.py:
     r1: 5
   tests/test_sanitize.py:

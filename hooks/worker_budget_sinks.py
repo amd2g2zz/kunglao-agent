@@ -392,11 +392,14 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     },
     'methodfamily': {
         'additionalContext': (
-            '#432 method-family vocabulary gate: the dispatch did not '
-            'declare a countable APPROACH. Fix: add "method_family": '
-            '"<token>" to the kunglao_dispatch v1 envelope (or a '
-            '`method-family: <token>` line on v0 prompts). The token names '
-            'the approach — the Q(state signature, method family) key — '
+            '#432 method-family vocabulary gate: the declared APPROACH is '
+            'not countable — either the declared token is outside the '
+            'registered vocabulary (or the other(...) escape is '
+            'malformed), or the task_spec constraint layer forbids the '
+            'approach (the reject message names which). Fix: declare '
+            '"method_family": "<token>" on the kunglao_dispatch v1 '
+            'envelope with a registered token. The token names the '
+            'approach — the Q(state signature, method family) key — '
             'NEVER the tool chain. Registered tokens live in '
             '<skill>/scripts/method_families.yaml (mined vocabulary; see '
             'method_families.derivation.md). No registered approach fits? '
@@ -853,9 +856,9 @@ def _sample_reconciliation(ws, declared: str | None) -> dict:
 
 def _override_reason(prompt: str) -> str | None:
     """The recorded-decision reason face: an ``agent-reasoning:`` line is
-    the dispatch's own logged override rationale — shared by the
-    deviation record and the sampled-binds check (a deviation without
-    this line is SILENT, and silence is not a decision)."""
+    the dispatch's own logged override rationale — the reason rides the
+    ``sample_deviation`` record (a deviation without the line is
+    recorded without a reason, never refused)."""
     m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
                   re.IGNORECASE)
     if not m:
@@ -901,8 +904,9 @@ def _emit_sample_deviation(ws, cid, declared, view: dict,
 
 def _gate_sample(ws) -> dict:
     """#773 W2 — the gate's own sampler draw, decision-grade (the same
-    face reconcile_declaration renders, returned for the gate to
-    enforce). All-None gap on every miss; fail-open to the gap."""
+    face reconcile_declaration renders, returned for the gate to adopt
+    as the declaration of a dispatch that declares nothing). All-None
+    gap on every miss; fail-open to the gap."""
     gap = {"family": None, "propensity": None, "prior_source": None}
     try:
         from rlvr import strategy_store as _ss773  # noqa: PLC0415 — lazy
@@ -920,16 +924,6 @@ def _gate_sample(ws) -> dict:
         return gap
 
 
-def _coherent_method_support(view: dict) -> bool:
-    """Support is independent of an unknown behavior propensity."""
-    supported = view.get('supported')
-    if supported is not None:
-        return supported is True
-    prop = view.get('propensity')  # legacy reconciliation adapters
-    return (isinstance(prop, (int, float)) and not isinstance(prop, bool)
-            and float(prop) > 0.0)
-
-
 def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                         row_agent: str, tier: int,
                         tools: list) -> tuple[int | None, str | None,
@@ -942,7 +936,7 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     bytes are never touched and a missing/corrupt receipt chain stays
     REJECT.
 
-    Fail-closed on missing/unregistered tokens and on a registry the
+    Fail-closed on unregistered tokens and on a registry the
     validator cannot read (2026-09-28 owner ruling posture); the
     other(<one-line>) escape passes and is quarantined for triage.
     Bookkeeping (usage/quarantine rows) is fail-open — telemetry never
@@ -960,10 +954,13 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     reconciliation triple (propensity + sampled_family + prior_source)
     rides the dispatch observation row since the #804 usage merge, and
     a deviation emits the recorded-decision ``sample_deviation`` event.
-    Under #794/#1033, a declaration differing from the sample requires
-    a reason and current support. An unknown external behavior propensity
-    does not erase conditional sampler support. With sampler material,
-    an undeclared dispatch receives the sampled family as its exit."""
+    The draw is recorded evidence, never a gate: a declaration
+    differing from the sample passes and is recorded (the deviation
+    event carries the dispatch's own reason when it declared one), and
+    with sampler material an undeclared dispatch adopts the sampled
+    family as its declaration so the record stays countable — a cold
+    sampler leaves the honest gap (no family fabricated, dispatch
+    proceeds)."""
     if cid is None:
         return (None, None, None)
     if _mf432 is None:
@@ -981,26 +978,18 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
         # the v0 prose marker below still declares the field.
         mf_meta = None
     mf_value = _mf432.declared_value(mf_meta, prompt)
-    # #773 W2: the sampler is the EXIT for the UNDECLARED case — silence
-    # is not an override. The gate draws once and REJECTs with the
-    # sampled family in the guidance (deterministic compliance in one
-    # retry); declaring another family remains the recorded-decision
-    # override (sample_deviation). This supersedes the 2026-10-14
-    # "never rejects" amendment FOR THE UNDECLARED CASE ONLY (owner
-    # directive 2026-10-18 + the live forensics: declared=false on every
-    # strategy-log row meant the sampler never exited). Cold sampler ->
-    # the legacy face (the honest gap), never a fabricated family.
+    # Record-only sampling posture: the envelope declaration is the
+    # dispatch's policy; the gate's own draw is recorded evidence. An
+    # undeclared dispatch adopts the draw as its declaration and flows
+    # through the same validation chain; a cold draw leaves the honest
+    # gap — no family fabricated, nothing to validate, the dispatch
+    # proceeds uncounted.
     if not mf_value:
         sampled = _gate_sample(paths.get('workspace'))
         if sampled.get('family'):
-            return (_reject(
-                'methodfamily',
-                "dispatch declares no method family — the gate's own "
-                f"sampler draw is '{sampled['family']}' (propensity "
-                f"{sampled.get('propensity')}, prior "
-                f"{sampled.get('prior_source')}): declaring it makes the "
-                "sampled exit durable in the usage row.",
-                paths), None, None)
+            mf_value = sampled['family']
+        else:
+            return (None, None, None)
     # the ws threads the overlay admission path: a discovered arm
     # validates only when THIS workspace carries its expansion receipt
     mf_ok, mf_msg = _mf432.validate_method_family(
@@ -1015,25 +1004,10 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     # miss) rides the usage row — the recorded sample-vs-declared pair
     # the issue measured absent from runs/method-family-log.jsonl.
     view = _sample_reconciliation(paths.get('workspace'), mf_value)
-    # Sampled-binds-to-dispatch (owner directive, the logs-panel card):
-    # A deviation needs both current support and a recorded reason.
-    # Conditional sampler support is not the probability of the external
-    # decision; unknown behavior propensity does not erase valid support.
-    # other(...) retains its existing validation and quarantine route.
-    if ((view.get('deviates') or view.get('supported') is False)
-            and _mf432.parse_other_detail(mf_value) is None):
-        coherent = _coherent_method_support(view)
-        if not _override_reason(prompt) or not coherent:
-            return (_reject(
-                'methodfamily',
-                f"declared family '{mf_value}' deviates from the sampler's "
-                f"draw '{view.get('sampled_family')}' (propensity "
-                f"{view.get('propensity')}) without a coherent recorded "
-                "decision — sampling binds the dispatch (#794 R2): declare "
-                "the sampled family, or record the override with an "
-                "`agent-reasoning:` line AND declare a family the current "
-                "policy actually supports.",
-                paths), None, None)
+    # A deviation from the draw is a recorded decision, never a gate:
+    # the reconciliation view rides the usage row below and the
+    # sample_deviation event carries the dispatch's own reason when it
+    # declared one; other(...) keeps its validation and quarantine route.
     # #804 usage merge (R3): the side usage-ledger write is CLOSED — the
     # #691 reconciliation view rides the dispatch observation row (the
     # ALLOW tail's lifecycle record), never a parallel ledger.
