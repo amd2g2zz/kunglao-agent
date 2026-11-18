@@ -700,7 +700,6 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     # of this claim-key climbs one rung of the Luby sequence, so a
     # timed-out re-dispatch earns MORE room, not the same ceiling.
     attempt = ctx.attempts.get(claim, 0)
-    ctx.attempts[claim] = attempt + 1
     ladder_timeout_s = _luby_timeout_s(attempt)
     # kernel-facing hook (audit §4): the envelope's method_family is the
     # declared proposal when the run carries one, else the DTS-sampled
@@ -720,7 +719,7 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
             kunglao_log.warn("e2e.method_family", violation or reason)
             return None, None
     dispatched.add(claim)
-    ctx.attempts[claim] = attempt
+    ctx.attempts[claim] = attempt + 1
     dispatch_id = mint_dispatch_id()
     receipt = dict(sample_receipt or {"family": None, "candidates": {}})
     # #539 WS1: the v2 action tuple — action_type dispatch (the worker
