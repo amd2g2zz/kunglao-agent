@@ -151,3 +151,50 @@ def test_settle_unmatched_dispatch_writes_no_store_row(
         set(), {"acts": []})
     assert strategy_store.load_rows(ws) == [], \
         "unmatched settlements never fabricate store rows"
+
+
+def test_executor_records_adopted_choice_with_a_dispatch_identity(tmp_path, monkeypatch):
+    ws = _ws(tmp_path)
+    ctx = _ctx(ws, "")
+    receipt = {"family": FAMILY, "prior_source": "history",
+               "candidates": {FAMILY: {"weight": 1.0}},
+               "candidate_sources": {FAMILY: ["history"]}}
+    monkeypatch.setattr(checkpoints, "_sample_envelope_family",
+                        lambda ws: (FAMILY, receipt))
+    request, _ = checkpoints._launch_dispatch(ctx, "C-004", set())
+    row = q_cells.dispatch_rows(ws)[-1]
+    assert row["method_source"] == "sampled-adoption"
+    assert row["dispatch_id"] == request.dispatch_id
+    assert ir.current_dispatch_id(ws, "C-004") == request.dispatch_id
+    assert row["propensity"] == 1.0
+    assert row["probability_source"] == "selection_law_exact"
+    assert _envelopes(ws)[-1]["envelope"]["dispatch_id"] == request.dispatch_id
+    checkpoints._land_dispatch(
+        ctx, "C-004", llm_faces.ActRecord(
+            claim="C-004", mode="auto", outcome="DISPATCHED", detail={}),
+        set(), {"acts": []}, attempt_id=request.launch_id,
+        dispatch_id=request.dispatch_id)
+    assert q_cells.banked_mass(ws, request.dispatch_id)[2] == 1
+
+
+def test_executor_rejects_a_revoked_method_before_recording(tmp_path):
+    ws = _ws(tmp_path)
+    (ws / "task_spec.yaml").write_text(
+        "constraints:\n  dynamic_re: forbidden\n", encoding="utf-8")
+    ctx = _ctx(ws, "dynamic-trace")
+    request, _ = checkpoints._launch_dispatch(ctx, "C-004", set())
+    assert request is None
+    assert q_cells.dispatch_rows(ws) == []
+
+
+def test_executor_replaying_a_result_does_not_bank_twice(tmp_path):
+    ws = _ws(tmp_path)
+    request, _ = checkpoints._launch_dispatch(_ctx(ws, FAMILY), "C-004", set())
+    act = llm_faces.ActRecord(
+        claim="C-004", mode="auto", outcome="DISPATCHED", detail={})
+    ctx = _ctx(ws, FAMILY)
+    for _ in range(2):
+        checkpoints._land_dispatch(
+            ctx, act.claim, act, set(), {"acts": []},
+            attempt_id=request.launch_id, dispatch_id=request.dispatch_id)
+    assert q_cells.banked_mass(ws, request.dispatch_id)[2] == 1

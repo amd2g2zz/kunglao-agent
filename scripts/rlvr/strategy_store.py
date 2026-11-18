@@ -1066,21 +1066,57 @@ def _round_lead(ws) -> str | None:
     return lead or None
 
 
-def reconcile_declaration(ws, declared: str | None) -> dict:
-    """Reconcile the sampled and externally declared methods.
+def method_decision(receipt: dict, declared: str | None) -> dict:
+    """Project one draw and the actual choice into a dispatch record."""
+    sampled = str(receipt.get("family") or "").strip() or None
+    actual = declared or sampled
+    candidates = receipt.get("candidates") or {}
+    sources = receipt.get("candidate_sources") or {}
+    weights = {}
+    for family, candidate in candidates.items():
+        weight = candidate.get("weight") if isinstance(candidate, dict) else None
+        if (isinstance(weight, bool) or not isinstance(weight, (int, float))
+                or not math.isfinite(weight) or weight <= 0):
+            weights = {}
+            break
+        weights[family] = float(weight)
+    total = sum(weights.values())
+    usable = total > 0 and math.isfinite(total)
+    deviates = bool(declared and sampled and declared != sampled)
+    return {
+        "actual_method_family": actual,
+        "method_source": ("override" if deviates else "declared" if declared
+                          else "sampled-adoption" if sampled else None),
+        "sampled_family": sampled,
+        "propensity": None,
+        "probability_source": "unknown",
+        "conditional_sampler_weight": (weights.get(actual, 0.0) / total
+                                       if usable else None),
+        "sampled_conditional_weight": (weights.get(sampled, 0.0) / total
+                                       if usable and sampled else None),
+        "supported": actual in sources,
+        "candidates": candidates,
+        "candidate_sources": sources,
+        "prior_source": receipt.get("prior_source"),
+        "deviates": deviates,
+        "sampled_propensity": None,
+    }
 
-    Conditional draw weights explain candidate support; they do not
-    identify the behavior probability of an LLM or manual declaration.
-    """
+
+def reconcile_declaration(ws, declared: str | None) -> dict:
+    """Sample once, even when the caller delegates the method choice."""
     gap = {"sampled_family": None, "propensity": None,
            "prior_source": None, "deviates": False,
            "sampled_propensity": None, "round_lead": None}
-    if not ws or not declared:
+    if declared:
+        gap.update(method_decision({}, declared))
+        gap.pop("supported")
+    if not ws:
         return gap
-    evidence_mode = True  # inability to establish the mode cannot authorize legacy fallback
+    evidence_mode = True
     try:
         evidence_mode = _support_material_present(ws)
-        from rlvr import state as rlvr_state  # noqa: PLC0415 — lazy
+        from rlvr import state as rlvr_state  # noqa: PLC0415
         store = PosteriorStrategyStore(ws)
         fp = rlvr_state.signature_hash(rlvr_state.snapshot(Path(ws)))
         receipt = store.method_sample(fp)
@@ -1090,74 +1126,16 @@ def reconcile_declaration(ws, declared: str | None) -> dict:
                         "probability_source": "unknown", "candidates": {},
                         "candidate_sources": {}}
             return gap
-        sampled = str(receipt.get("family") or "").strip() or None
-        weights: dict[str, float] = {}
-        for fam, cand in (receipt.get("candidates") or {}).items():
-            try:
-                weights[str(fam)] = float((cand or {}).get("weight") or 0.0)
-            except (TypeError, ValueError):
-                weights[str(fam)] = 0.0
-        total = sum(weights.values())
-        conditional = weights.get(str(declared), 0.0) / total if total > 0.0 else None
-        sampled_conditional = (
-            weights.get(sampled, 0.0) / total
-            if (total > 0.0 and sampled) else None)
-        return {
-            "sampled_family": sampled,
-            "propensity": None,
-            "probability_source": "unknown",
-            "conditional_sampler_weight": conditional,
-            "sampled_conditional_weight": sampled_conditional,
-            "supported": str(declared) in (receipt.get("candidate_sources") or {}),
-            "candidates": receipt.get("candidates", {}),
-            "candidate_sources": receipt.get("candidate_sources", {}),
-            "prior_source": receipt.get("prior_source"),
-            "deviates": bool(sampled) and str(declared) != sampled,
-            "sampled_propensity": None,
-            "round_lead": _round_lead(ws),
-        }
+        return {**method_decision(receipt, declared),
+                "round_lead": _round_lead(ws)}
     except Exception as exc:  # noqa: BLE001 — retain the authorization boundary
         warn("strategy_store.reconcile_declaration",
              f"{type(exc).__name__}: {exc}")
+        gap["sample_error"] = type(exc).__name__
         if evidence_mode:
             return {**gap, "supported": False, "support_error": type(exc).__name__,
                     "probability_source": "unknown", "candidates": {},
                     "candidate_sources": {}}
-        return gap
-
-
-def gate_sample(ws) -> dict:
-    """#773 W2 — the dispatch gate's own draw as a DECISION input (not
-    telemetry): the same sampler face reconcile_declaration renders,
-    returned for the gate to enforce. Returns ``{"family", "propensity",
-    "prior_source"}`` — the all-None gap on every miss (cold store, no
-    proposal material, any failure). Fail-open: a sampler hiccup must
-    never fabricate a family."""
-    gap = {"family": None, "propensity": None, "prior_source": None}
-    try:
-        from rlvr import state as rlvr_state  # noqa: PLC0415 — lazy
-        store = PosteriorStrategyStore(ws)
-        fp = rlvr_state.signature_hash(rlvr_state.snapshot(Path(ws)))
-        receipt = store.method_sample(fp)
-        if receipt is None:
-            return gap
-        family = str(receipt.get("family") or "").strip() or None
-        if not family:
-            return gap
-        weights: dict[str, float] = {}
-        for fam, cand in (receipt.get("candidates") or {}).items():
-            try:
-                weights[str(fam)] = float((cand or {}).get("weight") or 0.0)
-            except (TypeError, ValueError):
-                weights[str(fam)] = 0.0
-        total = sum(weights.values())
-        propensity = (round(weights.get(family, 0.0) / total, 6)
-                      if total > 0.0 else None)
-        return {"family": family, "propensity": propensity,
-                "prior_source": receipt.get("prior_source")}
-    except Exception as exc:  # noqa: BLE001 — the gap is the honest face
-        warn("strategy_store.gate_sample",
-             f"{type(exc).__name__}: {exc}")
         return gap
 
 

@@ -3,7 +3,7 @@ flowchart TD
     A[intake 锚点 task_spec goal-op] -->|W1 arm_oracle_cases| B[oracle cases 武装]
   end
   subgraph 决策
-    C[state.snapshot 签名 bf 维] --> D[strategy_store.gate_sample DTS 抽样]
+    C[state.snapshot 签名 bf 维] --> D[strategy_store.reconcile_declaration DTS 抽样]
     D --> E{_method_family_gate}
     E -->|未声明+有料| F[拒 携带采样家族]
     F --> G[重试声明 family]

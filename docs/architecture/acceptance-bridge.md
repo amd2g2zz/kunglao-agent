@@ -103,7 +103,7 @@ symbols are the anchors):
 | family resolve | `scripts/method_families.py:355` (`usage_family_map`) | claim id → LAST declared family from `runs/method-family-log.jsonl` |
 | bridge → series | `scripts/rlvr/strategy_store.py:270` (`append_workspace_credit_row`) | the workspace-local `posterior-store/1` credit row (one builder `_build_store_row` with the cross-task face) |
 | decision ← learning | `scripts/rlvr/strategy_store.py:501` (`proposal_prior_labeled`) + `scripts/rlvr/strategy_store.py:539` (`_case_prior`) | the `case` prior source in `method_sample`'s chain |
-| sampler consumers | `strategy_store.reconcile_declaration` / `gate_sample` / `method_lead` | unchanged call sites — they now draw from the case-fed chain (usage rows record `sampled_family`/`prior_source`) |
+| sampler consumers | `strategy_store.reconcile_declaration` / `method_lead` | Both use the case-fed sampler. The dispatch observation records the accepted method, sampled method, and prior source. |
 
 Before→after call chain (the starved-claim path):
 

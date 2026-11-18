@@ -454,33 +454,27 @@ def _audit_state_save(ws, state: dict) -> None:
               f"({type(exc).__name__}: {exc})", file=sys.stderr)
 
 
+def _committed_rows(ws, claim: str) -> list[dict]:
+    """Read committed dispatches in order, excluding rolled-back attempts."""
+    rows = [row for row in _iter_ledger_rows(ws)
+            if str(row.get("claim") or "") == str(claim)]
+    aborted = {row.get("dispatch_id") for row in rows
+               if row.get("state") == "aborted"
+               and isinstance(row.get("dispatch_id"), str)}
+    return [row for row in rows if row.get("state") == "committed"
+            and str(row.get("dispatch_id") or "") not in aborted]
+
+
 def latest_committed_dispatch(ws, claim: str) -> dict | None:
-    """The last COMMITTED ledger row for the claim — the settlement
-    face's dispatch-id resolver. None = no committed row: the settle
-    face classifies such a claim from the persisted dispatch traces
-    (``dispatch_attempts``) as never dispatched or uncredited, never
-    through an alias."""
-    latest = None
-    for row in _iter_ledger_rows(ws):
-        if (row.get("state") == "committed"
-                and str(row.get("claim") or "") == str(claim)):
-            latest = row
-    return latest
+    """Resolve the latest committed, non-aborted dispatch for settlement."""
+    rows = _committed_rows(ws, claim)
+    return rows[-1] if rows else None
 
 
 def committed_dispatch_ids(ws, claim: str) -> list[str]:
-    """Every committed dispatch id for the claim, oldest first — the
-    full producing/verifying set (a claim can carry several committed
-    dispatches; the credit bank keys on the producer, so a certifier
-    must see them all, never only the latest)."""
-    out: list[str] = []
-    for row in _iter_ledger_rows(ws):
-        if (row.get("state") == "committed"
-                and str(row.get("claim") or "") == str(claim)):
-            did = str(row.get("dispatch_id") or "")
-            if did:
-                out.append(did)
-    return out
+    """Resolve every committed, non-aborted dispatch ID in ledger order."""
+    return [str(row["dispatch_id"]) for row in _committed_rows(ws, claim)
+            if row.get("dispatch_id")]
 
 
 def _jsonl_dicts(path: Path) -> list:

@@ -106,12 +106,11 @@ sequenceDiagram
   WB->>WB: check_worker_plan 计划闸 粒度闸
   WB->>WB: 零输出断路器
   WB->>MFG: _method_family_gate
-  MFG->>SS: 未声明则 gate_sample ws
-  SS-->>MFG: family propensity prior_source 或冷隙
-  MFG--xO: 有料 REJECT methodfamily 携带采样家族
-  MFG->>SS: 已声明 reconcile_declaration 反账
-  MFG->>SS: append_usage_row 使用行
-  MFG-->>WB: None mf_value
+  MFG->>SS: reconcile_declaration(ws, declared)
+  SS-->>MFG: One decision with actual method and source
+  MFG->>MFG: Validate authorization and vocabulary
+  MFG-->>WB: Accepted decision
+  WB->>WB: Stage decision until PostToolUse confirms input
   WB-->>DG: 放行进入牙齿
   DG->>DG: must-stop top1 capability MCP plan-author
   DG->>RI: recall 判断 默认关
@@ -126,8 +125,8 @@ sequenceDiagram
 | 步结算屏障          | `check_step_settled`        | —              | 前步未结算（超 TTL pending 放行+WARN 一次）       |
 | facts-snapshot | —                           | `snapshot`     | prompt 缺 `facts-snapshot:`            |
 | 优先级审计          | `check_priority`            | `devreason`    | 偏离 #1 无 `agent-reasoning:`            |
-| 方法家族           | `_method_family_gate`       | `methodfamily` | 未声明（有料→拒并携带采样家族 W2）/未注册               |
-| 采样出口遥测         | `_gate_sample`              | —（事件）          | 异常 → `gate_sample_failed` 事件 + stderr |
+| 方法家族           | `_method_family_gate`       | `methodfamily` | 执行权限或注册校验失败               |
+| 采样出口遥测         | `_sample_reconciliation`   | —（事件）          | 异常 → `gate_sample_failed` 事件 + stderr |
 | tier 一致性       | `check_tier_consistency`    | `tiercons`     | envelope tier ≠ action_tier           |
 | 计划闸            | `check_worker_plan`         | `plan`         | 再派发无 worker 亲写计划                      |
 | 粒度闸            | `check_claim_granularity`   | `granularity`  | ≥8 步或 ≥2 族各 ≥2 步                      |
@@ -170,8 +169,8 @@ REJECT 时：`undo_dispatch_anchor`（#623 撤锚行）→ `reopen_claim_no_work
 - `method_sample(fp)` receipt 真实形状：  
   `{"schema":"q-cell-sample/1","signature_hash":"aea12f53…","family":"static-decompile","gamma":0.9,"candidates":{"static-decompile":{"p_llm":1.0,"alpha":1.67,"beta":1.33,"theta":0.857,"weight":0.857}},"prior_source":"history"}`  
   三源先验链：`proposal_prior_labeled()`（measured history → intake llm-prior → cross-task store；label ∈ history/llm_prior/none）→ `_store_prior` 兜底；None = 诚实冷隙，永不造家族。
-- `gate_sample(ws)`（#773 W2 决策封装）/ `reconcile_declaration(ws, declared)`（#691 反账遥测）/ `method_lead`（advisory）——三面一个 `method_sample`（法则 3）。
-- 姿态演进：偏离=记录（sample_deviation）不变；**未声明+有料=拒一次携带采样家族**（owner 2026-10-18，推翻 2026-10-14 "never rejects" 对未声明例外的适用——spec 增补待办 M3.4）。
+- `reconcile_declaration(ws, declared)` samples once per dispatch. The executor projects its own draw into the same record with `method_decision`. `method_lead` remains an advisory planning read.
+- When the declaration is absent, an eligible sampled method can be adopted. A different explicit choice is recorded as a deviation, subject to the same authorization checks.
 
 ### 4.2 `rlvr/l1_planner.py`（准入策略）
 
@@ -195,7 +194,7 @@ REJECT 时：`undo_dispatch_anchor`（#623 撤锚行）→ `reopen_claim_no_work
 
 ### 4.6 `hooks/worker_budget_sinks.py`
 
-- `pre_check` 腿序（§3.2）；`_method_family_gate`（#432 咽喉 + #773 W2）；`_gate_sample`/`_sample_reconciliation`/`_emit_sample_deviation`；ALLOW 尾 `_dispatch_lifecycle(method_family=mf_value)`。
+- `pre_check` 腿序（§3.2）；`_method_family_gate`（#432 咽喉 + #773 W2）；`_sample_reconciliation`/`_emit_sample_deviation`；ALLOW 尾 `_dispatch_lifecycle(method_family=mf_value)`。
 - `_reject` 单点 → `gate-telemetry.jsonl`（fail-open，ledger 不可写不改判）。
 
 ### 4.7 `hooks/dispatch_gate.py`
@@ -230,7 +229,7 @@ flowchart TD
     A[intake 锚点 task_spec goal-op] -->|W1 arm_oracle_cases| B[oracle cases 武装]
   end
   subgraph 决策
-    C[state.snapshot 签名 bf 维] --> D[strategy_store.gate_sample DTS 抽样]
+    C[state.snapshot 签名 bf 维] --> D[strategy_store.reconcile_declaration DTS 抽样]
     D --> E{_method_family_gate}
     E -->|未声明+有料| F[REJECT 携带采样家族]
     F --> G[重试声明 family]
@@ -969,11 +968,16 @@ Worker_budget battery runs BEFORE dispatch_gate on the same PreToolUse:Agent eve
 
 ### Flow 3 — RL 更新回路 (RL update loop)
 
-#### As-built chain (ordered)
+#### Current dispatch and credit path
 
-1. Declaration chokepoint: worker_budget_sinks.py:822 `_method_family_gate` → undeclared+sampled REJECT 856-877 (#773 W2) → `validate_method_family` 891 → `_sample_reconciliation` 744 (→ strategy_store.py:603 `reconcile_declaration`) → `append_usage_row` with propensity/sampled_family/prior_source (method_families.py:303-322) → deviation event `_emit_sample_deviation` 764-800 (`sample_deviation`, event_taxonomy.py:303).
-2. Sampler: strategy_store.py:357 `method_sample` (ONE draw behind `method_lead` 341) → 382 `proposal_prior_labeled` (history | llm_prior | none, + store fallback) → q_cells draw; 651 `gate_sample` (#773 W2 decision draw); sampler hiccup → `gate_sample_failed` event (sinks 805-820, event_taxonomy.py:221).
-3. Credit: scalar.py:807/850 → q_cells.py:1165 `observe_settlement` (credit_kind solve/verification decomposition, `beta_updated`).
+The hook and the end-to-end executor use the same decision record. See the [dispatch attribution specification](../../openspec/changes/unify-action-decisions/specs/dispatch-attribution/spec.md).
+
+1. The hook samples once and resolves the actual method from the explicit declaration or the adopted draw. It checks current authorization before writing an accepted dispatch.
+2. The executor builds the same decision fields from its existing draw. The hook supplies an adopted method in the updated tool input. A matching PostToolUse event publishes the staged method, source, and dispatch ID to the Q-cell ledger. A sampler weight and an external caller's behavior probability are separate fields.
+3. Blind settlement joins verified credit to that dispatch ID. An accepted dispatch with no result remains pending. A planned action without a dispatch contributes no observation. Verification, task termination, and credit settlement have separate lifecycles.
+
+The following transfer and planner references and the findings table document the earlier architecture audit. The sampled-method rejection and side usage ledger in audit findings 3.1 and 3.4 describe the implementation before amendment 7. See [the amendment history](acceptance-spec-amendments.md) and the current specification linked above.
+
 4. Transfer: settle-time crystallize (flow 2) → marl.py:91 `signature_class`, 138-169 `record_negative(signature_class, agent_type, method_family)`, 172 `negative_pools`, 218 broadcast; q_cells.py:775 arm_context `agent_type` (5th arm dim); SHRINK_CAP q_cells.py:168.
 5. Belief + planner: belief.py:55 `record_belief` (runs/belief.jsonl) at settle; state.py:497/529 `bf=` declared-unknown dim in the signature; l1_value.py:107 `ACTION_KINDS = (dispatch, park, split, verify, reuse, distill)`; l1_planner.py:296 `candidate()` boundary wall, 341 `_admit` (one-or-more budget-bounded), 377 `plan` (DTS argmax value/cost), 457 `plan_for_claim` (dispatch/park/reuse); consumed live at dispatch by dispatch_gate.py:946-973 `_write_plan_receipt` (plan-receipt/1: admitted list + chosen key).
 6. Plan-author anchor: worker_budget_sinks.py:1150 `stamp_dispatch_anchor` arms the plan gate for the NEXT dispatch (#57 gate 3).
@@ -993,7 +997,7 @@ Worker_budget battery runs BEFORE dispatch_gate on the same PreToolUse:Agent eve
 | 3.9 | [GAP] flow=3; code dispatch_gate.py:946-973 — plan() consumed live at the ALLOW tail (receipt admitted/chosen) is documented only in scripts/README.md + review-gate evidence; no spec dir for #773 W3. |
 | 3.10 | [MATCH] flow=3; spec issue-691 "ONE draw implementation behind both faces … can never disagree"; code strategy_store.py:341-355 `method_lead` delegates to `method_sample`. |
 
-**Verdict flow 3: 部分偏离** — 691/705 mechanics fully realized; the 2026-10-18 undeclared-REJECT supersedes 691's written non-goal without a spec update; the 760-component and 773-receipt spec lives outside openspec.
+**Historical verdict for flow 3** — the audit identified the undeclared rejection and gaps in the #760 and #773 specifications. Amendment 7 superseded the rejection. The current dispatch contract is linked above.
 
 ---
 

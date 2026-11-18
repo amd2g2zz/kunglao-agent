@@ -17,6 +17,7 @@ requires new tooling.
 | 5 | M4.2 | `openspec/archive/issue-753-upgrade-safety/proposal.md` §Amendment A | dirty state on the migration path is committed AS the snapshot; RC 6 = no-snapshot face + early-exit refresh face; "no snapshot → no migration" stands | `scripts/kunglao_upgrade.py:1403-1482`, `1484-1497`, `2188-2191`, `1284-1298` |
 | 6 | M4.5 | `openspec/archive/issue-753-upgrade-safety/proposal.md` §Amendment B (recorded home of the #764 refinement — #764 has no own spec dir) | iron rule append-tolerant for kunglao event logs: order-preserving prefix check; rewrites/reorders/deletions still trip rc=4 | `scripts/kunglao_upgrade.py:1055-1085`, `980-999` |
 | 7 | M3.4 (record-only supersession) | `openspec/changes/issue-1033-candidate-support/proposal.md` + `specs/` (the record-only ruling's spec home; supersedes row 4's W2 exit clause) | the sampler draw is recorded evidence, never a gate: undeclared + sampler material ADOPTS the draw as the dispatch's declaration; a deviation from the draw always passes and rides the observation row + `sample_deviation` (reason slot explicit); cold sampler = the honest gap (no family fabricated); the only remaining `methodfamily` REJECTs are the vocabulary/constraint contract faces (unregistered token, malformed other(...), task_spec dynamic_re constraint) — owner review round-1 PASS on the record-only slice | `hooks/worker_budget_sinks.py` `_method_family_gate` (REJECT_FIXES['methodfamily'] guidance rewritten for the kept faces); pins `tests/test_sampled_binds_794.py`, `tests/test_dispatch_executor_773.py` |
+| 8 | M3.4 (shared dispatch decision) | [#1064 specification](../../openspec/changes/unify-action-decisions/specs/dispatch-attribution/spec.md) | Both entry points record the actual method and decision source from one draw. Eligibility and sampler support are distinct. | `method_decision` and `record_dispatch_observation` |
 
 ## 2. How to accept — machine-checkable commands
 
@@ -45,9 +46,8 @@ sed -n '745p' hooks/dispatch_gate.py      # M1.5: "REJECT (fail-closed, owner ru
 sed -n '440,441p' hooks/worker_budget_sinks.py  # M1.6: "#533 F-H2 semantics kept: TICK data only — activity_ts stays" / "the kicker's signal"
 sed -n '485p' hooks/worker_budget_sinks.py      # M1.6: "return (False, f'#754 continuous-tick liveness REJECT - {detail}')"
 sed -n '261p' scripts/rlvr/liveness.py    # M1.6: "def evaluate_tick_continuity(state: dict, *,"
-sed -n '873p' hooks/worker_budget_sinks.py      # M3.4: "override (sample_deviation). This supersedes the 2026-10-14"
-sed -n '874p' hooks/worker_budget_sinks.py      # M3.4: "# "never rejects" amendment FOR THE UNDECLARED CASE ONLY (owner"
-sed -n '881,889p' hooks/worker_budget_sinks.py  # M3.4: the UNDECLARED "return (_reject(" block with the sampled family guidance
+rg -n 'def (_method_family_gate|_sample_reconciliation)' hooks/worker_budget_sinks.py  # M3.4: decision and authorization
+rg -n 'def (method_decision|reconcile_declaration)' scripts/rlvr/strategy_store.py   # M3.4: shared dispatch decision
 sed -n '1413p' scripts/kunglao_upgrade.py # M4.2: "point the #753 ruling demanded, and committing beats refusing."
 sed -n '1484p' scripts/kunglao_upgrade.py # M4.2: "def _refuse_no_snapshot(ws: Path) -> int:"
 sed -n '2191p' scripts/kunglao_upgrade.py # M4.2: "return _refuse_no_snapshot(ws)"
