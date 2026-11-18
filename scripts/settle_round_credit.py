@@ -292,7 +292,9 @@ def _effective_pair_outcomes(
 def _revoke_derived_rows(ws: Path, claim: str, revoked: list[str]) -> None:
     """The flipped claim's derived discriminants die with the settlement
     they were derived from; the next real settlement re-derives from the
-    corrected truth. Fail-open: a store failure never undoes the flip."""
+    corrected truth. Fail-open: a store failure never undoes the flip
+    (and never raises into it) — the retry channel is the discovery
+    sweep below, which re-attempts while the stale rows still match."""
     try:
         from rlvr import crystallize as _cz  # noqa: PLC0415 — lazy
         removed = _cz.revoke_claim(ws, claim)
@@ -302,6 +304,72 @@ def _revoke_derived_rows(ws: Path, claim: str, revoked: list[str]) -> None:
     except Exception as exc:  # noqa: BLE001 — never the flip
         warn("case_amendment_revoke",
              f"{claim}: {type(exc).__name__}: {exc}")
+
+
+def _pending_revoke_claims(ws: Path, claims: list[str]) -> list[str]:
+    """Which of ``claims`` still carry derived rows in the knowledge
+    family — the read-only discovery face behind the revoke retry. The
+    stale source itself is the durable pending marker (no new state
+    family): a claim whose revocation never landed still matches, so
+    every pass can find it again and the retry survives restarts. The
+    scan mirrors ``crystallize.revoke_claim``'s full sweep, not just its
+    predicates: the live family file PLUS the same pre-move rels
+    (``consolidate_ledgers.LEGACY_SOURCES`` resolved through
+    ``consolidated_ledger.legacy_path``) a revoke would rewrite — a
+    revoke that failed before reaching a pre-move file must still read
+    PENDING, or the R4 migration would resurrect the row into the
+    family read. Predicates are identical to revoke's rewrite —
+    negatives by ``claim_ref``, broadcasts by ``claim`` without a
+    ``credit_kind`` — with the same workspace scoping (rows stamped
+    with ``strategy_store.workspace_id_of``; rows WITHOUT the column
+    are the shared class-level rows and stay revocable from any
+    workspace). The window face retires with the R4 CLI: when the
+    migration window is deleted the pre-move paths read absent and this
+    scan silently degrades to the family file alone. Fail-open: an
+    unreadable file reads as nothing pending."""
+    from rlvr import consolidated_ledger as _cl
+    from rlvr import strategy_store as _ids
+
+    want = {str(c or "").strip() for c in claims}
+    want.discard("")
+    if not want:
+        return []
+    mine = str(_ids.workspace_id_of(ws))
+    windows: list[Path] = []
+    try:
+        import consolidate_ledgers as _migrate_cli  # noqa: PLC0415 — lazy
+        window_rels = tuple(_migrate_cli.LEGACY_SOURCES.get("knowledge", {}))
+        windows = list(_cl.legacy_path(ws, "knowledge", rel)
+                       for rel in window_rels
+                       if not rel.startswith("runs/"))
+        windows += list(_cl.legacy_path(ws, "knowledge", rel)
+                        for rel in window_rels
+                        if rel.startswith("runs/"))
+    except Exception as exc:  # noqa: BLE001 — the sweep degrades, loudly
+        warn("case_amendment_discovery",
+             f"pre-move sweep unavailable ({type(exc).__name__}: {exc}) "
+             f"— discovering the family file only")
+
+    pending: set[str] = set()
+
+    def _match(row: dict) -> None:
+        rid = str(row.get("workspace_id") or "")
+        if rid and rid != mine:
+            return
+        neg_ref = str(row.get("claim_ref") or "")
+        if neg_ref in want:
+            pending.add(neg_ref)
+            return
+        bcast_ref = str(row.get("claim") or "")
+        if bcast_ref in want and not row.get("credit_kind"):
+            pending.add(bcast_ref)
+
+    for row in _cl.read(ws, "knowledge"):
+        _match(row)
+    for path in dict.fromkeys(windows):
+        for row in _cl._read_rows(path):
+            _match(row)
+    return sorted(pending)
 
 
 def _decisive_status_map(claims: list[dict],
@@ -321,72 +389,127 @@ def _decisive_status_map(claims: list[dict],
     return out
 
 
+def _amend_pair_entries(ws: Path, entries: list[tuple[str, str, bool, bool]],
+                        revoked: list[str]) -> tuple[int, int, list[str]]:
+    """One transaction per entry: append the ``case-amendment/1`` row
+    FIRST, apply the floored ±1 flip to the in-memory posterior only
+    after ``ok``, and save the ledger once when something landed (a
+    failed save raises — loud, never swallowed). A refused row mutates
+    nothing and persists nothing. Returns ``(landed, refused,
+    landed_claims)``."""
+    import posteriors_case as po
+    from rlvr import consolidated_ledger as cl
+    from harness_common import utc_now_z
+
+    led = po.PosteriorLedger.load(ws)
+    ts = utc_now_z()
+    landed = 0
+    refused = 0
+    landed_claims: list[str] = []
+    for cid, claim, eff_outcome, target in entries:
+        cp = led.cases.get(cid) or po.CasePosterior(cid)
+        d_a = 1 if target else -1
+        d_b = -1 if target else 1
+        new_a = max(po._ALPHA0, cp.alpha + d_a)
+        new_b = max(po._BETA0, cp.beta + d_b)
+        applied_a, applied_b = new_a - cp.alpha, new_b - cp.beta
+        ok = cl.append(ws, "experience", {
+            "schema": CASE_AMEND_SCHEMA, "ts": ts, "case_id": cid,
+            "claim_id": claim, "from_passed": bool(eff_outcome),
+            "to_passed": bool(target), "d_alpha": applied_a,
+            "d_beta": applied_b, "source": "reconcile"})
+        if not ok:
+            refused += 1
+            continue  # commit-first: no mutation, no save
+        if applied_a != d_a or applied_b != d_b:
+            warn("case_amendment_floor",
+                 f"{cid}: posterior desync — floored at the "
+                 f"Beta(1,1) support")
+        cp.alpha, cp.beta = new_a, new_b
+        led.cases[cid] = cp
+        landed += 1
+        landed_claims.append(str(claim))
+        _revoke_derived_rows(ws, str(claim), revoked)
+    if landed:
+        led.save(ws)
+    return landed, refused, landed_claims
+
+
 def reconcile_case_settlements(ws: Path,
                                skip: set[str] | None = None) -> dict:
     """The pair-amendment face: when a claim's CURRENT decisive register
     status disagrees with the outcome already observed for its
-    (case, claim) pair, apply the ±1 flip to the case posterior
-    (belief-first, floored at the Beta(1,1) support — a desynced ledger
-    can never push the posterior outside it) and append ONE
-    ``case-amendment/1`` audit row. Idempotence lives in the fold: once
-    the row lands the effective outcome equals the target and every
-    re-run is a read-scan no-op. Honest gaps write nothing: a
-    non-decisive terminal, a removed claim, a retired case, an
-    unobserved pair, and the ``skip`` set (censored/pending outcomes —
-    never an observation). Telemetry never raises into the pass."""
+    (case, claim) pair, append ONE ``case-amendment/1`` audit row FIRST
+    and only after the append returns ``ok`` apply the ±1 flip to the
+    case posterior (floored at the Beta(1,1) support — a desynced ledger
+    can never push the posterior outside it) and save. The amendment is
+    one transaction: a refused row mutates NOTHING and persists NOTHING
+    (the old belief-first order could flip the belief while the fold —
+    which reads the rows — never saw one, so every following pass
+    flipped AGAIN); a landed row followed by a failed save raises into
+    the telemetry error field, loud and unswallowed. Idempotence lives
+    in the fold: once the row lands the effective outcome equals the
+    target and every re-run is a read-scan no-op — a retried correction
+    can never apply twice. Honest gaps write nothing: a non-decisive
+    terminal, a removed claim, a retired case, an unobserved pair, and
+    the ``skip`` set (censored/pending outcomes — never an observation).
+    The pass also carries the revoke-retry sweep: claims whose
+    amendments have ALREADY landed re-attempt revocation while derived
+    rows still match them in the knowledge family (see
+    ``_pending_revoke_claims``); a failure surfaces on the sibling
+    ``case_revocations_error`` field. Telemetry never raises into the
+    pass."""
     out: dict = {"case_amendments": 0, "case_amendments_error": None}
     try:
-        import posteriors_case as po
-        from rlvr import consolidated_ledger as cl
-        from harness_common import utc_now_z
-
         status_map = _decisive_status_map(_register_claims(ws), skip)
         known_cases = {c for ids in
                        _cases_by_pq(ws, armed_only=False).values()
                        for c in ids}
+        eff = _effective_pair_outcomes(ws)
         entries = []
-        for (cid, claim), (orig, amended) in _effective_pair_outcomes(
-                ws).items():
+        for (cid, claim), (orig, amended) in eff.items():
             effective = orig if amended is None else amended
             target = status_map.get(claim)
             if target is None or target == effective or cid not in (
                     known_cases):
                 continue
             entries.append((cid, claim, effective, target))
-        if not entries:
+        # every claim whose amendment has landed — the revoke-retry
+        # population, independent of this pass's entries (a converged
+        # fold must still sweep, or a failed revoke never retries).
+        # The pass's OWN landed amendments ride the sweep too: their
+        # in-loop revoke may already have failed, and that failure must
+        # be loud in the SAME pass, not one pass later.
+        amended_claims = sorted(
+            {claim for (_cid, claim), (_orig, amended) in eff.items()
+             if amended is not None})
+        if not entries and not amended_claims:
             return out
-        led = po.PosteriorLedger.load(ws)
-        ts = utc_now_z()
-        landed = 0
         revoked_claims: list[str] = []
-        for cid, claim, eff, target in entries:
-            cp = led.cases.get(cid) or po.CasePosterior(cid)
-            d_a = 1 if target else -1
-            d_b = -1 if target else 1
-            new_a = max(po._ALPHA0, cp.alpha + d_a)
-            new_b = max(po._BETA0, cp.beta + d_b)
-            if new_a != cp.alpha + d_a or new_b != cp.beta + d_b:
-                warn("case_amendment_floor",
-                     f"{cid}: posterior desync — floored at the "
-                     f"Beta(1,1) support")
-            applied_a, applied_b = new_a - cp.alpha, new_b - cp.beta
-            cp.alpha, cp.beta = new_a, new_b
-            led.cases[cid] = cp
-            ok = cl.append(ws, "experience", {
-                "schema": CASE_AMEND_SCHEMA, "ts": ts, "case_id": cid,
-                "claim_id": claim, "from_passed": bool(eff),
-                "to_passed": bool(target), "d_alpha": applied_a,
-                "d_beta": applied_b, "source": "reconcile"})
-            landed += 1 if ok else 0
-            if ok:
-                _revoke_derived_rows(ws, str(claim), revoked_claims)
-        led.save(ws)
-        out["case_amendments"] = landed
+        freshly_landed: list[str] = []
+        if entries:
+            landed, refused, freshly_landed = _amend_pair_entries(
+                ws, entries, revoked_claims)
+            out["case_amendments"] = landed
+            if refused:
+                out["case_amendments_error"] = (
+                    f"{refused} amendment row(s) refused — the belief is "
+                    f"untouched, the flip re-fires next pass")
+        # the revoke-retry sweep: re-attempt while derived rows still
+        # match, then re-discover — whatever still matches is what the
+        # telemetry sees (the accurate failure test, rewrite included)
+        retry = _pending_revoke_claims(
+            ws, sorted(set(amended_claims) | set(freshly_landed)))
+        if retry:
+            for claim in retry:
+                _revoke_derived_rows(ws, claim, revoked_claims)
+            still = _pending_revoke_claims(ws, retry)
+            if still:
+                out["case_revocations_error"] = (
+                    f"{len(still)} amended claim(s) still carry derived "
+                    f"knowledge rows after a revoke re-attempt: "
+                    f"{', '.join(still)}")
         out["revoked_claims"] = revoked_claims
-        if landed != len(entries):
-            out["case_amendments_error"] = (
-                f"{len(entries) - landed} amendment row(s) refused — "
-                f"the flip re-fires next pass (belief-first asymmetry)")
     except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
         out["case_amendments_error"] = f"{type(exc).__name__}: {exc}"
     return out
@@ -760,6 +883,8 @@ def _settle_case_legs(ws: Path, banked: list[str],
                 if leg.get("case_observations_error")]
         if amended.get("case_amendments_error"):
             errs.insert(0, amended["case_amendments_error"])
+        if amended.get("case_revocations_error"):
+            errs.append(amended["case_revocations_error"])
         if errs:
             out["case_observations_error"] = " | ".join(errs)
     return out
