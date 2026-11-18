@@ -200,14 +200,19 @@ def test_registry_corruption_is_fail_closed(monkeypatch, tmp_path):
 # C. the single validation chokepoint: worker_budget_sinks pre_check
 # ---------------------------------------------------------------------------
 
-def test_pre_check_rejects_missing_method_family(tmp_path, capsys):
-    """#432: a dispatch envelope WITHOUT method_family never leaves
-    pre_check (fail-closed missing)."""
+def test_pre_check_passes_missing_method_family_on_the_honest_gap(
+        tmp_path, capsys):
+    """#432 face under the record-only sampling posture: a dispatch
+    envelope WITHOUT method_family passes on the honest gap — no family
+    is fabricated for it (cold sampler, no adoption material), and no
+    methodfamily reject fires on the missing declaration."""
+    from rlvr import q_cells
     ws = tmp_path / 'ws'
     rc = sinks.pre_check(_dispatch_payload(_full_prompt(family=None)),
                          _min_paths(ws))
-    assert rc == 2
-    assert 'REJECT methodfamily' in _stderr(capsys)
+    assert rc == 0, _stderr(capsys)
+    assert 'REJECT methodfamily' not in _stderr(capsys)
+    assert q_cells.JSONLQStore(ws).observations() == []
 
 
 def test_pre_check_rejects_unregistered_token(tmp_path, capsys):
@@ -265,12 +270,14 @@ def test_pre_check_accepts_other_and_quarantines(tmp_path, capsys):
     assert q[0]['claim'] == 'C-001'
 
 
-def test_pre_check_rejects_v0_prose_marker_as_undeclared(tmp_path, capsys):
+def test_v0_prose_marker_stays_undeclared(tmp_path, capsys):
     """#804 de-compat (R3): the v0 prose marker is a replay-only marker,
     retired with the usage-write closure — a prose-only declaration is
-    the UNDECLARED loud gap (the envelope field is the ONE declaration
-    face; a prose ALLOW would lose its family record, the observation
-    row being envelope-only). The REJECT names the sampled exit."""
+    the UNDECLARED face (the envelope field is the ONE declaration
+    face). Record-only posture: the undeclared dispatch passes on the
+    honest gap and the prose marker is NOT adopted as a family — no
+    observation row, no family on the record."""
+    from rlvr import q_cells
     ws = tmp_path / 'ws'
     prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
               '"tier": 1, "tools": ["grep"]}}\n'
@@ -278,7 +285,8 @@ def test_pre_check_rejects_v0_prose_marker_as_undeclared(tmp_path, capsys):
               'facts-snapshot: 1 facts\n'
               'method-family: static-decompile')
     rc = sinks.pre_check(_dispatch_payload(prompt), _min_paths(ws))
-    assert rc == 2, _stderr(capsys)
+    assert rc == 0, _stderr(capsys)
+    assert q_cells.JSONLQStore(ws).observations() == []
     assert not (ws / 'runs' / 'method-family-log.jsonl').exists()
 
 

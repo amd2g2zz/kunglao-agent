@@ -93,42 +93,6 @@ def hierarchical_prior(rows: list[dict], families: list[str],
     return out
 
 
-def mc_propensity(rows: list[dict], chosen: str, families: list[str],
-                  draws: int = 128, seed: int = 7) -> float:
-    """Monte-Carlo estimate of P(this family's posterior sample is the
-    max) — the selection propensity logged per dispatch (#524 item 1):
-    the doubly-robust OPE raw material. Beta(succ+1, tot-succ+1) per
-    family over settled rows; uniform prior when a family has no data."""
-    import random  # noqa: PLC0415
-
-    rng = random.Random(seed)
-    params: dict[str, tuple[float, float]] = {}
-    for fam in families:
-        s = t = 0
-        for r in rows:
-            if (isinstance(r, dict) and r.get("credit") is not None
-                    and str(r.get("method_family")) == fam):
-                s += float(r.get("credit"))
-                t += 1
-        # the log may carry signed credit_amendment
-        # rows — floor the Beta parameters at the +1.0 prior so a
-        # clawback stream can never drive them ≤ 0 (betavariate would
-        # raise, and the fail-open caller would silently drop the OPE
-        # propensity).
-        params[fam] = (max(s, 0.0) + 1.0, max(t - s, 0.0) + 1.0)
-    wins = 0
-    for _ in range(draws):
-        best_v, best_f = -1.0, None
-        for fam in families:
-            a, b = params[fam]
-            v = rng.betavariate(a, b)
-            if v > best_v:
-                best_v, best_f = v, fam
-        if best_f == chosen:
-            wins += 1
-    return wins / draws
-
-
 def act_timeout_s() -> int:
     """The ONE act-timeout read (shared with the e2e LLM face) — the
     registry owns the parse and the declared default; a non-positive

@@ -45,8 +45,8 @@ def test_dispatch_source_labels_never_authorize_ope(tmp_path):
     assert stamps[0]['probability_source'] == 'unknown'
     assert stamps[1]['propensity'] == 0.5
     assert stamps[1]['probability_source'] == 'uniform_exact'
-    assert stamps[2]['propensity'] == 1.0
-    assert stamps[2]['probability_source'] == 'legacy_mc_estimate'
+    assert stamps[2]['propensity'] == 0.5
+    assert stamps[2]['probability_source'] == 'selection_law_exact'
     ws = tmp_path / 'ws'
     for i, source in enumerate(('unknown', 'uniform_exact', 'legacy_mc_estimate')):
         _record(ws, f'C{i}', 'a', probability_source=source)
@@ -210,3 +210,115 @@ def test_controlled_experiment_requires_complete_preregistered_population(tmp_pa
     assert result['verdict'] == 'incomplete_experiment'
     assert result['policies'] == {}
     assert sum(result['experiment_integrity'].values()) > 0
+
+
+def test_learned_stamp_is_the_receipts_exact_conditional_weight(tmp_path):
+    ctx = SimpleNamespace(repo=tmp_path, ws=tmp_path)
+    receipt = {'family': 'b',
+               'candidates': {'a': {'weight': 2.0}, 'b': {'weight': 6.0},
+                              'c': {'weight': 2.0}}}
+    _stamp_ope_propensity(ctx, receipt, False, 'b', None)
+    weights = {f: float(c['weight'])
+               for f, c in receipt['candidates'].items()}
+    assert receipt['propensity'] == round(
+        weights['b'] / sum(weights.values()), 4)
+    assert receipt['propensity'] == 0.6
+    assert receipt['probability_source'] == 'selection_law_exact'
+
+
+def test_unreconstructable_receipts_fall_to_the_unknown_face(tmp_path):
+    ctx = SimpleNamespace(repo=tmp_path, ws=tmp_path)
+    cases = [
+        # the chosen family is absent from the receipt's candidates
+        {'family': 'a', 'candidates': {'b': {'weight': 1.0}}},
+        # every candidate weight is zero: the total is not a support
+        {'family': 'a', 'candidates': {'a': {'weight': 0.0},
+                                       'b': {'weight': 0.0}}},
+        # a non-finite weight cannot be a probability numerator
+        {'family': 'a', 'candidates': {'a': {'weight': float('nan')},
+                                       'b': {'weight': 1.0}}},
+        # a candidate without a weight entry
+        {'family': 'a', 'candidates': {'a': {'p_llm': 1.0},
+                                       'b': {'weight': 1.0}}},
+        # a candidate that is not a mapping
+        {'family': 'a', 'candidates': {'a': 'bad', 'b': {'weight': 1.0}}},
+        # a stringy weight is not a number
+        {'family': 'a', 'candidates': {'a': {'weight': '1.0'},
+                                       'b': {'weight': 1.0}}},
+        # a boolean weight is not a probability weight
+        {'family': 'a', 'candidates': {'a': {'weight': True},
+                                       'b': {'weight': 1.0}}},
+        # a non-positive weight cannot enter a proportional support
+        {'family': 'a', 'candidates': {'a': {'weight': -1.0},
+                                       'b': {'weight': 3.0}}},
+        {'family': 'a', 'candidates': {'a': {'weight': 0.0},
+                                       'b': {'weight': 3.0}}},
+        # no candidates at all
+        {'family': 'a', 'candidates': None},
+    ]
+    for receipt in cases:
+        _stamp_ope_propensity(ctx, receipt, False, 'a', None)
+        assert receipt['propensity'] is None, receipt
+        assert receipt['probability_source'] == 'unknown', receipt
+
+
+def test_compare_excludes_the_legacy_law_and_admits_the_exact_law(tmp_path):
+    ws = tmp_path / 'ws'
+    design = pc.ControlledOPE(seed=5, weights={'a': 1.0, 'b': 1.0},
+                              decision_ids=['C-legacy', 'C-exact'])
+    _record(ws, 'C-legacy', 'a', propensity=0.5,
+            candidates={'a': {'weight': 1.0}, 'b': {'weight': 1.0}},
+            probability_source='legacy_mc_estimate')
+    _record(ws, 'C-exact', 'a', propensity=0.4,
+            candidates={'a': {'weight': 2.0}, 'b': {'weight': 3.0}},
+            probability_source='selection_law_exact')
+    report = pc.compare(ws, bootstrap=0, experiment=design)
+    # the legacy tag dies at the source gate; the exact tag passes it
+    # and leaves at the experiment-mismatch gate instead
+    assert report['skipped_unknown_probability'] == 1, report
+    assert report['skipped_experiment_mismatch'] == 1, report
+    assert report['decisions'] == 0
+
+
+def test_end_to_end_stamp_audit_compare_uses_the_exact_law(tmp_path):
+    import random
+
+    from rlvr import q_cells as qc
+
+    rng = random.Random(11)
+    receipt = qc.sample_method_family(
+        'aaaaaaaaaaaa', {'a': 1.0, 'b': 3.0}, qc.InMemoryStore(()), rng=rng)
+    chosen = receipt['family']
+    _stamp_ope_propensity(None, receipt, False, chosen, None)
+    weights = {f: float(c['weight'])
+               for f, c in receipt['candidates'].items()}
+    exact = round(weights[chosen] / sum(weights.values()), 4)
+    assert receipt['propensity'] == exact
+    assert receipt['probability_source'] == 'selection_law_exact'
+    ws = tmp_path / 'ws'
+    (ws / 'runs' / 'logs').mkdir(parents=True)
+
+    def _audit_row(claim):
+        line = json.dumps({'event': 'method_family_recorded',
+                           'claim': claim,
+                           'detail': {'method_family': chosen,
+                                      'envelope': receipt}}) + '\n'
+        with (ws / 'runs' / 'logs' / 'e2e-audit.jsonl').open('a') as f:
+            f.write(line)
+
+    _audit_row('C-exact')
+    assert cl.append(ws, 'experience', {
+        'schema': 'transition/1', 'dispatch_id': 'C-exact', 'a': chosen,
+        'propensity': exact, 'r_incr': 1.0})
+    # a twin whose transition carrier disagrees with the stamped law
+    _audit_row('C-twin')
+    assert cl.append(ws, 'experience', {
+        'schema': 'transition/1', 'dispatch_id': 'C-twin', 'a': chosen,
+        'propensity': round(exact / 2, 4), 'r_incr': 1.0})
+    report = pc.compare(ws, bootstrap=0)
+    # the exact-law row traverses the source gate and the carrier
+    # agreement, then stops at the missing-experiment gate; the twin
+    # dies at the carrier gate on the stamped exact value
+    assert report['skipped_unknown_probability'] == 1, report
+    assert report['skipped_propensity_mismatch'] == 1, report
+    assert report['decisions'] == 0

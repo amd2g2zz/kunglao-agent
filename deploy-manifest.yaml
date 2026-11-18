@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: b6c3d99da495114431d51195d239b6d4c2f9995d95f3a2872ca54fd9b5bfb4d3
+    sha256: c8cd3ffbe9fd03ed975df91160de4683aee4dd0900808de31f76669b3d9b3aac
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1155,7 +1155,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: 9ca3493765b4c0c6c9a2ec64f5f1b68b3fb55eaef47d7b789db80f47c2161511
+    sha256: 1ad7d67ee219765fbfcecef5142950b9e348e4172e95725b3192a76ca597fb68
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -1523,7 +1523,7 @@ files:
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
-    sha256: 963870d9de0094f46fc67ab0f9b9279dd4d1694e9811bbd1e0daeff8da8d148f
+    sha256: a9ca75459d0b80e5c82b962aa9324761efc8031d9845fbf87aa4b022cd3e0298
   - src: scripts/rlvr/meta_context.py
     dest: .claude/scripts/rlvr/meta_context.py
     kind: scaffold
@@ -1563,7 +1563,7 @@ files:
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
-    sha256: a303e35db094731ca9c623325c01d974d220a2eb26bb0e0becc4aa3336f6bc79
+    sha256: a60992e1318461e9ebf31e2b51dc64dad65c718107beaabbd509883979d10701
   - src: scripts/rlvr/pool_indexer.py
     dest: .claude/scripts/rlvr/pool_indexer.py
     kind: scaffold
@@ -1715,7 +1715,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: b264cd1cf6e7e7699abc663b0ea56d25e24f68218dccebae35cb41249a3a4126
+    sha256: 40111e0c0b763a8e4c9ed9f2a04ad93b769aaa2ad6534d43237fba0c7c53f2d4
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

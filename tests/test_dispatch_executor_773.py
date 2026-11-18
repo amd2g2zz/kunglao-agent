@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """tests/test_dispatch_executor_773.py — the RL executor wiring.
 
-W2: the dispatch gate's sampler is the EXIT — an undeclared dispatch
-draws one reject-with-guidance carrying the sampled family; cold
-sampler keeps the honest default row. W3: plan() consumes live — the
-admission receipt lands at the dispatch ALLOW tail
-(runs/plan-receipts.jsonl, schema plan-receipt/1).
+W2: the dispatch gate's sampler draw is recorded evidence — an
+undeclared dispatch ADOPTS the draw as its declaration when the
+sampler has material; a cold sampler keeps the honest default row (no
+family fabricated). W3: plan() consumes live — the admission receipt
+lands at the dispatch ALLOW tail (runs/plan-receipts.jsonl, schema
+plan-receipt/1).
 
 All fixtures are SYNTHETIC (privacy rule).
 """
@@ -83,14 +84,12 @@ def test_gate_sample_cold_returns_gap(tmp_path, ss):
                    "prior_source": None}
 
 
-def test_undeclared_reject_carries_the_sampled_family(
+def test_undeclared_adopts_the_sampled_family(
         sinks, tmp_path, capsys, monkeypatch):
-    """The wiring pin (#773 W2): an undeclared dispatch's methodfamily
-    reject carries the gate's own sampled family in the guidance — the
-    retry declares it and the #691 reconciliation view rides the
-    dispatch observation row (the #804 usage merge). (The draw's
-    warm-fill belongs to the strategy_store suite; here the sampler is
-    pinned, the guidance is proven.)"""
+    """The wiring pin: an undeclared dispatch adopts the gate's own
+    sampled family as its declaration (the gate RETURNS the token, and
+    the ALLOW tail's lifecycle record lands it) — record-only, no
+    reject, no fabricated family: the draw IS the record."""
     ws = _bare_ws(tmp_path)
     import rlvr.strategy_store
     monkeypatch.setattr(rlvr.strategy_store, "gate_sample",
@@ -100,10 +99,9 @@ def test_undeclared_reject_carries_the_sampled_family(
     paths = {"workspace": str(ws)}
     rc, value, _view = sinks._method_family_gate(
         paths, UNDECLARED, "C-001", "kunglao-worker", 1, [])
-    assert rc == 2 and value is None
+    assert rc is None and value == "static-decompile"
     out = capsys.readouterr().out
-    assert "static-decompile" in out and "propensity" in out
-    assert "sampler draw" in out
+    assert "methodfamily" not in out
 
 
 def test_declared_dispatch_records_the_sample_view(
@@ -127,13 +125,15 @@ def test_declared_dispatch_records_the_sample_view(
     assert not (ws / "runs" / "method-family-log.jsonl").exists()
 
 
-def test_cold_sampler_rejects_without_a_fabricated_family(
+def test_cold_sampler_passes_without_a_fabricated_family(
         sinks, tmp_path, capsys):
     ws = _bare_ws(tmp_path)
     paths = {"workspace": str(ws)}
     rc, value, _view = sinks._method_family_gate(
         paths, UNDECLARED, "C-001", "kunglao-worker", 1, [])
-    assert rc == 2
+    assert rc is None and value is None, (
+        "a cold sampler must never fabricate a family — the honest gap "
+        "passes uncounted")
     out = capsys.readouterr().out
     assert "sampler draw" not in out, ("a cold sampler must never "
                                        "fabricate a family")

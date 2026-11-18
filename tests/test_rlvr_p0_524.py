@@ -5,7 +5,6 @@
   1  meta-arms: all registered families map into exactly 3 metas
   2  hierarchical pooling: settled rows pool by meta; cross-fingerprint
      rows temper at LAMBDA; no data -> uniform
-  3  mc_propensity: a dominant arm approaches 1, uniform -> ~1/K
   4  env_fingerprint: stable per environment, distinct across models
   5  continuous credit: binary floor + fact production (hindsight
      partial credit for failed-but-productive acts)
@@ -67,15 +66,6 @@ def test_hierarchical_pooling_and_tempering():
             v > 0 for v in
             meta_arms.hierarchical_prior([], ["static-decompile"],
                                          "fp").values())
-
-
-def test_mc_propensity_dominant_and_uniform():
-    rows = ([{"method_family": "A", "credit": 1.0}] * 20
-            + [{"method_family": "B", "credit": 0.0}] * 20)
-    dom = meta_arms.mc_propensity(rows, "A", ["A", "B"])
-    uni = meta_arms.mc_propensity([], "A", ["A", "B"])
-    assert dom > 0.95
-    assert 0.3 < uni < 0.7  # uniform posteriors -> a fair coin
 
 
 def test_env_fingerprint_stable_and_distinct(tmp_path, monkeypatch):

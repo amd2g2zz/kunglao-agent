@@ -508,9 +508,10 @@ def test_allow_writes_no_usage_file(tmp_path, capsys, monkeypatch):
 def test_prose_only_declaration_is_the_undeclared_gap(tmp_path, capsys):
     """The v0 prose marker is a replay-only marker (the #804 abolish
     list; wave-1 retired it in the recording face): a prose-only
-    declaration is the UNDECLARED loud gap — the gate REJECTS with the
-    sampled exit, never an ALLOW whose family record would vanish
-    (the dispatch observation row is envelope-only)."""
+    declaration is the UNDECLARED face. Record-only posture: the
+    undeclared dispatch passes on the honest gap, and the prose marker
+    is NOT adopted as a family — no observation row, no fabricated
+    family record."""
     sys.path.insert(0, str(ROOT / "hooks"))
     try:
         import worker_budget_sinks as sinks
@@ -525,9 +526,9 @@ def test_prose_only_declaration_is_the_undeclared_gap(tmp_path, capsys):
     rc = sinks.pre_check(
         {"tool_input": {"name": "w-test", "description": "",
                         "prompt": prompt}}, _r3_paths(ws))
-    assert rc == 2, (
-        "a prose-only declaration must REJECT as undeclared "
-        f"(the loud gap), got rc={rc}")
+    assert rc == 0, (
+        "a prose-only declaration stays undeclared (record-only "
+        f"posture), got rc={rc}: {capsys.readouterr().err[-400:]}")
     rows = [r for r in q_cells.JSONLQStore(ws).observations()
             if r.get("claim") == "C-804"]
-    assert rows == [], "a rejected dispatch records no observation row"
+    assert rows == [], "the prose marker must not fabricate a family row"
