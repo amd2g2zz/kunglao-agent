@@ -25,7 +25,10 @@ not hold for them), and the two on-disk π carriers stamped from the same
 receipt at the same dispatch — the audit envelope and the transition row
 (via the launch stash) — are cross-checked; a disagreeing pair is
 skipped, counted, and warned (a corrupted carrier can no longer move the
-verdict silently).
+verdict silently). The envelope's ``probability_source`` must name a known
+selection law; a tag outside the accepted set (a legacy estimator, an
+unlabeled number) is excluded and counted the same way — the probability a
+row carries must come from the law that actually made the draw.
 
 Attribution discipline: every decision is cross-checked against each
 sampler-attribution carrier present — the transition row, the audit
@@ -66,6 +69,12 @@ from rlvr import q_cells as _qc
 from rlvr.incremental_reward import read_transitions
 
 MIN_DECISIONS = 40          # below this: underpowered, no verdict
+# the behavior-propensity source tags the weighted join admits: the two
+# exact selection laws stamped from the draw receipt, plus the trusted
+# experiment's own RNG. Any other tag does not describe a known
+# selection law and cannot act as a behavior probability.
+ACCEPTED_PROBABILITY_SOURCES = (
+    "uniform_exact", "selection_law_exact", "experiment_owned_rng")
 DEFAULT_BOOTSTRAP = 1000
 EPSILON = 0.1               # the control arm's exploration rate
 POLICIES = ("thompson", "eps-greedy", "uniform")
@@ -377,6 +386,14 @@ def compare(  # noqa: C901
             skipped_propensity_mismatch += 1
             warn("policy_compare.compare",
                  f"refused decision {key!r}: propensity carriers disagree")
+            continue
+        source = str(env.get("probability_source") or "")
+        if source not in ACCEPTED_PROBABILITY_SOURCES:
+            skipped_unknown_probability += 1
+            warn("policy_compare.compare",
+                 f"refused decision {key!r}: probability_source "
+                 f"{source!r} is not a known selection law — excluded "
+                 f"from off-policy weighting")
             continue
         expected = receipts.get(str(t.get('dispatch_id') or ''))
         if expected is None:

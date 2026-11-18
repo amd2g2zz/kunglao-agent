@@ -1523,7 +1523,7 @@ files:
   - src: scripts/rlvr/meta_arms.py
     dest: .claude/scripts/rlvr/meta_arms.py
     kind: scaffold
-    sha256: 963870d9de0094f46fc67ab0f9b9279dd4d1694e9811bbd1e0daeff8da8d148f
+    sha256: a9ca75459d0b80e5c82b962aa9324761efc8031d9845fbf87aa4b022cd3e0298
   - src: scripts/rlvr/meta_context.py
     dest: .claude/scripts/rlvr/meta_context.py
     kind: scaffold
@@ -1563,7 +1563,7 @@ files:
   - src: scripts/rlvr/policy_compare.py
     dest: .claude/scripts/rlvr/policy_compare.py
     kind: scaffold
-    sha256: a303e35db094731ca9c623325c01d974d220a2eb26bb0e0becc4aa3336f6bc79
+    sha256: a60992e1318461e9ebf31e2b51dc64dad65c718107beaabbd509883979d10701
   - src: scripts/rlvr/pool_indexer.py
     dest: .claude/scripts/rlvr/pool_indexer.py
     kind: scaffold
@@ -1715,7 +1715,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: ce4c165cfbc929612e5d030675ff7e4410400fabebbdc9fbea12be796316bd29
+    sha256: 40111e0c0b763a8e4c9ed9f2a04ad93b769aaa2ad6534d43237fba0c7c53f2d4
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

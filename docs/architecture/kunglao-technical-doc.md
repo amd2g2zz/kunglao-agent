@@ -424,7 +424,7 @@ flowchart TD
 | `rlvr/ledger.py` | rlvr/ledger.py — THE unified rollout ledger (U1). | register_kind(), kinds(), row_schema_lint(), read(), fold() | 10/4 |
 | `rlvr/liveness.py` | rlvr/liveness.py — heartbeat continuity core (#754 E2 + #830 faces). | append_tick(), heartbeat_log_path(), append_tick_log(), reset_continuity_baseline(), newest_sidecar_ts() | 1/0 |
 | `rlvr/marl.py` | marl.py — the MARL knowledge-transfer protocol (#705). | neg_store_path(), signature_class(), read_negatives(), record_negative(), negative_pools() | 3/2 |
-| `rlvr/meta_arms.py` | meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms, | meta_of(), hierarchical_prior(), mc_propensity(), env_fingerprint() | 4/5 |
+| `rlvr/meta_arms.py` | meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms, | meta_of(), hierarchical_prior(), env_fingerprint() | 4/5 |
 | `rlvr/obstacles.py` | obstacles.py — the obstacle/1 attribution registry (issue 461 | validate_obstacle(), record(), read(), retract(), sweep_stale_obstacles() | 4/8 |
 | `rlvr/policy_compare.py` | rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2). | snips(), compare(), main() | 1/2 |
 | `rlvr/posteriors.py ⚠同名双胞（import 边按名共享）: scripts/posteriors.py` | posteriors.py — the DTS posterior store (Discounted Thompson Sampling, | OutcomeAdaptiveGamma, gamma_constant(), default_schedule(), row_schema_lint(), read() | 12/30 |

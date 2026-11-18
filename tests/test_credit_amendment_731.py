@@ -45,7 +45,6 @@ if str(SCRIPTS) not in sys.path:
 
 import settle_round_credit as src  # noqa: E402
 from rlvr import consolidated_ledger as cl  # noqa: E402
-from rlvr import meta_arms  # noqa: E402
 from rlvr import q_cells as qc  # noqa: E402
 from rlvr import strategy_store as ss  # noqa: E402
 
@@ -453,16 +452,6 @@ def test_replay_without_correction_is_a_byte_noop(tmp_path):
 
 
 # ---------- 6. defensive reader fixes (audit findings) ----------------------
-
-def test_mc_propensity_survives_a_clawback_stream():
-    """Accumulated negative credits once drove Beta(s+1, t−s+1) ≤ 0 →
-    betavariate raised → the fail-open caller silently dropped the OPE
-    propensity. The parameters are floored at the +1.0 prior."""
-    rows = [{"credit": -0.8, "method_family": "a"},
-            {"credit": -0.8, "method_family": "a"}]
-    p = meta_arms.mc_propensity(rows, "a", ["a", "b"])
-    assert 0.0 <= p <= 1.0
-
 
 def test_cell_count_excludes_amendments(tmp_path):
     """A correction is not a new observation: the n_min evidence gate

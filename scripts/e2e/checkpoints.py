@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import tempfile
@@ -671,9 +672,17 @@ def _uniform_propensity(receipt: dict) -> float:
 def _stamp_ope_propensity(ctx: RunContext, receipt: dict | None,
                           declared: bool, method_family: str,
                           fingerprint: str | None) -> None:
-    """Keep declarations unknown and preserve known uniform probabilities.
+    """Stamp the behavior propensity from the law that made the draw.
 
-    The legacy learned MC estimator remains unchanged pending #1034.
+    Three sources: a declared selection has no draw receipt behind it
+    (propensity None, source "unknown"); the flat scheduler's marginal
+    is exactly 1/K ("uniform_exact"); the learned face reads the
+    proportional law's final per-candidate weights back off the same
+    sample receipt that made the draw — weight(chosen)/total is the
+    exact conditional probability under that law on its own
+    information set ("selection_law_exact"), never a trajectory
+    marginal. An unreconstructable receipt falls to the honest unknown
+    face; the off-policy comparison admits only known-law sources.
     """
     if not method_family or receipt is None:
         return
@@ -688,15 +697,31 @@ def _stamp_ope_propensity(ctx: RunContext, receipt: dict | None,
             receipt["propensity"] = _uniform_propensity(receipt)
             receipt["probability_source"] = "uniform_exact"
         else:
-            from rlvr import meta_arms as _ma2
-            qc_mod = _load_repo_module(ctx.repo, "rlvr.q_cells")
-            rows = [r for r in qc_mod.JSONLQStore(str(ctx.ws)).observations()
-                    if isinstance(r, dict)]
-            families = sorted({str(r.get("method_family")) for r in rows
-                               if r.get("method_family")} | {method_family})
-            receipt["propensity"] = round(_ma2.mc_propensity(
-                rows, method_family, families), 4)
-            receipt["probability_source"] = "legacy_mc_estimate"
+            # the proportional selection law's exact conditional
+            # probability: the receipt that made the draw carries the
+            # final per-candidate weights, so weight(chosen)/total IS
+            # the probability of this draw under that law on the same
+            # information set. Any unreconstructable receipt raises and
+            # falls to the honest unknown face below.
+            weights = {}
+            for name, cand in (receipt.get("candidates") or {}).items():
+                w = cand["weight"]
+                if isinstance(w, bool) or not isinstance(w, (int, float)):
+                    raise TypeError(
+                        f"candidate weight for {name!r} is not a number")
+                if not math.isfinite(w) or w <= 0.0:
+                    raise ValueError(
+                        f"candidate weight for {name!r} is not a "
+                        f"positive finite probability weight")
+                weights[str(name)] = float(w)
+            total = sum(weights.values())
+            if method_family not in weights or total <= 0.0:
+                raise ValueError(
+                    f"cannot reconstruct the selection probability for "
+                    f"{method_family!r} from this receipt")
+            receipt["propensity"] = round(
+                weights[method_family] / total, 4)
+            receipt["probability_source"] = "selection_law_exact"
         if fingerprint:
             receipt["fingerprint"] = fingerprint
     except Exception as exc:  # noqa: BLE001 — telemetry, never a gate
