@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: b6c3d99da495114431d51195d239b6d4c2f9995d95f3a2872ca54fd9b5bfb4d3
+    sha256: c8cd3ffbe9fd03ed975df91160de4683aee4dd0900808de31f76669b3d9b3aac
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1715,7 +1715,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: b264cd1cf6e7e7699abc663b0ea56d25e24f68218dccebae35cb41249a3a4126
+    sha256: ce4c165cfbc929612e5d030675ff7e4410400fabebbdc9fbea12be796316bd29
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

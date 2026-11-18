@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Synthetic regression for retaining evidence-backed method candidates."""
 from __future__ import annotations
 
@@ -296,10 +298,12 @@ def test_corrupt_intake_does_not_activate_history_fallback(workspace: Path):
     q_cells.append_observation(workspace, 'aaaaaaaaaaaa', 'static-decompile', None,
                                source='dispatch')
     assert strategy_store.PosteriorStrategyStore(workspace).method_sample('aaaaaaaaaaaa') is None
-    rc, _, _ = sinks._method_family_gate(
+    # Record-only: the corrupt-intake sampler gap never gates the
+    # declared dispatch.
+    rc, family, _ = sinks._method_family_gate(
         {'workspace': str(workspace)}, _prompt('static-decompile', 'reason'),
         'C-001', 'kunglao-worker', 1, ['grep'])
-    assert rc == 2
+    assert rc is None and family == 'static-decompile'
 
 
 def test_uniform_host_probability_remains_known(workspace: Path, monkeypatch):
@@ -372,7 +376,8 @@ def test_multiround_host_executes_newly_evidenced_registered_method(
     assert q_cells.dispatch_rows(workspace)[-1]['method_family'] == 'dynamic-trace'
 
 
-def test_declared_override_requires_caller_rationale(workspace: Path, monkeypatch):
+def test_declared_override_records_with_or_without_caller_rationale(
+        workspace: Path, monkeypatch):
     import random
     import time
 
@@ -402,10 +407,12 @@ def test_declared_override_requires_caller_rationale(workspace: Path, monkeypatc
     prompt = Path(request.prompt_file).read_text(encoding='utf-8')
     view = strategy_store.reconcile_declaration(workspace, actual)
     assert view['deviates'] and view['supported']
-    rc, _, _ = sinks._method_family_gate(
+    # Record-only: the unreasoned deviation passes (the gate's record
+    # face marks it), and the reasoned line rides the record.
+    rc, family, _ = sinks._method_family_gate(
         {'workspace': str(workspace)}, prompt, 'C-001',
         'kunglao-worker', 1, ['grep', 'python3'])
-    assert rc == 2
+    assert rc is None and family == actual
     # The live orchestrator supplies this line in the Agent prompt. The
     # checkpoint harness has no caller rationale input and does not add it.
     reasoned = prompt + '\nagent-reasoning: observed evidence requires independent observation\n'
@@ -415,16 +422,21 @@ def test_declared_override_requires_caller_rationale(workspace: Path, monkeypatc
     assert rc is None and family == actual
 
 
-def test_missing_reason_cannot_override_current_sample(workspace: Path):
+def test_silent_deviation_is_allowed_and_recorded(workspace: Path):
+    """Record-only posture: a declaration that deviates from the draw
+    with no recorded reason passes — the gate returns the declared
+    family and the reconciliation view for the row to mark the silent
+    override (the record face, not a reject)."""
     from rlvr import state
 
     fp = state.signature_hash(state.snapshot(workspace))
     sampled = strategy_store.PosteriorStrategyStore(workspace).method_sample(fp)['family']
     other = ({'static-decompile', 'dynamic-trace'} - {sampled}).pop()
-    rc, _, _ = sinks._method_family_gate(
+    rc, family, view = sinks._method_family_gate(
         {'workspace': str(workspace)}, _prompt(other), 'C-001',
         'kunglao-worker', 1, ['grep'])
-    assert rc == 2
+    assert rc is None and family == other
+    assert view['sampled_family'] == sampled
 
 
 def test_other_escape_preserves_validation_without_adding_mass(workspace: Path):
@@ -536,10 +548,12 @@ def test_deleted_intake_cannot_restore_history_support(workspace: Path):
                                source='dispatch')
     (workspace / priors.SEED_REL).unlink()
     assert strategy_store.PosteriorStrategyStore(workspace).method_sample('aaaaaaaaaaaa') is None
-    rc, _, _ = sinks._method_family_gate(
+    # Record-only: the sampler gap never gates the dispatch — the
+    # declared family passes and the reconciliation rides the row.
+    rc, family, _ = sinks._method_family_gate(
         {'workspace': str(workspace)}, _prompt('dynamic-trace', 'new evidence'),
         'C-001', 'kunglao-worker', 1, ['grep'])
-    assert rc == 2
+    assert rc is None and family == 'dynamic-trace'
 
 
 def test_tiny_positive_support_survives_receipt_precision(workspace: Path):
@@ -575,10 +589,12 @@ def test_expansion_evidence_withdrawal_removes_only_its_source(workspace: Path, 
     assert 'expansion' not in sources
     assert not any(source.startswith('expansion_receipt:') for source in sources)
     assert ('dynamic-trace' in after['candidates']) is independent_intake
-    rc, _, _ = sinks._method_family_gate(
+    # Record-only: the withdrawal removes only the expansion's support
+    # on the sampler face; the declared dispatch passes either way.
+    rc, family, _ = sinks._method_family_gate(
         {'workspace': str(workspace)}, _prompt('dynamic-trace', 'independent observation'),
         'C-001', 'kunglao-worker', 1, ['grep'])
-    assert rc is None if independent_intake else rc == 2
+    assert rc is None and family == 'dynamic-trace'
 
 
 def test_support_marker_failure_prevents_source_publication(tmp_path: Path, monkeypatch):
@@ -602,7 +618,7 @@ def test_support_marker_failure_prevents_source_publication(tmp_path: Path, monk
     assert not list((ws / expansion.RECEIPT_DIR).glob('E-*.json'))
 
 
-def test_malformed_expansion_path_cannot_bypass_support_gate(workspace: Path):
+def test_malformed_expansion_path_cannot_fabricate_support(workspace: Path):
     from rlvr import expansion
 
     priors.seed_intake_prior(workspace, families=['static-decompile'])
@@ -610,10 +626,12 @@ def test_malformed_expansion_path_cannot_bypass_support_gate(workspace: Path):
     view = strategy_store.reconcile_declaration(workspace, 'dynamic-trace')
     assert view['supported'] is False
     assert view['sampled_family'] == 'static-decompile'
-    rc, _, _ = sinks._method_family_gate(
+    # Record-only: the unsupported declaration passes and is recorded;
+    # the malformed receipt never fabricates sampler support.
+    rc, family, _ = sinks._method_family_gate(
         {'workspace': str(workspace)}, _prompt('dynamic-trace', 'reason'),
         'C-001', 'kunglao-worker', 1, ['grep'])
-    assert rc == 2
+    assert rc is None and family == 'dynamic-trace'
 
 
 @pytest.mark.parametrize('evidence_mode', [True, False])
@@ -632,7 +650,9 @@ def test_reconcile_error_preserves_current_mode_boundary(workspace: Path, monkey
         assert view['support_error'] == 'ValueError'
     else:
         assert 'supported' not in view
-    rc, _, _ = sinks._method_family_gate(
+    rc, family, _ = sinks._method_family_gate(
         {'workspace': str(workspace)}, _prompt('static-decompile', 'reason'),
         'C-001', 'kunglao-worker', 1, ['grep'])
-    assert rc == 2 if evidence_mode else rc is None
+    # Record-only: a sampler failure never turns an ALLOW into anything
+    # else, in either evidence mode.
+    assert rc is None and family == 'static-decompile'

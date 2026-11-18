@@ -14,14 +14,13 @@ and records the outcome:
 1. the declaration row carries ``propensity`` (the sampler's draw
    probability of the DECLARED family), ``sampled_family`` and
    ``prior_source`` (history | llm_prior | store);
-2. a deviation emits a unified-log ``sample_deviation`` event — the
-   older "recorded, never rejected" amendment was NARROWED by the
-   sampled-binds card: a silent deviation rejects with the sampled
-   family as the exit, and a reasoned deviation must be coherent
-   (propensity > 0); the coherent pass still emits the event;
+2. a deviation from the draw is a recorded decision, never a gate: the
+   dispatch passes and one ``sample_deviation`` event carries the
+   deviation's logged view and the dispatch's own reason when it
+   declared one;
 3. the ``agent-reasoning:`` prefix is the recorded-decision face the
-   bind check reads — the reason rides the event on a coherent pass,
-   and never silences the family reconciliation;
+   deviation record reads — the reason rides the event, and never
+   silences the family reconciliation;
 4. ``settle_round_credit.record_case_settlements`` moves the linked
    ``CasePosterior`` and the rank order follows — the non-empty-posterior
    face: ``Thompson Beta over N linked`` instead of cold-start.
@@ -150,38 +149,40 @@ def test_declared_family_records_propensity_and_sampled_family(
 # 2. a deviation from the sample is recorded, never silent (and never a gate)
 # ---------------------------------------------------------------------------
 
-def test_deviation_from_sample_rejects_without_recorded_decision(
+def test_deviation_from_sample_is_allowed_and_recorded(
         tmp_path, capsys):
-    """SUPERSEDED for the deviation case by the sampled-binds card
-    (owner directive, the logs-panel follow-up): the prior holds only
-    static-decompile, the envelope declares dynamic-trace with NO
-    recorded override — the 17/17 production counterexample shape ("the
-    sampler never binds"). The dispatch REJECTS naming the sampled
-    family; the `sample_deviation` vocabulary stays registered (the
-    coherent face in tests/test_sampled_binds_794.py still emits it)."""
+    """Record-only posture: the prior holds only static-decompile, the
+    envelope declares dynamic-trace with NO recorded override — the
+    dispatch passes and the deviation is on the record: the observation
+    row marks the override (reason slot explicitly null) and one
+    ``sample_deviation`` event carries the pair."""
     import event_taxonomy as et
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
     rc = sinks.pre_check(
         _dispatch_payload(_full_prompt('dynamic-trace')), _min_paths(ws))
     err = capsys.readouterr().err
-    assert rc == 2, f"the silent deviation must not pass: rc={rc}"
+    assert rc == 0, f"the recorded deviation must pass: rc={rc}, err={err[-300:]}"
     assert 'sample_deviation' in et.EMIT_ACTIONS
-    assert _usage_rows(ws) == [], 'a rejected dispatch writes no usage row'
-    assert _events(ws, 'sample_deviation') == []
+    row = _usage_rows(ws)[-1]
+    assert row['method_family'] == 'dynamic-trace'
+    assert row['sampled_family'] == 'static-decompile'
+    assert row['family_override'] is True
+    assert row['override_source'] == 'declared'
+    evs = _events(ws, 'sample_deviation')
+    assert len(evs) == 1
+    assert _detail(evs[0])['sampled'] == 'static-decompile'
 
 
 # ---------------------------------------------------------------------------
 # 3. the agent-reasoning prefix never silences the record
 # ---------------------------------------------------------------------------
 
-def test_agent_reasoning_alone_does_not_buy_a_zero_propensity_deviation(
-        tmp_path, capsys):
-    """The reason-rides-the-record face still holds, but the
-    sampled-binds card adds the coherence floor: a reason + propensity
-    0.0 is not a decision the policy could have made (the declared
-    family was never a candidate) — REJECT with the coherence guidance
-    (the coherent-pass face lives in tests/test_sampled_binds_794.py)."""
+def test_agent_reasoning_rides_the_deviation_record(tmp_path, capsys):
+    """The reason-rides-the-record face: a reasoned deviation whose
+    declared family was never a candidate passes, and the
+    ``agent-reasoning:`` line lands on the ``sample_deviation`` event —
+    the decision is recorded, never refused, never silent."""
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
     prompt = _full_prompt(
@@ -189,9 +190,13 @@ def test_agent_reasoning_alone_does_not_buy_a_zero_propensity_deviation(
         extra='agent-reasoning: dynamic claims fit this binary better')
     rc = sinks.pre_check(_dispatch_payload(prompt), _min_paths(ws))
     err = capsys.readouterr().err
-    assert rc == 2, f"the p=0 reasoned deviation must not pass: rc={rc}"
-    assert 'propensity' in err
-    assert _events(ws, 'sample_deviation') == []
+    assert rc == 0, f"the recorded deviation must pass: rc={rc}, err={err[-300:]}"
+    evs = _events(ws, 'sample_deviation')
+    assert len(evs) == 1
+    det = _detail(evs[0])
+    assert det['reason'] == 'dynamic claims fit this binary better'
+    assert det['declared'] == 'dynamic-trace'
+    assert det['sampled'] == 'static-decompile'
 
 
 # ---------------------------------------------------------------------------
