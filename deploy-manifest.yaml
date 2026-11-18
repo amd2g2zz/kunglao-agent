@@ -1155,7 +1155,7 @@ files:
   - src: scripts/settle_round_credit.py
     dest: .claude/scripts/settle_round_credit.py
     kind: scaffold
-    sha256: 9ca3493765b4c0c6c9a2ec64f5f1b68b3fb55eaef47d7b789db80f47c2161511
+    sha256: 1ad7d67ee219765fbfcecef5142950b9e348e4172e95725b3192a76ca597fb68
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold

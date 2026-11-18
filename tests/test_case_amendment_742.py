@@ -17,9 +17,10 @@ The fix mirrors the credit-amendment shape for the pair grain:
     original case-observation/1 row stays byte-untouched as history;
   - ``reconcile_case_settlements`` folds BOTH stamps (last-amendment-
     wins) into the pair's effective outcome, compares it with the
-    claim's CURRENT decisive register status, and applies a ±1 flip to
-    the belief — belief-first, floored at the Beta(1,1) support so a
-    desynced ledger can never push the posterior outside its support;
+    claim's CURRENT decisive register status, appends the amendment row
+    FIRST and only then applies the floored ±1 flip to the belief (the
+    Beta(1,1) support floors stay, so a desynced ledger can never push
+    the posterior outside its support);
   - idempotence lives in the fold: once the row lands the effective
     outcome equals the target and every re-run is a read-scan no-op;
   - honest gaps: a non-decisive terminal, a removed claim, a retired
@@ -237,7 +238,7 @@ def test_delta_composes_with_runner_banked_mass(tmp_path):
     assert _belief(ws, "case-q2") == (2.0, 2.0)   # 3-1 / 1+1: delta, not reset
 
 
-# ---------- 5. the belief-first refusal is loud -----------------------------
+# ---------- 5. the refusal is loud (commit-first: nothing moves) -------------
 
 def test_row_refusal_surfaces_in_the_error_field(tmp_path, monkeypatch):
     ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN",
