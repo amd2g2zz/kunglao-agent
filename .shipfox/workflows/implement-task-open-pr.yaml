@@ -7,6 +7,14 @@ triggers:
   # Dispatchers, ticket loaders, and people start a task with the inputs in the guide.
   manual:
     source: manual
+  # An open issue in this repository gets the shipfox trigger label.
+  on_issues_labeled:
+    source: github_amd2g2zz
+    event: issues.labeled
+    filter: >-
+      event.repository.full_name == "amd2g2zz/kunglao-agent" &&
+      event.label.name == "shipfox" &&
+      event.issue.state == "open"
 
 # Published when the run succeeds, for the workflow that started it.
 outputs:
@@ -39,6 +47,12 @@ jobs:
           INPUT_TICKET_ID: '${{ trigger.source == "manual" && has(inputs.ticket_id) ? inputs.ticket_id : "" }}'
           INPUT_URL: '${{ trigger.source == "manual" && has(inputs.url) ? inputs.url : "" }}'
           INPUT_REQUEST: '${{ trigger.source == "manual" && has(inputs.request) ? inputs.request : "" }}'
+          TICKET_ID: '${{ trigger.event == "issues.labeled" ? string(event.issue.number) : "" }}'
+          TICKET_IDENTIFIER: '${{ trigger.event == "issues.labeled" ? "issue-" + string(event.issue.number) : "" }}'
+          TICKET_TITLE: '${{ trigger.event == "issues.labeled" ? event.issue.title : "" }}'
+          TICKET_URL: '${{ trigger.event == "issues.labeled" ? event.issue.html_url : "" }}'
+          TICKET_DESCRIPTION: '${{ trigger.event == "issues.labeled" ? event.issue.body : "" }}'
+          TICKET_REFERENCE: '${{ trigger.event == "issues.labeled" ? "Fixes #" + string(event.issue.number) : "" }}'
         run: |
           if [ "$MANUAL_START" = true ]; then
             MISSING=""
@@ -218,6 +232,20 @@ jobs:
           pr_summary: string
           questions: string
 
+      # Ticket write-back: the agent's questions land on the issue when the
+      # task cannot be implemented.
+      - key: comment_questions
+        if: ${{ steps.fix.outputs.status == "needs_clarification" && steps.task.outputs.ticket_id != "" }}
+        tool: add_issue_comment
+        connection: github_amd2g2zz
+        with:
+          owner: ${{ steps.prepare.outputs.owner }}
+          repo: ${{ steps.prepare.outputs.repo }}
+          issue_number: ${{ int(steps.task.outputs.ticket_id) }}
+          body: |-
+            This task needs clarification before it can be implemented:
+
+            ${{ steps.fix.outputs.questions }}
 
       - key: test
         if: ${{ steps.fix.outputs.status == "implemented" }}
@@ -263,6 +291,18 @@ jobs:
         outputs:
           pr_number: ${{ result.pull_request.number }}
           pr_url: ${{ result.pull_request.html_url }}
+
+      # Ticket write-back: the draft pull request link lands on the issue.
+      - key: comment_pr_link
+        if: ${{ steps.open_pr.status == "succeeded" && steps.task.outputs.ticket_id != "" }}
+        tool: add_issue_comment
+        connection: github_amd2g2zz
+        with:
+          owner: ${{ steps.prepare.outputs.owner }}
+          repo: ${{ steps.prepare.outputs.repo }}
+          issue_number: ${{ int(steps.task.outputs.ticket_id) }}
+          body: |-
+            Opened ${{ steps.open_pr.outputs.pr_url }} — ${{ steps.task.outputs.reference }}
 
 
   respond_to_feedback:
