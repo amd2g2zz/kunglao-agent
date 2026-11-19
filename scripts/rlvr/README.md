@@ -46,14 +46,6 @@ scripts/rlvr/
 │                        #   probe.py shim (checker.py's trust boundary,
 │                        #   mirrored) + probe_delta (the #954 ΔV seam);
 │                        #   fail-closed, deterministic, oracle-locked
-├── direction.py         # #954 the direction face (Type-3) — Beta
-│                        #   posterior (α, β) per direction over the shared
-│                        #   runs/direction-state.jsonl (sibling rows to the
-│                        #   #958 censor rows), per-step credit =
-│                        #   probe_face.probe_delta (the ΔV seam), racing
-│                        #   elimination gated on posterior collapse (no
-│                        #   failure evidence -> never eliminated);
-│                        #   KUNGLAO_DIRECTION=1, default OFF
 ├── triples.py           # experience_triples — (s, a, r) CSV view + Q report
 ├── winrate.py           # winrate_curve — read-side aggregation face
 ├── state.py             # state_signature — canonical state + V(s) anchor
@@ -358,15 +350,6 @@ the one-line pointer (name — the docstring's opening line):
   terminal / censored_env / agent_death, mechanical over session returncode +
   timed_out + active env-class blocker files + liveness at exit; agent-death
   prose stays owned by the #447/#497 Type E gate.
-- `censoring` — rlvr/censoring.py — censored posterior semantics (#955 links 4/5):
-  censored rows update NOTHING, per-direction trailing censor streaks, the
-  freeze-at-K predicate, and the #954 integration seam
-  (posterior_observations filter over runs/direction-state.jsonl).
-- `direction` — rlvr/direction.py — the oracle-probe density direction face (#954,
-  Type-3): Beta posterior per direction over the shared direction-state rows,
-  step credit = probe_face.probe_delta (the ΔV seam), racing elimination gated
-  on posterior collapse (zero failure evidence never eliminates), flag-gated
-  KUNGLAO_DIRECTION=1 loop faces (default OFF).
 - `disposition` — rlvr/disposition.py — the episode disposition algebra (#988):
   one evidence-gated disposition per episode (SOLVED / OUT_OF_SCOPE /
   CENSORED_ENV / ATTEMPTED_EXHAUSTED / INFRA / FAILED / SURRENDER) under a

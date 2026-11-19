@@ -392,8 +392,6 @@ files:
     r1: 2
   scripts/rlvr/censored_review.py:
     r1: 6
-  scripts/rlvr/censoring.py:
-    r1: 8
   scripts/rlvr/commit_semantics.py:
     r1: 1
   scripts/rlvr/compose.py:
@@ -402,8 +400,6 @@ files:
     r1: 1
   scripts/rlvr/crystallize.py:
     r1: 1
-  scripts/rlvr/direction.py:
-    r1: 14
   scripts/rlvr/episode_pool.py:
     r1: 3
   scripts/rlvr/episode_schema.py:
@@ -1645,8 +1641,6 @@ files:
   tests/test_rl_v2_worker_885.py:
     r2: 1
   tests/test_rl_v3_censoring_955.py:
-    r1: 5
-  tests/test_rl_v3_direction_954.py:
     r1: 4
   tests/test_rl_v3_playbook_960.py:
     r1: 1

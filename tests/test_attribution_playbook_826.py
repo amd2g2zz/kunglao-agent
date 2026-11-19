@@ -21,8 +21,11 @@ faces (the #806 axis's third card, on top of the #824 contract and the
   4. the self-correction loop: surprise (a verified outcome
      contradicting the value table's expectation) generates the forced
      re-examination commit.
-  5. component ablation: the four knobs (retrieval / value_table /
-     attribution / playbook), each priced in output terms.
+
+The former component-ablation knobs (retrieval / value_table /
+attribution / playbook) are retired: every component runs
+unconditionally, and the pricing face that reported their deltas died
+with the switches.
 
 Fixtures are synthetic workspaces; pool episodes are seeded through the
 unmodified #824 faces; settlement/verifier semantics are only ever
@@ -51,9 +54,7 @@ from rlvr import playbook as pb  # noqa: E402
 
 # ---------------------------------------------------------------- fixtures
 
-_ENV = ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-        "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK",
-        "KUNGLAO_META_RETRIEVE_MAX", "KUNGLAO_META_MIN_UTILITY",
+_ENV = ("KUNGLAO_META_RETRIEVE_MAX", "KUNGLAO_META_MIN_UTILITY",
         "KUNGLAO_META_W_REWARD", "KUNGLAO_META_W_COST",
         "KUNGLAO_META_W_PRIOR", "KUNGLAO_META_N_SHRINK",
         "KUNGLAO_META_W_CITATION", "KUNGLAO_META_W_RETRIEVAL")
@@ -125,23 +126,10 @@ def _seed_ok(ws: Path, claim: str, features: list[str], **kw) -> dict:
 
 # ---------------------------------------------------------------- helpers
 
-@pytest.fixture(autouse=True)
-def _declared_learning_faces(monkeypatch):
-    """The learning switches default OFF; these pins assert the
-    declared-ON behavior of each component."""
-    for name in ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK"):
-        monkeypatch.setenv(name, "1")
-
-
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear the knob values, then re-declare the four learning switches
-    ON (their silent default is OFF)."""
+    """Clear the knob values (the numeric knob face stays env-tunable)."""
     for name in _ENV:
         monkeypatch.delenv(name, raising=False)
-    for name in ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK"):
-        monkeypatch.setenv(name, "1")
 
 
 def _failure(ws: Path, claim: str, features: list[str], why: str,
@@ -532,61 +520,6 @@ class TestEnvelopeEnrichment:
         assert dead["class"] == "static-x"
         assert dead["attempts"] == 4
         assert dead["over_cap"] is False
-
-    def test_attribution_ablated_switch_has_no_evidence(
-            self, tmp_path, monkeypatch):
-        _clean_env(monkeypatch)
-        ws = _mk_ws(tmp_path)
-        for i in range(3):
-            _seed_ok(ws, f"C-S{i}", ["lane-a", "cond-a"])
-        tuned = _episode("C-T0", ["lane-a", "cond-a"],
-                         commits=[{"seq": 1, "action": "tune",
-                                   "class": "frida-gadget",
-                                   "param_changes": {"timeout_ms": 5000},
-                                   "summary": "parameterized retry"}])
-        _seed(ws, tuned)
-        _failure(ws, "C-F9", ["lane-a", "cond-a"], "wrong approach")
-        (ws / "task_spec.yaml").write_text("lane: a\n", encoding="utf-8")
-        monkeypatch.setenv("KUNGLAO_META_W_REWARD", "-1")
-        monkeypatch.setenv("KUNGLAO_META_ATTRIBUTION", "0")
-        block = mp.envelope_block(ws, "C-F9", phase="commit_boundary")
-        assert block["commit"]["action"] == "switch"
-        assert block["commit"]["attribution"]["available"] is False
-
-    def test_playbook_ablated_removes_the_ride_along(self, tmp_path,
-                                                     monkeypatch):
-        _clean_env(monkeypatch)
-        ws = _mk_ws(tmp_path)
-        _seed_ok(ws, "C-S0", ["fam-x"], fragments=["persist worked here"])
-        monkeypatch.setenv("KUNGLAO_META_PLAYBOOK", "0")
-        ctx = mr.assemble(ws, ["fam-x"], phase="episode_start")
-        assert ctx["playbook"] == []
-        assert ctx["budget"]["playbook"] is False
-        # the cases component is a DIFFERENT knob — unaffected
-        assert [c["claim"] for c in ctx["cases"]] == ["C-S0"]
-
-    def test_four_knobs_in_the_knob_face(self, monkeypatch):
-        _clean_env(monkeypatch)
-        k = mp.knobs()
-        assert k["retrieval"] is True and k["value_table"] is True
-        assert k["attribution"] is True and k["playbook"] is True
-        monkeypatch.setenv("KUNGLAO_META_PLAYBOOK", "0")
-        assert mp.knobs()["playbook"] is False
-
-    def test_price_ablations_reports_all_four(self, tmp_path, monkeypatch):
-        _clean_env(monkeypatch)
-        ws = _mk_ws(tmp_path)
-        for i in range(3):
-            _seed_ok(ws, f"C-S{i}", ["lane-a", "cond-a"])
-        _failure(ws, "C-F9", ["lane-a", "cond-a"], "wrong approach")
-        monkeypatch.setenv("KUNGLAO_META_W_REWARD", "-1")
-        priced = cs.price_ablations(ws, features=["lane-a", "cond-a"],
-                                    phase="commit_boundary", claim="C-F9")
-        assert set(priced) == {"retrieval", "value_table", "attribution",
-                               "playbook"}
-        for knob, row in priced.items():
-            assert row["component"] == knob
-            assert row["price"], f"{knob} carries an output-terms price"
 
     def test_enrichment_fail_open(self, tmp_path, monkeypatch):
         _clean_env(monkeypatch)

@@ -36,8 +36,7 @@ The seven arms (docs/design/ws5-five-arms.yaml, the arm registry):
 Arms differ ONLY in declared faces (runner face, store kind, env). The
 launcher is HERMETIC: every supply/learning switch an arm can declare
 (KUNGLAO_RECALL / KUNGLAO_EXPANSION / KUNGLAO_PREDICT_BEFORE_TRY /
-KUNGLAO_SCHEDULER / KUNGLAO_META_* / KUNGLAO_DIRECTION /
-KUNGLAO_PLAYBOOK) is stripped from the inherited
+KUNGLAO_SCHEDULER / KUNGLAO_PLAYBOOK) is stripped from the inherited
 environment before each arm's declared env merges — ambient shell state
 can never contaminate an arm. Store isolation: warm arms read an
 ISOLATED per-run COPY of the configured warm store (arms never share a
@@ -140,9 +139,7 @@ EVAL_ROOT_ENV = "KUNGLAO_EVAL_ROOT"
 # ambient shell value can never masquerade as a declared arm value
 STRIPPED_ENV = ("KUNGLAO_RECALL", "KUNGLAO_EXPANSION",
                 "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_SCHEDULER",
-                "KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-                "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK",
-                "KUNGLAO_DIRECTION", "KUNGLAO_PLAYBOOK",
+                "KUNGLAO_PLAYBOOK",
                 SEED_STORE_ENV, EXPORT_STORE_ENV)
 
 VALID_FACES = ("loop", "cc-default", "cc-warm-context")

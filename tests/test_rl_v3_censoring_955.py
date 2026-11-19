@@ -16,8 +16,9 @@ Faces under test (the issue's chain links 1, 2, 4, 5, 12):
      trip with mass conservation, deterministic decay on the #667
      parameters, register status through the ws_yaml single-writer seam;
   4. censored posterior semantics — a censored sample updates NOTHING
-     (fold mass byte-stable, trajectory wall holds) and the censor
-     streak freezes a direction at K;
+     (fold mass byte-stable, trajectory wall holds); the former
+     direction-state streak/freeze cluster (rlvr.censoring) died with
+     its only consumer, the retired direction face;
   5. the CENSORED(env, reason) row type in the unified ledger append
      face (schema censored/1) + its closed env vocabulary;
   6. the delivery gate's behavioral pin (#955 round-2 test gap): a
@@ -43,7 +44,7 @@ for _p in (ROOT / "scripts", ROOT / "experiments" / "learning-loop"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from rlvr import censoring, interruption, parking, q_cells  # noqa: E402
+from rlvr import interruption, parking, q_cells  # noqa: E402
 import status_defs  # noqa: E402
 from e2e.checkpoints import _no_open_claims  # noqa: E402
 
@@ -453,7 +454,7 @@ class TestParking:
         assert parking.escrow_rows(ws) == []
 
 
-# ------------------------------------ 4. censored-no-update + streak freeze
+# ------------------------------------ 4. censored-no-update
 
 class TestCensoredSemantics:
     def test_censored_rows_never_reach_the_fold(self, tmp_path):
@@ -463,45 +464,11 @@ class TestCensoredSemantics:
             "mod-crypto")
         q_cells.append_censored(ws, "risk-control", "env_risk_control",
                                 source="protocol", claim="C-1")
-        censoring.observe_censored(ws, "deep-probe", "env_risk_control")
         after = q_cells.fold(q_cells.default_store(ws)).family_mass(
             "mod-crypto")
         assert before == after                     # NO posterior update
         schemas = {r["schema"] for r in q_cells.trajectory_rows(ws)}
         assert schemas == {"q-cell-obs/1"}         # the trajectory wall holds
-
-    def test_streak_freezes_at_k_and_live_breaks_it(self, tmp_path):
-        ws = _mk_ws(tmp_path)
-        for _ in range(censoring.CENSOR_FREEZE_K - 1):
-            censoring.observe_censored(ws, "deep-probe", "env_toolchain")
-        assert not censoring.frozen(ws, "deep-probe")
-        censoring.observe_censored(ws, "deep-probe", "env_toolchain")
-        assert censoring.frozen(ws, "deep-probe")       # K consecutive
-        assert not censoring.frozen(ws, "other-dir")    # per-direction
-        censoring.observe_live(ws, "deep-probe")        # #954 seam face
-        assert not censoring.frozen(ws, "deep-probe")
-
-    def test_streaks_are_per_direction(self, tmp_path):
-        ws = _mk_ws(tmp_path)
-        censoring.observe_censored(ws, "d-1", "env_risk_control")
-        censoring.observe_censored(ws, "d-1", "env_risk_control")
-        censoring.observe_censored(ws, "d-2", "env_toolchain")
-        streaks = censoring.censor_streaks(ws)
-        assert streaks == {"d-1": 2, "d-2": 1}
-
-    def test_posterior_filter_drops_only_censored_rows(self, tmp_path):
-        ws = _mk_ws(tmp_path)
-        censoring.observe_censored(ws, "d-1", "env_risk_control")
-        censoring.observe_live(ws, "d-1")
-        rows = censoring.state_rows(ws)
-        kept = censoring.posterior_observations(rows)
-        assert [r["censored"] for r in kept] == [False]
-        assert censoring.posterior_observations([]) == []
-
-    def test_empty_direction_refuses(self, tmp_path):
-        ws = _mk_ws(tmp_path)
-        with pytest.raises(ValueError):
-            censoring.observe_censored(ws, "  ", "env_toolchain")
 
 
 # --------------------------------------- 5. the CENSORED ledger row type
@@ -552,9 +519,9 @@ class TestCensoredRowSchema:
 # ------------------------------------------- #799 seals on the new ledgers
 
 class TestSealedLedgers:
-    """Fix 2: the parked-mass and direction-state rows ride the same
-    #799 seal discipline as every q-cell row — armed, a forged raw row
-    can never drive escrow_balance(), open_park_row() or frozen()."""
+    """Fix 2: the parked-mass rows ride the same #799 seal discipline as
+    every q-cell row — armed, a forged raw row can never drive
+    escrow_balance() or open_park_row()."""
 
     @pytest.fixture
     def armed_seal(self, tmp_path, monkeypatch):
@@ -592,28 +559,6 @@ class TestSealedLedgers:
         parking.unpark_claim(ws, "C-1")
         assert parking.escrow_balance(ws) == pytest.approx(0.0)
         assert len(parking.escrow_rows(ws)) == 2   # park + release, sealed
-
-    def test_forged_state_row_cannot_drive_frozen(self, tmp_path,
-                                                  armed_seal):
-        ws = _mk_ws(tmp_path)
-        censoring.observe_censored(ws, "d-1", "env_risk_control")
-        censoring.observe_censored(ws, "d-1", "env_risk_control")
-        assert not censoring.frozen(ws, "d-1")
-        for _ in range(censoring.CENSOR_FREEZE_K):
-            self._forge(ws, "runs/direction-state.jsonl",
-                        {"schema": "direction-censor/1", "ts": "x",
-                         "direction": "d-1", "censored": True,
-                         "reason": "forged"})
-        assert censoring.frozen(ws, "d-1") is False   # forgeries refused
-        assert censoring.censor_streak(censoring.state_rows(ws),
-                                       "d-1") == 2
-
-    def test_legit_state_rows_survive_armed_reads(self, tmp_path,
-                                                  armed_seal):
-        ws = _mk_ws(tmp_path)
-        for _ in range(censoring.CENSOR_FREEZE_K):
-            censoring.observe_censored(ws, "d-1", "env_toolchain")
-        assert censoring.frozen(ws, "d-1") is True
 
 
 # --------------------------------------- lint compatibility: PARKED status

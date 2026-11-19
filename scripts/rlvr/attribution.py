@@ -200,9 +200,3 @@ def report_ref(report: dict) -> str:
     canonical = json.dumps(report, sort_keys=True, ensure_ascii=True,
                            separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
-
-
-def knob_on() -> bool:
-    """The component-ablation switch (the third of four knobs)."""
-    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
-    return runtime_switches.get_bool("KUNGLAO_META_ATTRIBUTION")

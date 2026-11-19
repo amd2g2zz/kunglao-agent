@@ -10,10 +10,6 @@ budget (knob group c), and attaches the feature-matched playbook view
 fragments. The output rides the dispatch envelope's meta-policy block —
 the executor's in-context learning is FED, not bypassed (#806 axis).
 
-Ablation: KUNGLAO_META_RETRIEVAL=0 removes the retrieval component —
-no retrieve call (the pool counters stay untouched), no cases, no
-playbook; the budget block still reports the (inactive) budget.
-
 Zero telemetry points (Standard 11). No storage: the cases' utility
 counters are the pool's own faces (retrieval bumps them; settlement
 decays/revalues them).
@@ -57,11 +53,7 @@ def assemble(ws, features: list[str], *, phase: str,
     refusal propagates)."""
     k = _knobs(knobs)
     budget = {"max_cases": int(k["retrieve_max"]),
-              "min_utility": float(k["min_utility"]),
-              "retrieval": bool(k["retrieval"]),
-              "playbook": bool(k["playbook"])}
-    if not k["retrieval"]:
-        return {"cases": [], "playbook": [], "budget": budget}
+              "min_utility": float(k["min_utility"])}
 
     ws = Path(ws)
     matched = pool.retrieve(ws, features, phase=phase)
@@ -82,17 +74,16 @@ def assemble(ws, features: list[str], *, phase: str,
                       "summary": fragments[0] if fragments else ""})
 
     groups: list[dict] = []
-    if k["playbook"]:
-        # the P3 compression face: the P1 admission spine with the
-        # quality axioms applied (case-specific refused, verb-bearing
-        # kept, support-ranked) — no store, computed per call
-        from rlvr import playbook  # noqa: PLC0415 — lazy (cycle-free)
-        feats = {str(f) for f in features}
-        for group in playbook.compressed_view(ws):
-            if not feats & {str(f) for f in
-                            group.get("context_features") or []}:
-                continue
-            groups.append(group)
-            if len(groups) >= PLAYBOOK_GROUPS_CAP:
-                break
+    # the P3 compression face: the P1 admission spine with the
+    # quality axioms applied (case-specific refused, verb-bearing
+    # kept, support-ranked) — no store, computed per call
+    from rlvr import playbook  # noqa: PLC0415 — lazy (cycle-free)
+    feats = {str(f) for f in features}
+    for group in playbook.compressed_view(ws):
+        if not feats & {str(f) for f in
+                        group.get("context_features") or []}:
+            continue
+        groups.append(group)
+        if len(groups) >= PLAYBOOK_GROUPS_CAP:
+            break
     return {"cases": cases, "playbook": groups, "budget": budget}

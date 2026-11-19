@@ -163,10 +163,6 @@ def test_real_registry_no_l1_arm_declares_the_recall_switch():
     for other in mx.config_arms(doc):
         env = other.get("env") or {}
         assert "KUNGLAO_RECALL" in env
-        assert "KUNGLAO_META_RETRIEVAL" in env
-        assert "KUNGLAO_META_VALUE_TABLE" in env
-        assert "KUNGLAO_META_ATTRIBUTION" in env
-        assert "KUNGLAO_META_PLAYBOOK" in env
         if other["id"] == "kunglao-warm-no-l1":
             continue
         if other.get("runner_face") != "loop":

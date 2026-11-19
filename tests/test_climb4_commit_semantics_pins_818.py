@@ -12,9 +12,10 @@ episode pools:
   face), the dead-path reading (run accumulation, evidenced-pivot reset,
   the 9x cap), the surprise loop (verified outcome vs the value table's
   leave-self-out cell expectation, both contradiction kinds), the forced
-  re-examination commit, the additive envelope enrichment (dead_path,
-  reexamination, tune contract, switch attribution with the ablation and
-  no-episode faces), and the four-component ablation pricing table.
+  re-examination commit, and the additive envelope enrichment (dead_path,
+  reexamination, tune contract, the switch attribution's no-episode
+  face). The former four-component ablation pricing table died with the
+  ablation switches.
 """
 from __future__ import annotations
 
@@ -33,14 +34,6 @@ from rlvr import episode_pool as pool  # noqa: E402
 
 
 # ------------------------------------------------------------ fixtures
-
-@pytest.fixture(autouse=True)
-def _declared_learning_faces(monkeypatch):
-    """The learning switches default OFF; these pins assert the
-    declared-ON enrichment behavior."""
-    for name in ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK"):
-        monkeypatch.setenv(name, "1")
 
 def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
@@ -271,17 +264,14 @@ class TestEnrichBlock:
         assert tune == {"same_class": True, "class": "frida-gadget",
                         "requires": ["param_changes|tool_changes"]}
 
-    def test_switch_attribution_ablation_face(self, tmp_path,
-                                              monkeypatch) -> None:
+    def test_switch_attribution_no_episode_face(self, tmp_path) -> None:
         ws = _mk_ws(tmp_path)
-        _seed(ws, _episode("C-1", ["android"]))
         block = {"schema": cs.ENVELOPE_SCHEMA, "phase": "commit_boundary",
                  "commit": {"action": "switch"}, "features": ["android"]}
-        monkeypatch.setenv("KUNGLAO_META_ATTRIBUTION", "0")
         out = cs.enrich_block(ws, "C-1", block)
         att = out["commit"]["attribution"]
         assert att["available"] is False
-        assert "KUNGLAO_META_ATTRIBUTION=0" in att["reason"]
+        assert "no pool episode" in att["reason"]
 
     def test_enrichment_fail_open_on_a_broken_pool(self, tmp_path) -> None:
         ws = tmp_path / "broken"
@@ -291,41 +281,3 @@ class TestEnrichBlock:
                  "commit": {"action": "persist"}, "features": []}
         out = cs.enrich_block(ws, "C-1", block)
         assert out["commit"] == {"action": "persist"}  # untouched
-
-
-# --------------------------------------------------------- ablation pricing
-
-class TestAblationPricing:
-    def test_price_table_covers_the_four_components(self, tmp_path,
-                                                    monkeypatch) -> None:
-        for name in ("KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK",
-                     "KUNGLAO_META_VALUE_TABLE", "KUNGLAO_META_RETRIEVAL"):
-            monkeypatch.delenv(name, raising=False)
-        ws = _mk_ws(tmp_path)
-        _seed(ws, _episode("C-9", ["android", "packed"], r=-1.0))
-        rows = cs.price_ablations(ws, features=["android", "packed"],
-                                  phase="commit_boundary", claim="C-1")
-        assert set(rows) == {"playbook", "retrieval", "value_table",
-                             "attribution"}
-        assert "playbook" in rows["playbook"]["price"]
-        assert "case(s) leave the context"
-        assert rows["value_table"]["on"]["source"]
-        assert "manual attribution_ref" in rows["attribution"]["price"]
-
-    def test_playbook_price_off_reads_zero(self, tmp_path) -> None:
-        ws = _mk_ws(tmp_path)
-        assert cs._playbook_price(ws, ["android"], on=False) == {
-            "groups": 0}
-
-    def test_retrieval_price_respects_the_knob_floor(self, tmp_path,
-                                                     monkeypatch) -> None:
-        ws = _mk_ws(tmp_path)
-        _seed(ws, _episode("C-9", ["android"],
-                           r=1.0))  # utility 0.5 in the fixture
-        monkeypatch.setenv("KUNGLAO_META_MIN_UTILITY", "0.99")
-        assert cs._retrieval_price(ws, ["android"], "commit_boundary",
-                                   on=True)["cases"] == []
-        monkeypatch.setenv("KUNGLAO_META_MIN_UTILITY", "0.1")
-        cases = cs._retrieval_price(ws, ["android"], "commit_boundary",
-                                    on=True)["cases"]
-        assert cases == ["C-9"]
