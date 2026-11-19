@@ -34,16 +34,12 @@ import runtime_switches as rs  # noqa: E402  # pytest.ini pythonpath = scripts
 
 REGISTRY_MODULE = "scripts/runtime_switches.py"
 
-#: the six switches an evaluation arm must declare explicitly (the
-#: supply face plus the learning flags whose silence would otherwise
+#: the two switches an evaluation arm must declare explicitly (the
+#: supply face plus the learning flag whose silence would otherwise
 #: contaminate an ablation reading)
 ARM_DECLARED = {
     "KUNGLAO_RECALL",
     "KUNGLAO_PREDICT_BEFORE_TRY",
-    "KUNGLAO_META_RETRIEVAL",
-    "KUNGLAO_META_VALUE_TABLE",
-    "KUNGLAO_META_ATTRIBUTION",
-    "KUNGLAO_META_PLAYBOOK",
 }
 
 
@@ -365,12 +361,8 @@ def test_polarity_supply_protection_on_learning_off():
     learning = {n for n, s in rs.SWITCHES.items()
                 if s.type == "bool" and s.direction == "learning"}
     assert "KUNGLAO_RECALL" in supply
-    assert {
-        "KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-        "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK",
-        "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_DIRECTION",
-        "KUNGLAO_PLAYBOOK",
-    } <= learning
+    assert {"KUNGLAO_PREDICT_BEFORE_TRY",
+            "KUNGLAO_PLAYBOOK"} <= learning
     for name in supply | protection:
         assert rs.SWITCHES[name].default is True, (
             f"{name}: supply/protection silence must default ON")
@@ -387,9 +379,9 @@ def test_unknown_switch_fails_closed():
 
 
 def test_unparseable_bool_value_fails_closed(monkeypatch):
-    monkeypatch.setenv("KUNGLAO_META_RETRIEVAL", "sometimes")
-    with pytest.raises(ValueError, match="KUNGLAO_META_RETRIEVAL"):
-        rs.get_bool("KUNGLAO_META_RETRIEVAL")
+    monkeypatch.setenv("KUNGLAO_PREDICT_BEFORE_TRY", "sometimes")
+    with pytest.raises(ValueError, match="KUNGLAO_PREDICT_BEFORE_TRY"):
+        rs.get_bool("KUNGLAO_PREDICT_BEFORE_TRY")
 
 
 def test_typed_helpers_and_defaults(monkeypatch):
@@ -450,40 +442,27 @@ def test_recall_arm_declaration_still_ablates(tmp_path, monkeypatch):
 
 
 def test_learning_switches_default_off(monkeypatch):
-    for name in ARM_DECLARED | {
-            "KUNGLAO_DIRECTION", "KUNGLAO_PLAYBOOK"}:
+    for name in ARM_DECLARED | {"KUNGLAO_PLAYBOOK"}:
         monkeypatch.delenv(name, raising=False)
-    from rlvr import attribution as attr
     from rlvr import meta_policy as mp
-    from rlvr import playbook as pb
 
-    k = mp.knobs()
-    assert k["retrieval"] is False
-    assert k["value_table"] is False
-    assert k["attribution"] is False
-    assert k["playbook"] is False
-    assert attr.knob_on() is False
-    assert pb.knob_on() is False
+    # the surviving learning switches default OFF; the former component
+    # ablation switches are retired — no meta-policy knob reads them
+    assert rs.SWITCHES["KUNGLAO_PREDICT_BEFORE_TRY"].default is False
+    assert rs.SWITCHES["KUNGLAO_PLAYBOOK"].default is False
+    assert not (set(mp.knobs())
+                & {"retrieval", "value_table", "attribution", "playbook"})
 
 
-def test_learning_switches_declared_on_are_read(monkeypatch):
-    from rlvr import attribution as attr
-    from rlvr import meta_policy as mp
-    from rlvr import playbook as pb
-
-    for name in ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK"):
-        monkeypatch.setenv(name, "1")
-    k = mp.knobs()
-    assert k["retrieval"] is True and k["value_table"] is True
-    assert k["attribution"] is True and k["playbook"] is True
-    assert attr.knob_on() is True and pb.knob_on() is True
+def test_learning_switch_declared_on_is_read(monkeypatch):
+    monkeypatch.setenv("KUNGLAO_PLAYBOOK", "1")
+    assert rs.get_bool("KUNGLAO_PLAYBOOK") is True
 
 
 # ------------------------------------------------ 4. declaration surfaces
 
 
-def test_arm_matrix_declares_recall_and_meta_switches():
+def test_arm_matrix_declares_recall_and_the_predict_flag():
     doc = yaml.safe_load(MATRIX.read_text(encoding="utf-8"))
     arms = doc["arms"]
     for arm in arms:
@@ -500,19 +479,12 @@ def test_arm_matrix_values_match_declared_defaults():
     for arm in doc["arms"]:
         env = arm.get("env") or {}
         recall = env["KUNGLAO_RECALL"]
-        meta = {name: env[name] for name in (
-            "KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-            "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK")}
         if arm["id"] == "kunglao-warm-no-l1":
             assert recall == "0", "the L1 ablation arm must declare recall off"
         elif arm["runner_face"] == "loop":
             assert recall == "1"
         else:
             assert recall == "0"
-        if arm["runner_face"] == "loop":
-            assert set(meta.values()) == {"1"}, arm["id"]
-        else:
-            assert set(meta.values()) == {"0"}, arm["id"]
 
 
 def test_matrix_stripped_env_covers_the_declared_arms():
@@ -521,13 +493,12 @@ def test_matrix_stripped_env_covers_the_declared_arms():
     stripped = set(STRIPPED_ENV)
     assert ARM_DECLARED <= stripped
     assert {"KUNGLAO_EXPANSION", "KUNGLAO_SCHEDULER",
-            "KUNGLAO_DIRECTION",
             "KUNGLAO_PLAYBOOK"} <= stripped
 
 
 def test_dispatch_context_carries_declared_values(tmp_path, monkeypatch):
     monkeypatch.delenv("KUNGLAO_RECALL", raising=False)
-    monkeypatch.delenv("KUNGLAO_META_ATTRIBUTION", raising=False)
+    monkeypatch.delenv("KUNGLAO_PREDICT_BEFORE_TRY", raising=False)
     import dispatch_context as dc
 
     ws = tmp_path / "ws"
@@ -539,15 +510,15 @@ def test_dispatch_context_carries_declared_values(tmp_path, monkeypatch):
     block = ctx["runtime_switches"]
     assert block["schema"] == "runtime-switches/1"
     assert block["declared_defaults"]["KUNGLAO_RECALL"] is True
-    assert block["declared_defaults"]["KUNGLAO_META_ATTRIBUTION"] is False
+    assert block["declared_defaults"]["KUNGLAO_PREDICT_BEFORE_TRY"] is False
     assert block["values"]["KUNGLAO_RECALL"] is True
-    assert block["values"]["KUNGLAO_META_ATTRIBUTION"] is False
+    assert block["values"]["KUNGLAO_PREDICT_BEFORE_TRY"] is False
     assert block["sources"]["KUNGLAO_RECALL"] == "default"
     assert json.dumps(block)  # deterministic, serialisable context
 
 
 def test_dispatch_context_reports_env_source(tmp_path, monkeypatch):
-    monkeypatch.setenv("KUNGLAO_META_ATTRIBUTION", "1")
+    monkeypatch.setenv("KUNGLAO_PREDICT_BEFORE_TRY", "1")
     import dispatch_context as dc
 
     ws = tmp_path / "ws"
@@ -557,8 +528,8 @@ def test_dispatch_context_reports_env_source(tmp_path, monkeypatch):
     block = dc.build_dispatch_context(
         ws=ws, claim_id="C-001", tier=1, tools=[], agent_name="worker"
     )["runtime_switches"]
-    assert block["values"]["KUNGLAO_META_ATTRIBUTION"] is True
-    assert block["sources"]["KUNGLAO_META_ATTRIBUTION"] == "env"
+    assert block["values"]["KUNGLAO_PREDICT_BEFORE_TRY"] is True
+    assert block["sources"]["KUNGLAO_PREDICT_BEFORE_TRY"] == "env"
 
 
 # ------------------------------------------------ 5. Gate 10

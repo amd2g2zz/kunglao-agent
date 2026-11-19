@@ -54,7 +54,7 @@ llm_prior → case → (cross-task store fallback).
 uv run pytest tests/test_case_prior_779.py -q -n 4
 ```
 
-Expected: exit 0, `10 passed` — key pins: `case` labels a one-family
+Expected: exit 0, `12 passed` — key pins: `case` labels a one-family
 prior at share 1.0 (`test_case_prior_is_the_fourth_source`); history
 and llm_prior win over case (`test_history_and_llm_prior_win_over_case`);
 a red-dominated case folds zero upward weight
@@ -148,7 +148,7 @@ AFTER:
 | method-family usage log | `<ws>/runs/method-family-log.jsonl` (`method-family-usage/1`) | the dispatch gate's ALLOW tail (pre-existing; the replay test writes through the same producer face) | `usage_family_map` — the settle-side family resolve AND the case-prior join's last hop |
 | case posterior ledger | `<ws>/runs/posteriors.yaml` (`posteriors-schema/1`) | the settle pass's case-observation legs (pre-existing) | `_case_prior` — the decision side's NEW read |
 | workspace credit series | `<ws>/runs/posterior-store.jsonl` (`posterior-store/1`, credit rows) | `append_workspace_credit_row` — credit, `credit_kind`, `method_family`, `provenance.dispatch_id`, holdout-filtered BEFORE append | `rlvr.signal_guard.recent_credits` (the degeneracy series), `devkit/liveness_gate.py` (`rl-posterior-moved`) |
-| cross-task store | guarded root (`KUNGLAO_POSTERIOR_STORE` or `scripts/rlvr/patterns/posterior-store.jsonl`) | `append_store_row` (unchanged) | `warm_pools` / `_store_prior` (unchanged) |
+| cross-task store | workspace-local store root (`<ws>/runs/posterior/knowledge-store.jsonl` — `KUNGLAO_POSTERIOR_STORE` honored only inside the workspace; cross-project learning is off) | `append_store_row` (unchanged) | `warm_pools` / `_store_prior` (unchanged; the eval-arm staging seam) |
 
 Crossing rules the boundary enforces:
 

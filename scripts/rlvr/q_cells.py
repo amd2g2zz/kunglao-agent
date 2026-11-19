@@ -1490,8 +1490,7 @@ def append_censored(ws, env: str, reason: str, *, source: str,
     entry). ``claim`` / ``rollout_id`` / ``direction`` ride only when
     supplied (the additive-column discipline: a bare censored row is
     byte-stable). The row NEVER feeds the fold or any posterior — that
-    is the censoring semantics, enforced by the trajectory prefix wall
-    plus rlvr.censoring.posterior_observations for the #954 seam."""
+    is the censoring semantics, enforced by the trajectory prefix wall."""
     from rlvr import interruption as _itv  # noqa: PLC0415 — lazy, cycle-free
     env_out = str(env or "").strip()
     if env_out not in _itv.ENV_CLASSES:

@@ -9,10 +9,10 @@ files:
   hooks/env_check_gate.py: 30
   hooks/gate_policy.py: 11
   hooks/heartbeat_touch.py: 24
-  hooks/lib_kunglao.py: 58
+  hooks/lib_kunglao.py: 56
   hooks/orchestrator_tool_guard.py: 24
   hooks/recall_inject.py: 34
-  hooks/round_closure.py: 15
+  hooks/round_closure.py: 13
   hooks/rt_read_barrier.py: 2
   hooks/session_start.py: 7
   hooks/state_anchor.py: 12
@@ -20,9 +20,9 @@ files:
   hooks/user_signal_capture.py: 3
   hooks/violation_capture.py: 4
   hooks/worker_budget.py: 7
-  hooks/worker_budget_core.py: 52
+  hooks/worker_budget_core.py: 48
   hooks/worker_budget_gates.py: 130
-  hooks/worker_budget_sinks.py: 144
+  hooks/worker_budget_sinks.py: 127
   hooks/worker_pulse.py: 18
   hooks/workguard_gate.py: 2
   hooks/write_guard.py: 39
@@ -68,8 +68,8 @@ files:
   scripts/consolidate_ledgers.py: 2
   scripts/context_budget.py: 12
   scripts/contracts.py: 12
-  scripts/convergence_check.py: 185
-  scripts/convergence_health.py: 14
+  scripts/convergence_check.py: 184
+  scripts/convergence_health.py: 13
   scripts/cost_gate.py: 2
   scripts/dead_letter.py: 5
   scripts/decision_lint.py: 1
@@ -84,7 +84,7 @@ files:
   scripts/dispatch_context.py: 28
   scripts/dual_gate.py: 4
   scripts/e2e/audit.py: 10
-  scripts/e2e/checkpoints.py: 110
+  scripts/e2e/checkpoints.py: 95
   scripts/e2e/evidence.py: 1
   scripts/e2e/llm_faces.py: 16
   scripts/e2e/model.py: 7
@@ -172,7 +172,7 @@ files:
   scripts/kunglao_verify.py: 30
   scripts/kunglao_wait.py: 10
   scripts/lane_spec.py: 2
-  scripts/lessons_telemetry.py: 4
+  scripts/lessons_telemetry.py: 3
   scripts/lint_facts.py: 47
   scripts/liveness_policy.py: 33
   scripts/local_gate.py: 1
@@ -234,12 +234,10 @@ files:
   scripts/rlvr/action_params.py: 7
   scripts/rlvr/attribution.py: 4
   scripts/rlvr/censored_review.py: 8
-  scripts/rlvr/censoring.py: 21
   scripts/rlvr/commit_semantics.py: 2
   scripts/rlvr/compose.py: 17
   scripts/rlvr/consolidated_ledger.py: 1
   scripts/rlvr/crystallize.py: 1
-  scripts/rlvr/direction.py: 22
   scripts/rlvr/episode_pool.py: 5
   scripts/rlvr/episode_schema.py: 5
   scripts/rlvr/expansion.py: 4
@@ -254,7 +252,7 @@ files:
   scripts/rlvr/ledger.py: 3
   scripts/rlvr/liveness.py: 40
   scripts/rlvr/marl.py: 2
-  scripts/rlvr/meta_arms.py: 8
+  scripts/rlvr/meta_arms.py: 7
   scripts/rlvr/meta_context.py: 3
   scripts/rlvr/meta_policy.py: 1
   scripts/rlvr/meta_retrieval.py: 1
@@ -267,19 +265,19 @@ files:
   scripts/rlvr/pool_indexer.py: 2
   scripts/rlvr/posteriors.py: 13
   scripts/rlvr/priors.py: 18
-  scripts/rlvr/q_cells.py: 171
+  scripts/rlvr/q_cells.py: 169
   scripts/rlvr/recipe_arms.py: 28
   scripts/rlvr/refutation_fold.py: 1
   scripts/rlvr/reward.py: 10
   scripts/rlvr/reward_signal.py: 2
-  scripts/rlvr/scalar.py: 38
+  scripts/rlvr/scalar.py: 30
   scripts/rlvr/settlement_scorer.py: 1
   scripts/rlvr/signal_guard.py: 1
   scripts/rlvr/state.py: 24
   scripts/rlvr/step_credit.py: 5
   scripts/rlvr/step_grain.py: 19
   scripts/rlvr/step_ledger.py: 11
-  scripts/rlvr/strategy_store.py: 32
+  scripts/rlvr/strategy_store.py: 26
   scripts/rlvr/termination.py: 1
   scripts/rlvr/triples.py: 15
   scripts/rlvr/winrate.py: 14

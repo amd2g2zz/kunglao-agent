@@ -1,6 +1,15 @@
 # Cross-Workspace Method Memory — the keyed fold promoted user-level, plus the Claude-Code-memory distillation bridge
 
-Status: design draft — implementation gated on owner sign-off (this PR is the sign-off instrument; the owner decisions are §8)
+Status: RETIRED BY #1004 (S7, cross-project off, 2026-11-17). The
+promotion this card designs — a user-level global memory root
+(`~/.kunglao/memory/`, `KUNGLAO_MEMORY_STORE`) — is the exact shape S7
+refuses: every learning store must resolve INSIDE the workspace
+(`store_root()` = `<ws>/runs/posterior`, override honored only
+in-workspace), and the workspace identity is
+`strategy_store.workspace_id_of` (sha256 over the resolved path, 12
+hex). The #495 lessons library is workspace-local or removed by the
+same ruling. The card below is kept as design history only; §2.1-§2.3,
+§5 and D1 describe a store-root world that no longer exists.
 Issue: #583
 Milestone: v0.2
 Date: 2026-10-09
@@ -34,7 +43,7 @@ The owner's validated thesis places every memory-adjacent concern on one ladder;
 
 ### 2.1 What exists today
 
-The cross-task posterior store (#545, WS2) is `scripts/rlvr/strategy_store.py`: append-only `posterior-store/1` JSONL, keyed `(method_family, arm_key, feature_key, fingerprint)`, rooted at `scripts/rlvr/patterns/` (env override `KUNGLAO_POSTERIOR_STORE`). Its guard set is already the right one:
+The cross-task posterior store (#545, WS2) is `scripts/rlvr/strategy_store.py`: append-only `posterior-store/1` JSONL, keyed `(method_family, arm_key, feature_key, fingerprint)`, rooted at the workspace-local store root `<ws>/runs/posterior/` since #1004 (the deployment-local `scripts/rlvr/patterns/` root and any outside-workspace `KUNGLAO_POSTERIOR_STORE` override are refused). Its guard set is already the right one:
 
 - **Feature-keyed, never identity-keyed** (#518 rule): `feature_key_of()` = SHA-256 over the sorted mined feature tokens (`scripts/rlvr/feature_prior.py`, #460-B), fail-open to the inert `"none"`.
 - **Holdout firewall**: `append_row()` refuses any row whose serialized form carries a holdout unit id from `eval/v1/split.yaml` (read-only — the never-write wall), and `scripts/eval_split_lint.py` re-checks the file as the second gate.
@@ -42,7 +51,7 @@ The cross-task posterior store (#545, WS2) is `scripts/rlvr/strategy_store.py`: 
 
 ### 2.2 Why promote at all
 
-The store is **deployment-local**: it lives inside one repo checkout, so its hard-won method-family experience does not survive a clone, a worktree rotation, a VM redeploy, or the multi-machine reality of the public-canonical repo. The refutation fold (#582, `scripts/rlvr/refutation_fold.py`) already demonstrates the value of the cross-engagement read — a second workspace with the same feature signature inherits the raised verification density — but its substrate is trapped in the same deployment. The lessons library (`scripts/failure_analysis_gate.py`, #495) is the existence proof for the fix: it is already **global, cross-sample, never per-workspace**, rooted at `~/.claude/skills/kunglao-agent/references/lessons/`. Method memory deserves the same lifetime.
+The store is **deployment-local**: it lives inside one repo checkout, so its hard-won method-family experience does not survive a clone, a worktree rotation, a VM redeploy, or the multi-machine reality of the public-canonical repo. The refutation fold (#582, `scripts/rlvr/refutation_fold.py`) already demonstrates the value of the cross-engagement read — a second workspace with the same feature signature inherits the raised verification density — but its substrate is trapped in the same deployment. (The lessons library once made the cross-engagement lifetime real: `scripts/failure_analysis_gate.py` read a global, cross-sample lessons dir at `~/.claude/skills/kunglao-agent/references/lessons/` — #1004 workspace-localized or removed that face, and with it the strongest argument this card made.)
 
 ### 2.3 The promotion mechanics
 

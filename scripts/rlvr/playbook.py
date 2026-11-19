@@ -121,9 +121,3 @@ def compressed_view(ws) -> list[dict]:
                                    for _n, t in kept},
                        "refused": refused})
     return groups
-
-
-def knob_on() -> bool:
-    """The component-ablation switch (the fourth of four knobs)."""
-    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
-    return runtime_switches.get_bool("KUNGLAO_META_PLAYBOOK")

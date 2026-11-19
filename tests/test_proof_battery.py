@@ -13,9 +13,9 @@ objection. Each experiment isolates one objection:
   E1c  scrambled-memory control — the memory face fed WRONG-family
        features loses the fam-a decline entirely (scrambled == ablated
        on the fam-a axis): memory CONTENT matters, not memory existence.
-       Under the bridge's identity-validated mastery the misfiled stamp
-       masters nothing either — the scramble is inert on BOTH faces
-       (price and flag).
+       Under identity-validated mastery the misfiled stamp masters
+       nothing either — the scramble is inert on BOTH faces (price and
+       flag).
   E1d  convergence floor — six laps: the decline asymptotes (deltas
        strictly shrink, no oscillation) — a learning curve, not a step.
   E3a  component ablation — cost-face-only vs method-memory-only vs
@@ -24,9 +24,6 @@ objection. Each experiment isolates one objection:
        ordering change (the value table's ordering face).
   E3b  dose-response — 1/2/3 prior episodes: expected cost monotone
        (and pinned exactly) in the evidence dose.
-  M    earned mastery — mastery is granted by the REAL memory_bridge
-       differential (completed + positive reward + identity match),
-       never by the loop; a failed mission must NOT master its family.
 
 Every pinned cost is the settle line's OWN honest per-mission booking
 (the P7c spend window): one cost event per mission at tokens/1e4 lands
@@ -68,31 +65,6 @@ def _run(tmp_path, name="ws", **kw):
     ws = tmp_path / name
     ws.mkdir()
     return loop_sim.run_learning_loop(ws, delta=DELTA, **kw)
-
-
-# ------------------------------ M: mastery is earned, never granted
-
-def test_mastery_is_earned_not_granted(tmp_path):
-    """The loop's stamp face rides the REAL memory_bridge differential:
-    a FAILED mission must NOT master its family, a completed
-    positive-reward mission must. (Under the old stand-in the grant was
-    unconditional — this pin is the anti-construction witness.)"""
-    ws = tmp_path / "earned-ws"
-    ws.mkdir()
-    loop_sim._bootstrap(ws)
-    failed = {"claim": "C-FAIL", "status": "NEGATIVE",
-              "title": "failed probe", "family": "fam-f", "tokens": 8000}
-    loop_sim._register(ws, failed)
-    loop_sim._ledger_row(ws, failed)
-    out, memory = loop_sim._settle_and_stamp(ws, failed, {})
-    assert out["episodes_written"] == 1
-    assert memory["fam-f"]["mastered"] is False, memory
-    ok = {"claim": "C-OK", "status": "PROVEN",
-          "title": "cheap probe", "family": "fam-g", "tokens": 1000}
-    loop_sim._register(ws, ok)
-    loop_sim._ledger_row(ws, ok)
-    _out, memory = loop_sim._settle_and_stamp(ws, ok, memory)
-    assert memory["fam-g"]["mastered"] is True, memory
 
 
 # --------------------------------------- E1b: endogenous step reward
@@ -149,7 +121,7 @@ def test_e1c_scrambled_memory_control(tmp_path):
     scrambled at stamp time the fam-a decline vanishes entirely — the
     scrambled arm's cost trace equals the ABLATED arm's (flat at the
     cold base), while the live arm keeps its earned decline. And under
-    the bridge's identity-validated mastery the scramble kills the
+    identity-validated mastery the scramble kills the
     FLAGS too: the episode's own ``family`` field refutes the mislabeled
     stamp, so a misfiled episode masters NOTHING — the early-battery
     finding where the flags said everything is learned while the prices
