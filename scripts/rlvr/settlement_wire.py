@@ -487,7 +487,7 @@ def _producing_dispatch(ws: Path, claim: str) -> str:
 
 
 def _bank_settled_verdict(ws: Path, claim: str, res: dict, *,
-                          act_outcome: str) -> dict | None:
+                          target: str, act_outcome: str) -> dict | None:
     """Bank one settled blind verdict into the q-cell fold — the learning
     feed's consumer face. Order: only a SETTLED verdict reaches here;
     the censoring routes (``rlvr.scalar.settlement_route`` — the same
@@ -512,7 +512,6 @@ def _bank_settled_verdict(ws: Path, claim: str, res: dict, *,
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415 — lazy sibling
         from rlvr import scalar as _sc  # noqa: PLC0415 — lazy sibling
-        target = _producing_dispatch(ws, claim)
         route = _sc.settlement_route(
             _claim_status(ws, claim), str(act_outcome or ""),
             [a for a in _sc.fact_artifacts(ws)
@@ -581,6 +580,66 @@ def _bank_settled_verdict(ws: Path, claim: str, res: dict, *,
         warn("rlvr.settlement_wire.bank",
              f"{claim}: {type(exc).__name__}: {exc}")
         return None
+
+
+def _deferred_credit_path(ws: Path, target: str) -> Path:
+    from rlvr.q_cells import DISPATCH_DECISION_REL
+
+    return ws / DISPATCH_DECISION_REL / f"{target}.credit.json"
+
+
+def _bank_or_defer(ws: Path, claim: str, res: dict, *, target: str,
+                   act_outcome: str, awaiting_execution: bool) -> dict | None:
+    """Serialize credit publication with the host execution callback."""
+    if not awaiting_execution or not res.get("settled"):
+        return _bank_settled_verdict(ws, claim, res, target=target,
+                                    act_outcome=act_outcome)
+    try:
+        from _common import atomic_write_text
+
+        with cl.family_lock(ws, "settlement"):
+            bank = _bank_settled_verdict(ws, claim, res, target=target,
+                                        act_outcome=act_outcome)
+            if bank and bank.get("reason") == "unmatched":
+                credit = _seal.sign_row({
+                    "dispatch_id": target, "claim": claim,
+                    "settlement": res["settlement"], "act_outcome": act_outcome,
+                })
+                atomic_write_text(_deferred_credit_path(ws, target),
+                                  json.dumps(credit, ensure_ascii=False), unique=True)
+                return {**bank, "reason": "execution-unconfirmed"}
+            return bank
+    except Exception as exc:  # noqa: BLE001 — attribution cannot undo verification
+        warn("rlvr.settlement_wire.defer", f"{target}: {type(exc).__name__}: {exc}")
+        return None
+
+
+def bank_confirmed_dispatch(ws, claim: str, dispatch_id: str) -> bool:
+    """Reconcile late execution with verified credit and report completion."""
+    ws = Path(ws)
+    path = _deferred_credit_path(ws, _safe_claim(dispatch_id))
+    try:
+        # Read under the same lock used by the verdict writer. The receipt
+        # may still be in flight when the execution callback arrives.
+        with cl.family_lock(ws, "settlement"):
+            credit = json.loads(path.read_text(encoding="utf-8"))
+            if not _seal.trusted_rows([credit], op="settlement_wire.deferred"):
+                return False
+            if credit["dispatch_id"] != dispatch_id or credit["claim"] != claim:
+                return False
+            bank = _bank_settled_verdict(
+                ws, claim, {"settled": True, "settlement": credit["settlement"]},
+                target=dispatch_id, act_outcome=credit["act_outcome"])
+            if not bank or not (bank.get("appended") or bank.get("route")
+                                or bank.get("reason") == "already-banked"):
+                return False
+            path.unlink()
+            return True
+    except FileNotFoundError:
+        return True  # no credit to retry or another callback already handled it
+    except Exception as exc:  # noqa: BLE001 — attribution cannot undo verification
+        warn("rlvr.settlement_wire.confirm", f"{dispatch_id}: {type(exc).__name__}: {exc}")
+        return False
 
 
 # ------------------------------------------------------------ the consumer
@@ -786,6 +845,10 @@ def settle_parked(ws, claim, *, oracle_verdict: str | None = None,
     drift = _sha_recheck(ws, input_doc)
     if drift:
         return _refuse(drift)
+    from rlvr import q_cells as _qc  # noqa: PLC0415 — lazy learner boundary
+
+    target = _producing_dispatch(ws, str(claim))
+    awaiting_execution = _qc.dispatch_observation_pending(ws, target)
     verdict = str(oracle_verdict) if oracle_verdict is not None else None
     if verdict is None:
         try:
@@ -816,8 +879,9 @@ def settle_parked(ws, claim, *, oracle_verdict: str | None = None,
     # the learner feed: the settled verdict banks on the producing
     # dispatch's arm, censored by the act outcome the stop face parked
     # (fail-open telemetry — never the settle receipt)
-    bank = _bank_settled_verdict(ws, str(claim), res,
-                                 act_outcome=load_act_outcome(ws, claim))
+    bank = _bank_or_defer(ws, str(claim), res, target=target,
+                         act_outcome=load_act_outcome(ws, claim),
+                         awaiting_execution=awaiting_execution)
     if bank is not None:
         res["q_cell_bank"] = bank
     return res

@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import os
 import re
 import tempfile
@@ -584,63 +583,6 @@ def _pooled_or_flat(store, counts: dict[str, int],
         return {fam: float(n) for fam, n in sorted(counts.items())}
 
 
-def _cold_seed_prior(ws, registered: list[str]) -> dict[str, float]:
-    """WS3 (#544): a fresh workspace's first dispatch rides the
-    intake-seeded proposal means instead of the flat 1.0 face when a
-    FULL-coverage llm-prior/1 doc exists; partial coverage or any read
-    failure fails open to the historical uniform face (the determinism
-    wall keeps the wall)."""
-    prior = {fam: 1.0 for fam in registered}
-    try:
-        from rlvr import priors as _p3
-        seeded = _p3.intake_prior_weights(ws, allowed=registered)
-        if seeded:
-            prior = {fam: float(seeded[fam]) for fam in registered}
-    except Exception as exc:  # noqa: BLE001 — fail-open, but loud (#275)
-        from kunglao_log import warn
-        warn("e2e.cold_seed_prior",
-             f"{type(exc).__name__}: {exc} (fail-open: uniform proposal)")
-    return prior
-
-
-def _sampler_extras(ws, prior: dict) -> dict:
-    """The #460/#461/#545 optional sampler kwargs, each fail-open to its
-    pre-wiring shape (a broken extra never breaks the loop): the
-    predict-before-try feature prior (flag-gated), the option-death
-    verdicts, the cross-task warm-start pools (#545), and the keyed
-    consumption arm context (#545 — the same recipe/verif/tier the
-    dispatch meta records, so the keyed read matches the keyed write)."""
-    kwargs: dict = {}
-    try:
-        from rlvr import feature_prior as _fp
-        if _fp.enabled():
-            features = _fp.features_from_workspace(ws)
-            features = _fp.with_refutation_token(ws, features)
-            if features:
-                kwargs = {"features": features,
-                          "feature_table": _fp.default_table_path(ws)}
-    except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
-        kunglao_log.warn("e2e.feature_prior",
-                         f"{type(_exc).__name__}: {_exc}")
-    try:
-        from rlvr import termination as _t461
-        _death = _t461.verdicts(ws, prior.keys())
-    except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
-        kunglao_log.warn("e2e.termination", f"{type(_exc).__name__}: {_exc}")
-        _death = {}
-    if _death:
-        kwargs["death"] = _death
-    try:
-        from rlvr import strategy_store as _ss
-        pools = _ss.warm_pools(ws, prior.keys())
-        if pools:
-            kwargs["warm_pools"] = pools
-    except Exception as _exc:  # noqa: BLE001 — fail-open at the seam
-        kunglao_log.warn("e2e.warm_pools", f"{type(_exc).__name__}: {_exc}")
-    kwargs["arm_context"] = dict(_DISPATCH_ARM_CONTEXT)
-    return kwargs
-
-
 # the harness-without-learning face: the env var flips the envelope
 # sampler's behavior policy to flat-uniform over the registered
 # vocabulary (the measurement arm that isolates the LEARNING's value as
@@ -686,48 +628,20 @@ def _stamp_ope_propensity(ctx: RunContext, receipt: dict | None,
     """
     if not method_family or receipt is None:
         return
-    receipt["actual_method_family"] = method_family
-    receipt["sampled_family"] = receipt.get("family")
-    try:
-        if declared:
-            receipt["propensity"] = None
-            receipt["probability_source"] = "unknown"
-            receipt["declared"] = True
-        elif str(receipt.get("scheduler") or "") == SCHEDULER_UNIFORM:
-            receipt["propensity"] = _uniform_propensity(receipt)
-            receipt["probability_source"] = "uniform_exact"
-        else:
-            # the proportional selection law's exact conditional
-            # probability: the receipt that made the draw carries the
-            # final per-candidate weights, so weight(chosen)/total IS
-            # the probability of this draw under that law on the same
-            # information set. Any unreconstructable receipt raises and
-            # falls to the honest unknown face below.
-            weights = {}
-            for name, cand in (receipt.get("candidates") or {}).items():
-                w = cand["weight"]
-                if isinstance(w, bool) or not isinstance(w, (int, float)):
-                    raise TypeError(
-                        f"candidate weight for {name!r} is not a number")
-                if not math.isfinite(w) or w <= 0.0:
-                    raise ValueError(
-                        f"candidate weight for {name!r} is not a "
-                        f"positive finite probability weight")
-                weights[str(name)] = float(w)
-            total = sum(weights.values())
-            if method_family not in weights or total <= 0.0:
-                raise ValueError(
-                    f"cannot reconstruct the selection probability for "
-                    f"{method_family!r} from this receipt")
-            receipt["propensity"] = round(
-                weights[method_family] / total, 4)
-            receipt["probability_source"] = "selection_law_exact"
-        if fingerprint:
-            receipt["fingerprint"] = fingerprint
-    except Exception as exc:  # noqa: BLE001 — telemetry, never a gate
-        receipt["propensity"] = None
-        receipt["probability_source"] = "unknown"
-        kunglao_log.warn("e2e.propensity", f"{type(exc).__name__}: {exc}")
+    from rlvr.strategy_store import method_decision
+
+    receipt.update(method_decision(receipt, method_family if declared else None))
+    if declared:
+        receipt["declared"] = True
+    elif receipt.get("scheduler") == SCHEDULER_UNIFORM:
+        receipt["propensity"] = _uniform_propensity(receipt)
+        receipt["probability_source"] = "uniform_exact"
+    elif (receipt["sampled_family"] == method_family
+          and (weight := receipt["conditional_sampler_weight"])):
+        receipt["propensity"] = round(weight, 4)
+        receipt["probability_source"] = "selection_law_exact"
+    if fingerprint:
+        receipt["fingerprint"] = fingerprint
 
 
 def _sample_envelope_family(ws, require_family: str | None = None
@@ -767,26 +681,6 @@ def _sample_envelope_family(ws, require_family: str | None = None
         return "", None
 
 
-def _envelope_sampler_view(receipt: dict | None, actual: str) -> dict | None:
-    """Persist the decision this host made, rather than a separate draw."""
-    if receipt is None:
-        return None
-    candidates = receipt.get("candidates") or {}
-    weights = {family: float(candidate.get("weight") or 0.0)
-               for family, candidate in candidates.items()}
-    total = sum(weights.values())
-    sampled = receipt.get("family")
-    return {
-        "sampled_family": sampled, "propensity": None,
-        "probability_source": "unknown",
-        "conditional_sampler_weight": weights.get(actual, 0.0) / total if total else None,
-        "sampled_conditional_weight": weights.get(sampled, 0.0) / total if total else None,
-        "prior_source": receipt.get("prior_source"),
-        "candidates": candidates,
-        "candidate_sources": receipt.get("candidate_sources", {}),
-    }
-
-
 def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
                      ) -> tuple[model.DispatchRequest | None, object]:
     """Launch phase (#459) — MAIN THREAD ONLY: mark the claim, mint the
@@ -802,27 +696,32 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
     # a wall-clock cliff: no deadline, no give-up, just a cheaper probe).
     if _quota_hold_active(ctx, claim):
         return None, None
-    dispatched.add(claim)
     # K1 wiring (matrix4): the per-key attempt ladder — every launch
     # of this claim-key climbs one rung of the Luby sequence, so a
     # timed-out re-dispatch earns MORE room, not the same ceiling.
     attempt = ctx.attempts.get(claim, 0)
-    ctx.attempts[claim] = attempt + 1
     ladder_timeout_s = _luby_timeout_s(attempt)
     # kernel-facing hook (audit §4): the envelope's method_family is the
     # declared proposal when the run carries one, else the DTS-sampled
     # draw (W4, issue 462) — the sampled family rides the envelope AND
     # the stream records it with its sampler receipt.
-    method_family = getattr(ctx.state, "method_family", "") or ""
-    declared = bool(method_family)
-    receipt: dict | None = None
-    if not method_family:
-        method_family, receipt = _sample_envelope_family(ctx.ws)
-    else:
-        # A declaration does not inject itself into the sampled support.
-        _mf, receipt = _sample_envelope_family(ctx.ws)
-        if receipt is None:
-            receipt = {"family": None, "declared": True, "candidates": {}}
+    from rlvr.strategy_store import method_constraint_violation
+    from claims_store import mint_dispatch_id
+    from method_families import validate_method_family
+
+    declaration = getattr(ctx.state, "method_family", "") or ""
+    sampled, sample_receipt = _sample_envelope_family(ctx.ws)
+    method_family = declaration or sampled
+    if method_family:
+        allowed, reason = validate_method_family(method_family, ws=ctx.ws)
+        violation = method_constraint_violation(ctx.ws, method_family)
+        if not allowed or violation:
+            kunglao_log.warn("e2e.method_family", violation or reason)
+            return None, None
+    dispatched.add(claim)
+    ctx.attempts[claim] = attempt + 1
+    dispatch_id = mint_dispatch_id()
+    receipt = dict(sample_receipt or {"family": None, "candidates": {}})
     # #539 WS1: the v2 action tuple — action_type dispatch (the worker
     # act), context recipe = the facts-snapshot assembly this prompt
     # actually ships, verification_mode none (verification is a SEPARATE
@@ -872,18 +771,13 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         _fp = _ma.env_fingerprint(str(ctx.ws), Path(ctx.repo))
     except Exception:  # noqa: BLE001 — telemetry never breaks dispatch
         _fp = None
+    _stamp_ope_propensity(ctx, receipt, bool(declaration), method_family, _fp)
+    receipt["dispatch_id"] = dispatch_id
     qc_mod = _load_repo_module(ctx.repo, "rlvr.q_cells")
     qc_mod.record_dispatch_observation(
         str(ctx.ws), prompt_file.read_text(encoding="utf-8"),
-        envelope_meta=({"method_family": method_family,
-                        "action_type": "dispatch",
-                        **_DISPATCH_ARM_CONTEXT}
-                       if method_family else None),
-        claim=claim, fingerprint=_fp,
-        sampler_view=_envelope_sampler_view(receipt, method_family))
-    # the propensity rides the receipt — the DR-OPE record (see
-    # _stamp_ope_propensity for the three faces)
-    _stamp_ope_propensity(ctx, receipt, declared, method_family, _fp)
+        envelope_meta=dispatch_meta, claim=claim, fingerprint=_fp,
+        dispatch_id=dispatch_id, sampler_view=receipt if method_family else None)
     # the emit rides AFTER the propensity block: the receipt mutation
     # post-emit never reached the durable audit row (the round-1 G3
     # envelopes carry candidates but no propensity — the DR-OPE record
@@ -897,7 +791,7 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         _launch_doc = ir2.record_launch(
             str(ctx.ws), claim,
             action_key=method_family or "unattributed",
-            propensity=(receipt or {}).get("propensity"))
+            propensity=receipt.get("propensity"), dispatch_id=dispatch_id)
     except Exception as exc:  # noqa: BLE001 — telemetry never breaks dispatch
         kunglao_log.warn("e2e.record_launch", f"{type(exc).__name__}: {exc}")
     request = model.DispatchRequest(
@@ -906,13 +800,14 @@ def _launch_dispatch(ctx: RunContext, claim: str, dispatched: set[str]
         method_family=method_family or None,
         timeout_s=ladder_timeout_s,
         mcp_prefixes=getattr(ctx, "mcp_prefixes", ()) or (),
+        dispatch_id=dispatch_id,
         launch_id=str((_launch_doc or {}).get("attempt_id") or ""))
     return request, ctx.face.launch_dispatch(request)
 
 
 def _land_dispatch(ctx: RunContext, claim: str, act: object,
                    dispatched: set[str], detail: dict,
-                   attempt_id: str = "") -> None:
+                   attempt_id: str = "", dispatch_id: str = "") -> None:
     """Landing phase (#459) — MAIN THREAD ONLY: record the act + per-act
     rollback. #456 bug-2: a BLOCKED/TIMEOUT/ERROR act frees THAT claim
     only — without the discard the loop skips re-dispatch forever and
@@ -928,7 +823,8 @@ def _land_dispatch(ctx: RunContext, claim: str, act: object,
     # silent no-op, burning budget in the P2 stall shape). The plain and
     # the V: forms both release; re-dispatch remains possible, the pin is
     # gone.
-    _settle_dispatch_outcome(ctx, claim, act, attempt_id=attempt_id)
+    _settle_dispatch_outcome(ctx, claim, act, attempt_id=attempt_id,
+                             dispatch_id=dispatch_id)
     # the reconciliation: quota-class failure memory rides the settle
     # path — the lane's hold and its observable retreat rows are decided
     # HERE (the same face that banks the act's outcome), never at launch.
@@ -959,9 +855,20 @@ def _facts_citing(ws, claim: str) -> int:
         return 0
 
 
+def _bank_dispatch_result(qc, ws, claim: str, dispatch_id: str,
+                          credit: float, phi_delta: float | None) -> dict:
+    """The executor serializes landing and banks each explicit ID once."""
+    if dispatch_id:
+        mass = qc.banked_mass(ws, dispatch_id)
+        if mass is None or mass[2]:
+            return {}
+    return qc.observe_settlement(ws, dispatch_id or claim, credit,
+                                 phi_delta=phi_delta)
+
+
 def _settle_dispatch_outcome(ctx: RunContext, claim: str,
                              act: object,
-                             attempt_id: str = "") -> None:
+                             attempt_id: str = "", dispatch_id: str = "") -> None:
     """#518 PR-2 (RC6, W2+W3): bank the act's outcome credit into the
     q cell its dispatch opened, and feed a TIMEOUT act to the obstacles
     registry (the termination floor's input — repeat-offender families
@@ -1024,8 +931,8 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
                 return None
 
         _phi_delta = _phi_delta_of(t_row)
-        res = qc.observe_settlement(str(ctx.ws), claim, credit,
-                                    phi_delta=_phi_delta)
+        res = _bank_dispatch_result(qc, str(ctx.ws), claim, dispatch_id,
+                                    credit, _phi_delta)
         if res.get("matched") and res.get("appended"):
             # #524 item 3: censoring made visible — a TIMEOUT is
             # right-censored (unknown-not-failed), recorded on the
@@ -1051,7 +958,7 @@ def _settle_dispatch_outcome(ctx: RunContext, claim: str,
                     facts_citing=_n_facts,
                     propensity=(t_row or {}).get("propensity"),
                     phi_delta=_phi_delta,
-                    dispatch_id=claim,
+                    dispatch_id=dispatch_id or claim,
                     arm_key=res.get("arm_key"),
                     fingerprint=res.get("fingerprint"))
             except Exception as exc:  # noqa: BLE001 — telemetry
@@ -1158,7 +1065,8 @@ def _run_dispatch_act(ctx: RunContext, claim: str, dispatched: set[str],
         return None  # already emitted; wait for the act to land
     act = ctx.face.run_dispatch(request, handle)
     _land_dispatch(ctx, claim, act, dispatched, detail,
-                   attempt_id=getattr(request, "launch_id", ""))
+                   attempt_id=getattr(request, "launch_id", ""),
+                   dispatch_id=getattr(request, "dispatch_id", ""))
     return None
 
 
@@ -1186,11 +1094,12 @@ def _dispatch_wave(ctx: RunContext, claims: list[str],
     # 1-F2: the launch attempt id rides each act's settle — one
     # in-flight launch per claim (the `dispatched` set), so the claim ->
     # request correlation is unambiguous within the wave
-    _launch_ids = {str(req.claim): getattr(req, "launch_id", "")
-                   for req, _handle in launched}
+    requests = {str(req.claim): req for req, _handle in launched}
     for act in acts:  # landing order; ActRecord.claim correlates 1:1
+        request = requests.get(str(act.claim))
         _land_dispatch(ctx, act.claim, act, dispatched, detail,
-                       attempt_id=_launch_ids.get(str(act.claim), ""))
+                       attempt_id=getattr(request, "launch_id", ""),
+                       dispatch_id=getattr(request, "dispatch_id", ""))
 
 
 def _partial_claim_ids(ctx: RunContext) -> list:

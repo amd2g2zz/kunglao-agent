@@ -115,3 +115,5 @@ ranking is verifiable end to end.
   alphas/betas (schema `posteriors-schema/1`) and the next rank orders
   the claims in reverse — the posterior moved the rank, and the feeds
   keep reporting linked-case Thompson rather than cold-start
+
+For the current method decision and settlement contract, see [#1064](../../../unify-action-decisions/specs/dispatch-attribution/spec.md). The undeclared rejection described by the earlier W2 amendment is historical.

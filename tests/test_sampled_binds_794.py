@@ -219,9 +219,7 @@ def test_undeclared_adopts_the_sampled_family_as_declaration(
     """No declaration + sampler material -> the gate's own draw becomes
     the dispatch's declaration: the dispatch passes and the adopted
     family is on the lifecycle record (countable, replay-indexable);
-    the adopted draw is not a deviation (no sample_deviation) and the
-    envelope-only observation row stays honest (nothing declared, no
-    row)."""
+    the adopted draw is recorded with its source."""
     ws = tmp_path / 'ws'
     _seed_history(ws, 'static-decompile')
     rc = sinks.pre_check(
@@ -246,10 +244,13 @@ def test_forbidden_dynamic_sample_still_rejects(tmp_path, capsys,
     paths = _min_paths(ws)
     paths['task_spec'].write_text(
         'constraints:\n  dynamic_re: forbidden\n', encoding='utf-8')
+    from rlvr.strategy_store import PosteriorStrategyStore
+
     monkeypatch.setattr(
-        sinks, '_gate_sample',
-        lambda ws_: {'family': 'dynamic-trace', 'propensity': 0.5,
-                     'prior_source': 'history'})
+        PosteriorStrategyStore, 'method_sample',
+        lambda self, fingerprint: {'family': 'dynamic-trace',
+                                   'candidates': {'dynamic-trace': {'weight': 1}},
+                                   'prior_source': 'history'})
     rc = sinks.pre_check(
         _dispatch_payload(_undeclared_prompt()), paths)
     err = capsys.readouterr().err
@@ -291,3 +292,128 @@ def test_other_escape_keeps_the_quarantine_face(tmp_path, capsys):
     q = ws / 'runs' / 'method-family-quarantine.jsonl'
     assert q.is_file() and 'neat uncode trick' in q.read_text(
         encoding='utf-8')
+
+
+def test_adoption_records_the_same_draw_and_settles_by_dispatch_id(tmp_path, monkeypatch):
+    from rlvr import q_cells, strategy_store
+
+    ws = tmp_path / "workspace"
+    paths = _min_paths(ws)
+    draws = []
+
+    def sample(self, fingerprint, **kwargs):
+        draws.append(fingerprint)
+        family = "static-decompile" if len(draws) == 1 else "dynamic-trace"
+        return {"family": family, "prior_source": "history",
+                "candidates": {family: {"weight": 1.0}},
+                "candidate_sources": {family: ["history"]}}
+
+    monkeypatch.setattr(strategy_store.PosteriorStrategyStore, "method_sample", sample)
+    prompt = _undeclared_prompt()
+    assert sinks.pre_check(_dispatch_payload(prompt), paths) == 0
+    rows = _usage_rows(ws)
+    assert len(rows) == 1
+    row = rows[0]
+    assert len(draws) == 1
+    assert row["method_family"] == row["sampled_family"] == "static-decompile"
+    assert row["method_source"] == "sampled-adoption"
+    assert "method_family" not in json.loads(prompt.splitlines()[0])["kunglao_dispatch"]
+    dispatch_id = row["dispatch_id"]
+    assert q_cells.observe_settlement(ws, dispatch_id, 1.0)["appended"]
+    assert q_cells.banked_mass(ws, dispatch_id) == (1.0, 0.0, 1)
+
+
+def test_adopted_method_is_sent_to_worker_without_permission_override(
+        tmp_path, capsys):
+    ws = tmp_path / "ws"
+    _seed_history(ws, "static-decompile")
+    prompt = _undeclared_prompt()
+    payload = _dispatch_payload(prompt)
+    payload["tool_name"] = "Agent"
+    payload["tool_use_id"] = "toolu_synthetic"
+    assert sinks.pre_check(payload, _min_paths(ws)) == 0
+    response = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert response["hookEventName"] == "PreToolUse"
+    assert "permissionDecision" not in response
+    updated = response["updatedInput"]
+    assert updated["name"] == payload["tool_input"]["name"]
+    assert updated["description"] == payload["tool_input"]["description"]
+    head, suffix = updated["prompt"].split("\n", 1)
+    assert suffix == prompt.split("\n", 1)[1]
+    assert json.loads(head)["kunglao_dispatch"]["method_family"] == "static-decompile"
+
+
+def test_hook_credit_observation_requires_the_correlated_execution(
+        tmp_path, capsys):
+    ws = tmp_path / "ws"
+    paths = _min_paths(ws)
+    _seed_history(ws, "static-decompile")
+    payload = _dispatch_payload(_undeclared_prompt())
+    payload.update(tool_name="Agent", tool_use_id="toolu_first")
+    assert sinks.pre_check(payload, paths) == 0
+    effective = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["updatedInput"]
+    assert _usage_rows(ws) == []  # other hooks or permission checks can still refuse
+
+    after = {**payload, "hook_event_name": "PostToolUse", "tool_response": {}}
+    assert sinks.post_check(after, paths) == 0  # original input never confirms adoption
+    assert sinks.post_check({**after, "tool_input": effective,
+                             "tool_use_id": "toolu_other"}, paths) == 0
+    assert _usage_rows(ws) == []
+    after["tool_input"] = effective
+    assert sinks.post_check(after, paths) == 0
+    assert sinks.post_check(after, paths) == 0
+    row, = _usage_rows(ws)
+    assert row["method_family"] == row["sampled_family"] == "static-decompile"
+    assert row["method_source"] == "sampled-adoption"
+
+
+def test_concurrent_callback_replay_publishes_one_observation(tmp_path, capsys, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from threading import Event, local
+
+    from rlvr import consolidated_ledger as cl, q_cells
+
+    ws = tmp_path / "ws"
+    paths = _min_paths(ws)
+    _seed_history(ws, "static-decompile")
+    payload = _dispatch_payload(_undeclared_prompt())
+    payload.update(tool_name="Agent", tool_use_id="toolu_replay")
+    assert sinks.pre_check(payload, paths) == 0
+    effective = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["updatedInput"]
+    after = dict(payload, tool_input=effective, hook_event_name="PostToolUse")
+    first_read = Event()
+    second_arrived = Event()
+    role = local()
+    read_rows = q_cells.dispatch_rows
+    lock = cl.family_lock
+
+    def snapshot(root):
+        rows = read_rows(root)
+        if role.number == 1:
+            first_read.set()
+            assert second_arrived.wait(10)
+        else:
+            second_arrived.set()
+        return rows
+
+    @contextmanager
+    def observe_lock(*args, **kwargs):
+        if role.number == 2:
+            second_arrived.set()
+        with lock(*args, **kwargs):
+            yield
+
+    def callback(number):
+        role.number = number
+        sinks._record_executed_method(after, paths)
+
+    monkeypatch.setattr(q_cells, "dispatch_rows", snapshot)
+    monkeypatch.setattr(cl, "family_lock", observe_lock)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        one = pool.submit(callback, 1)
+        assert first_read.wait(10)
+        two = pool.submit(callback, 2)
+        one.result(timeout=10)
+        two.result(timeout=10)
+    assert len(_usage_rows(ws)) == 1

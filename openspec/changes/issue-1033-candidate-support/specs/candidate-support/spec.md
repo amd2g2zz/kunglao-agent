@@ -30,6 +30,8 @@ The system SHALL compute current candidate support from positive intake entries 
 
 ### Requirement: Dispatch attribution is truthful
 
+The [#1064 specification](../../../unify-action-decisions/specs/dispatch-attribution/spec.md) supersedes the dispatch attribution scenarios below, including the original silent-or-unsupported override rejection. This section records the original proposal.
+
 The dispatch record SHALL identify the sampled family, actual method family, override reason, candidate set and per-candidate source. It SHALL distinguish conditional sampler weights from behavior propensity and leave unknown behavior probabilities unknown.
 
 #### Scenario: Reasoned override

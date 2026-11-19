@@ -6,7 +6,7 @@
     {"id": "arm", "label": "arm_oracle_cases → oracle/cases（#773 W1）", "kind": "service"},
     {"id": "state", "label": "rlvr.state.snapshot → 签名", "kind": "service"},
     {"id": "belief", "label": "rlvr.belief（settle 步记录，declared_unknown → bf 维）", "kind": "service"},
-    {"id": "sampler", "label": "strategy_store.gate_sample（DTS 抽样+倾向）", "kind": "service"},
+    {"id": "sampler", "label": "strategy_store.reconcile_declaration（DTS 抽样+倾向）", "kind": "service"},
     {"id": "familygate", "label": "sinks._method_family_gate：未声明→带采样家族拒绝（W2）", "kind": "service"},
     {"id": "usage", "label": "method-family-log 使用行（sampled_family+倾向）", "kind": "store"},
     {"id": "planner", "label": "l1_planner.plan_for_claim（准入：dispatch/park/reuse/distill）", "kind": "service"},

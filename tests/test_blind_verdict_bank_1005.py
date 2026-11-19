@@ -351,3 +351,174 @@ def test_unverified_rule_out_banks_nothing_verified_banks_a_row(
     bank2 = res2["q_cell_bank"]
     assert bank2["appended"] is True and bank2["route"] is None, bank2
     assert q_cells.banked_mass(ws, did2)[2] == 1
+
+
+@pytest.mark.parametrize("declared", [True, False])
+def test_interrupted_trajectory_can_settle_the_completed_action(
+        tmp_path, declared):
+    import worker_budget_sinks as sinks
+    from rlvr import priors
+
+    steps = ["C-1", "C-2", "C-3"]
+    ws = _ws(tmp_path, [{"id": cid, "status": "OPEN"} for cid in steps])
+    (ws / "task_spec.yaml").write_text("family: static-replay\n", encoding="utf-8")
+    assert priors.seed_intake_prior(ws, families=[FAM])
+    dispatch_ids = {}
+    for cid in steps[:2]:
+        envelope = {"version": 1, "claim": cid, "tier": 1}
+        if declared:
+            envelope["method_family"] = FAM
+        prompt = json.dumps({"kunglao_dispatch": envelope})
+        paths = {"workspace": str(ws)}
+        rc, family, view = sinks._method_family_gate(paths, prompt, cid, "w-test", 1, [])
+        assert rc is None and family == FAM
+        began = claims_store.begin_dispatch(
+            ws, cid, "hook:worker_budget", tier=1, prompt=prompt,
+            agent="w-test", method_family=family)
+        assert began.ok
+        assert claims_store.commit_dispatch(ws, cid).ok
+        assert claims_store.confirm_dispatch(ws, cid)
+        dispatch_ids[cid] = str(began.journal_id)
+        sinks._qcell_record_dispatch(
+            paths, prompt, cid, "w-test", dispatch_id=dispatch_ids[cid],
+            tier=1, tools=[], sampler_view=view)
+
+    # The first action's evidence is available. No result returned for
+    # the second action, and the third was never dispatched.
+    completed, unknown, unstarted = steps
+    _park(ws, tmp_path, completed)
+    assert wire.load_parked(ws, unknown) is None
+    rows = {r["claim"]: r for r in q_cells.dispatch_rows(ws)}
+    assert set(rows) == {completed, unknown}
+    assert unstarted not in rows
+    for cid, row in rows.items():
+        assert row["dispatch_id"] == dispatch_ids[cid]
+        assert row["method_source"] == ("declared" if declared else "sampled-adoption")
+        assert row["credit"] is None
+    assert q_cells.banked_mass(ws, dispatch_ids[completed])[2] == 0
+
+    _verdict(ws, completed, 0.9)
+    result = _settle(ws, completed, oracle_verdict="pass", at=T0)
+    assert result["q_cell_bank"]["matched"]
+    assert result["q_cell_bank"]["dispatch_id"] == dispatch_ids[completed]
+    assert q_cells.banked_mass(ws, dispatch_ids[completed]) == (1.0, 0.0, 1)
+    assert q_cells.banked_mass(ws, dispatch_ids[unknown]) == (0.0, 0.0, 0)
+    assert not _settle(ws, completed, oracle_verdict="pass", at=T0)["settled"]
+    assert q_cells.banked_mass(ws, dispatch_ids[completed]) == (1.0, 0.0, 1)
+
+
+def test_later_aborted_dispatch_does_not_replace_the_producer(tmp_path):
+    ws = _ws(tmp_path, [{"id": CLAIM, "status": "OPEN"}])
+    producer = _mint(ws, CLAIM)
+    rejected = claims_store.begin_dispatch(
+        ws, CLAIM, "hook:worker_budget", tier=1, prompt="fixture",
+        agent="w-test", method_family=FAM)
+    assert rejected.ok and claims_store.commit_dispatch(ws, CLAIM).ok
+    assert claims_store.abort_dispatch(ws, CLAIM, actor="hook:dispatch_gate").ok
+    assert claims_store.committed_dispatch_ids(ws, CLAIM) == [producer]
+    _park(ws, tmp_path)
+    _verdict(ws, CLAIM, 0.9)
+    result = _settle(ws, CLAIM, oracle_verdict="pass", at=T0)
+    assert result["q_cell_bank"]["matched"]
+    assert result["q_cell_bank"]["dispatch_id"] == producer
+
+
+def _race_execution_with_credit_publish(sinks, ws, claim, paths, after, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from threading import Event, local
+
+    import _common
+
+    before_write = Event()
+    callback_ready = Event()
+    release_write = Event()
+    role = local()
+    actual_write = _common.atomic_write_text
+    actual_lock = cl.family_lock
+
+    def write_credit(path, *args, **kwargs):
+        if str(path).endswith(".credit.json"):
+            before_write.set()
+            assert release_write.wait(10), "execution callback did not arrive"
+        return actual_write(path, *args, **kwargs)
+
+    @contextmanager
+    def notice_callback_lock(*args, **kwargs):
+        if getattr(role, "callback", False):
+            callback_ready.set()
+        with actual_lock(*args, **kwargs):
+            yield
+
+    def acknowledge():
+        role.callback = True
+        try:
+            return sinks.post_check(after, paths)
+        finally:
+            callback_ready.set()  # also detect a callback that skips the lock
+
+    monkeypatch.setattr(_common, "atomic_write_text", write_credit)
+    monkeypatch.setattr(cl, "family_lock", notice_callback_lock)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        settled = pool.submit(_settle, ws, claim, oracle_verdict="pass", at=T0)
+        try:
+            assert before_write.wait(10)
+            posted = pool.submit(acknowledge)
+            assert callback_ready.wait(10)
+        finally:
+            release_write.set()
+        assert posted.result(timeout=10) == 0
+        return settled.result(timeout=10)
+
+
+@pytest.mark.parametrize("ack", ["matched", "mismatched", "missing", "concurrent", "transient"])
+def test_verified_credit_waits_for_the_effective_worker_input(
+        tmp_path, capsys, monkeypatch, ack):
+    import worker_budget_sinks as sinks
+    from rlvr import priors
+    from test_sampled_binds_794 import _dispatch_payload, _min_paths, _undeclared_prompt
+
+    claim = "C-001"
+    ws = _ws(tmp_path, [{"id": claim, "status": "OPEN"}])
+    (ws / "task_spec.yaml").write_text("family: static-replay\n", encoding="utf-8")
+    assert priors.seed_intake_prior(ws, families=[FAM])
+    payload = _dispatch_payload(_undeclared_prompt())
+    payload.update(tool_name="Agent", tool_use_id="toolu_late_post")
+    paths = _min_paths(ws)
+    assert sinks.pre_check(payload, paths) == 0
+    effective = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["updatedInput"]
+    assert claims_store.confirm_dispatch(ws, claim)
+    did = claims_store.latest_committed_dispatch(ws, claim)["dispatch_id"]
+    _park(ws, tmp_path, claim)
+    _verdict(ws, claim, 0.9)
+
+    after = dict(payload, tool_input=effective, hook_event_name="PostToolUse")
+    if ack == "concurrent":
+        first = _race_execution_with_credit_publish(
+            sinks, ws, claim, paths, after, monkeypatch)
+    else:
+        first = _settle(ws, claim, oracle_verdict="pass", at=T0)
+        assert q_cells.banked_mass(ws, did) == (0.0, 0.0, 0)
+    assert first["settled"]
+    assert first["q_cell_bank"]["reason"] == "execution-unconfirmed"
+
+    if ack == "mismatched":
+        effective["prompt"] += "\nDifferent effective input"
+    if ack == "transient":
+        append = cl.append
+
+        def fail_late_bank(root, family, row):
+            if family == "experience" and row.get("source") == "settlement":
+                return False
+            return append(root, family, row)
+
+        with monkeypatch.context() as fault:
+            fault.setattr(cl, "append", fail_late_bank)
+            assert sinks.post_check(after, paths) == 0
+            assert q_cells.banked_mass(ws, did) == (0.0, 0.0, 0)
+    if ack in {"matched", "mismatched", "transient"}:
+        assert sinks.post_check(after, paths) == 0
+        assert sinks.post_check(after, paths) == 0
+    expected = (0.0, 0.0, 0) if ack in {"missing", "mismatched"} else (1.0, 0.0, 1)
+    assert q_cells.banked_mass(ws, did) == expected
+    assert not _settle(ws, claim, oracle_verdict="pass", at=T0)["settled"]

@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: c8cd3ffbe9fd03ed975df91160de4683aee4dd0900808de31f76669b3d9b3aac
+    sha256: 151b1f7e43b193c464ece9c1357b700b1908ca86e9c1cf99705e641cf55138a2
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -307,7 +307,7 @@ files:
   - src: scripts/claims_store.py
     dest: .claude/scripts/claims_store.py
     kind: scaffold
-    sha256: e16b9044bd4fb4be804ab01f0f5f0eee4fe6240e9f4d1a2ef99f44eaa1c0b74e
+    sha256: 1d99434b1cebc44fa0c1c6ef3a8fa7ce10a89e62d425e084729ee47552e27654
   - src: scripts/claims_view.py
     dest: .claude/scripts/claims_view.py
     kind: scaffold
@@ -1599,7 +1599,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 2bca232d1d0560f1ac19cd735f3617f6b07df75a821e40ed0dbd8c169870e93e
+    sha256: 094743d4af2c244273072655665fed20aa38e6944f96350794f0daf7504118f3
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold
@@ -1643,7 +1643,7 @@ files:
   - src: scripts/rlvr/settlement_wire.py
     dest: .claude/scripts/rlvr/settlement_wire.py
     kind: scaffold
-    sha256: 924a2d08458739d8ab2d73f9cac30db8fd3b68cc23a2f97387659c36fd134c92
+    sha256: 94d7b38f2cf20ed6fcb31dd6c3a94d4ac4cb4c082ee61f5a87134c7b98b45af7
   - src: scripts/rlvr/signal_guard.py
     dest: .claude/scripts/rlvr/signal_guard.py
     kind: scaffold
@@ -1683,7 +1683,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 621826977308a4bb683891781b6a3f907de75c8e408793ff4097682b3350e008
+    sha256: ceea03c256276a2434886cda2eba096082689fa407cb23c3c2494903547f59bf
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
@@ -1715,7 +1715,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 40111e0c0b763a8e4c9ed9f2a04ad93b769aaa2ad6534d43237fba0c7c53f2d4
+    sha256: d75c9c4fd132dda0b90d9836cb43652a2df6e3448310858e1152604f429a0226
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

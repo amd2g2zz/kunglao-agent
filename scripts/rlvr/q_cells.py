@@ -1220,6 +1220,8 @@ def _usage_cols(tier, tools, view: dict | None) -> tuple:
         triple = {"propensity": propensity,
                   "sampled_family": str(sampled).strip() if sampled else None,
                   "prior_source": str(prior).strip() if prior else None}
+        if view.get("method_source"):
+            triple["method_source"] = view["method_source"]
         if "probability_source" in view:
             triple["probability_source"] = view["probability_source"]
             triple["conditional_sampler_weight"] = _valid_propensity(
@@ -2252,6 +2254,17 @@ def _task_open_signature(ws) -> str:
     return ssig.signature_hash(ssig.snapshot(ws))
 
 
+DISPATCH_DECISION_REL = "runs/.dispatch-decisions"
+
+
+def dispatch_observation_pending(ws, dispatch_id: str) -> bool:
+    """A host hook is still waiting for the execution acknowledgement."""
+    if not re.fullmatch(r"[0-9a-f]{12}", dispatch_id):
+        return False
+    return next((Path(ws) / DISPATCH_DECISION_REL).glob(
+        f"{dispatch_id}-*.json"), None) is not None
+
+
 def record_dispatch_observation(ws, prompt: str, *,
                                 envelope_meta=None,
                                 claim: str | None = None,
@@ -2259,14 +2272,15 @@ def record_dispatch_observation(ws, prompt: str, *,
                                 fingerprint: str | None = None,
                                 dispatch_id: str | None = None,
                                 tier=None, tools=None,
-                                sampler_view: dict | None = None) -> dict:
+                                sampler_view: dict | None = None,
+                                signature: str | None = None) -> dict:
     """Record the (signature_hash, method_family) observation at the
     dispatch ALLOW tail — s_r = state-sig/1 AT dispatch (#429 §2).
 
     The signature is computed HERE (the hook must stay state_signature-
-    free per the #396 freeze). Undeclared families are the honest gap:
-    no row, never a fabricated bucket (the #432 gate is the enforcement
-    face that makes declaration mandatory). Fail-open throughout.
+    free per the #396 freeze). The accepted decision can carry either
+    a declaration or an adopted method. Legacy callers without a
+    decision still use the envelope. Fail-open throughout.
 
     #695: the row also carries the recipe triple ({recipe_id,
     recipe_propensity, recipe_source: sampled|declared|none} — see
@@ -2281,11 +2295,14 @@ def record_dispatch_observation(ws, prompt: str, *,
     override reason — the row never pairs a foreign propensity with the
     arm_key."""
     try:
-        family = declared_family(envelope_meta, prompt or "")
+        family = (sampler_view.get("actual_method_family")
+                  if isinstance(sampler_view, dict)
+                  and "actual_method_family" in sampler_view
+                  else declared_family(envelope_meta, prompt or ""))
         if not family:
             return {"appended": False, "reason": "undeclared",
                     "family": None, "signature_hash": None}
-        sig = _task_open_signature(ws)
+        sig = signature or _task_open_signature(ws)
         # #539 WS1: derive the 4-dim arm key from the v2 envelope fields
         # (v1 back-fill defaults keep legacy shapes identical). #705 MARL:
         # an envelope-declared agent_type appends the 5th dim so the

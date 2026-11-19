@@ -32,7 +32,7 @@ import rlvr.strategy_store as _ss_preinit  # noqa: E402,F401
 # Pin the WORKTREE rlvr.strategy_store into sys.modules BEFORE
 # dispatch_gate's import graph runs — its load_hooks_lib face can insert
 # the deployed skill root into sys.path, and a stale rlvr from that root
-# would answer gate_sample with the cold gap (the exact wrong verdict
+# would answer reconciliation with the cold gap (the exact wrong verdict
 # this suite exists to catch).
 
 
@@ -77,11 +77,11 @@ DECLARED = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
 UNDECLARED = "dispatch C-001 per the ranked plan"
 
 
-def test_gate_sample_cold_returns_gap(tmp_path, ss):
+def test_reconciliation_cold_returns_gap(tmp_path, ss):
     ws = _bare_ws(tmp_path)
-    gap = ss.gate_sample(ws)
-    assert gap == {"family": None, "propensity": None,
-                   "prior_source": None}
+    gap = ss.reconcile_declaration(ws, None)
+    assert gap["sampled_family"] is gap["propensity"] is gap["prior_source"] is None
+    assert not gap.get("actual_method_family")
 
 
 def test_undeclared_adopts_the_sampled_family(
@@ -92,10 +92,11 @@ def test_undeclared_adopts_the_sampled_family(
     reject, no fabricated family: the draw IS the record."""
     ws = _bare_ws(tmp_path)
     import rlvr.strategy_store
-    monkeypatch.setattr(rlvr.strategy_store, "gate_sample",
-                        lambda ws: {"family": "static-decompile",
-                                    "propensity": 0.62,
-                                    "prior_source": "store"})
+    monkeypatch.setattr(
+        rlvr.strategy_store.PosteriorStrategyStore, "method_sample",
+        lambda self, fingerprint: {"family": "static-decompile",
+                                   "prior_source": "store",
+                                   "candidates": {"static-decompile": {"weight": 1}}})
     paths = {"workspace": str(ws)}
     rc, value, _view = sinks._method_family_gate(
         paths, UNDECLARED, "C-001", "kunglao-worker", 1, [])
