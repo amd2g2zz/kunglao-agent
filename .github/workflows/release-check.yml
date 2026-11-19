@@ -57,7 +57,7 @@ jobs:
     # (integration) claims the self-hosted slot when free and overflows
     # to ubuntu-latest otherwise — one hardware slot can never serve a
     # five-PR queue. Probe failure defaults BACK to self-hosted.
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     outputs:
       runner_long: ${{ steps.probe.outputs.runner_long }}
       is_selfhosted: ${{ steps.probe.outputs.is_selfhosted }}
@@ -151,7 +151,7 @@ jobs:
     # these three legs are pure Python + uv — verified portable.
     # The integration leg is NOT (cross toolchains + eval fixtures)
     # and stays on our self-hosted slot below.
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -243,7 +243,7 @@ jobs:
     # these three legs are pure Python + uv — verified portable.
     # The integration leg is NOT (cross toolchains + eval fixtures)
     # and stays on our self-hosted slot below.
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -279,7 +279,7 @@ jobs:
     # these three legs are pure Python + uv — verified portable.
     # The integration leg is NOT (cross toolchains + eval fixtures)
     # and stays on our self-hosted slot below.
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2604
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -473,7 +473,7 @@ jobs:
     # The injected-platform tests pin the semantics; this leg pins the
     # host. Docs-only PRs skip it (same signal as the other legs).
     needs: runner-probe
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     if: needs.runner-probe.outputs.docs_only != 'true'
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
