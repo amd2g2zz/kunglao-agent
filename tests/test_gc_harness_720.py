@@ -19,8 +19,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 HARNESS = REPO / "gc-harness"
 
-_OLD = "2026-01-01"          # fixed past date for age windows
-_RECENT = "2026-08-20"       # fixed fresh date
+import datetime as _dt
+
+_OLD = "2026-01-01"          # fixed past date for age windows (always >90d old)
+# A fixed "fresh" date is a time bomb: it crossed the 90-day orphan window on
+# 2026-11-18 and Rule 1 started archiving the fixtures before Rule 3 could
+# report. Derive freshness relative to the run date instead.
+_RECENT = (_dt.date.today() - _dt.timedelta(days=30)).isoformat()
 
 
 def _clean_git_env() -> dict:
