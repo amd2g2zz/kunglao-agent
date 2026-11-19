@@ -36,31 +36,27 @@ on:
     branches: [ "dev", "master" ]
 
 env:
-  # uv picks the interpreter via this env on both tiers (self-hosted
-  # image python + uv-managed 3.11 on GitHub-hosted — see the
-  # provisioning step; host-agnostic since the 2026-10-07 routing).
+  # uv picks the interpreter via this env on the GitHub-hosted tier
+  # (uv-managed 3.11 — see the provisioning step).
   UV_PYTHON: python3.11
 
 # The four legs only read the repo and upload run artifacts — no write
 # surface is needed (CodeQL actions/missing-workflow-permissions).
 permissions:
   contents: read
-  # runner-probe lists workflow runs to see whether the single
-  # self-hosted slot is occupied
-  actions: read
 
 jobs:
   runner-probe:
-    # Owner routing: SELF-HOSTED FIRST, free-tier overflow when ours is
-    # busy, queue on self-hosted when the free quota is spent. The three
-    # short legs pin ubuntu-latest (always parallel); the LONG leg
-    # (integration) claims the self-hosted slot when free and overflows
-    # to ubuntu-latest otherwise — one hardware slot can never serve a
-    # five-PR queue. Probe failure defaults BACK to self-hosted.
+    # Owner routing (2026-11-18): GitHub-hosted ONLY. The repository is
+    # public (unlimited free hosted minutes) and the self-hosted slot was
+    # deregistered, so the long leg always rides ubuntu-latest with the
+    # native module deselected (portable-subset parity). The probe keeps
+    # the egress gate (#538) and the docs-only fast path; runner_long and
+    # is_selfhosted stay static for the downstream consumers.
     runs-on: ubuntu-latest
     outputs:
-      runner_long: ${{ steps.probe.outputs.runner_long }}
-      is_selfhosted: ${{ steps.probe.outputs.is_selfhosted }}
+      runner_long: ubuntu-latest
+      is_selfhosted: 'false'
       docs_only: ${{ steps.docs.outputs.docs_only }}
     steps:
       - name: Connectivity gate — absorb egress blips before any checkout (#538)
@@ -76,7 +72,7 @@ jobs:
         # at the ceiling instead of hanging the queue.
         # Ordering: the integration leg (needs: runner-probe) reaches its
         # checkout only AFTER this gate passes, so one gate at the run
-        # head covers the leg that actually rides the self-hosted egress.
+        # head covers the leg that then checks out on hosted egress.
         # lint-hygiene / docs-contract / unit-fast check out in parallel
         # on GitHub-hosted runners (a different egress path, not the
         # observed failure class); duplicating the gate per job would
@@ -121,36 +117,10 @@ jobs:
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Probe the self-hosted slot (free => integration claims it)
-        id: probe
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -eu
-          busy=$(gh api "repos/${{ github.repository }}/actions/runs?per_page=50" \
-            --jq '[.workflow_runs[] | select(.name == "release-check"
-              and .status != "completed"
-              and .id != ${{ github.run_id }})] | length' \
-            || echo "")
-          if [ "${{ steps.docs.outputs.docs_only }}" = "true" ]; then
-            echo 'runner_long="ubuntu-latest"' >> "$GITHUB_OUTPUT"
-            echo 'is_selfhosted="false"' >> "$GITHUB_OUTPUT"
-          elif [ -n "$busy" ] && [ "$busy" -ge 1 ]; then
-            echo 'runner_long="ubuntu-latest"' >> "$GITHUB_OUTPUT"
-            echo 'is_selfhosted="false"' >> "$GITHUB_OUTPUT"
-          else
-            echo 'runner_long=["self-hosted","python-3.11"]' >> "$GITHUB_OUTPUT"
-            echo 'is_selfhosted="true"' >> "$GITHUB_OUTPUT"
-          fi
 
   lint-hygiene:
-    # Route to runners that actually have python3.11 (kunglao-runner-py311).
-    # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
-    # with "command not found" — the python-3.11 label pins the right host.
     # always the free tier, always parallel (owner routing 2026-10-07):
     # these three legs are pure Python + uv — verified portable.
-    # The integration leg is NOT (cross toolchains + eval fixtures)
-    # and stays on our self-hosted slot below.
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -241,8 +211,7 @@ jobs:
   docs-contract:
     # always the free tier, always parallel (owner routing 2026-10-07):
     # these three legs are pure Python + uv — verified portable.
-    # The integration leg is NOT (cross toolchains + eval fixtures)
-    # and stays on our self-hosted slot below.
+    # (the integration leg rides ubuntu-latest too — hosted-only routing).
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -277,8 +246,7 @@ jobs:
     needs: runner-probe
     # always the free tier, always parallel (owner routing 2026-10-07):
     # these three legs are pure Python + uv — verified portable.
-    # The integration leg is NOT (cross toolchains + eval fixtures)
-    # and stays on our self-hosted slot below.
+    # (the integration leg rides ubuntu-latest too — hosted-only routing).
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -324,14 +292,12 @@ jobs:
 
   integration:
     needs: runner-probe
-    # The LONG leg claims the self-hosted slot when free (max utilization
-    # of the preferred resource) and overflows to ubuntu-latest when the
-    # slot is busy — the single hardware slot can never serve a multi-PR
-    # queue in parallel. On the free tier the env-bound native module
-    # (aarch cross-compiler + exec-permitted fixtures — proven RED on
-    # ubuntu-latest) is DESELECTED exactly like the CircleCI portable
-    # subset; the self-hosted run carries the full suite.
-    runs-on: ${{ fromJSON(needs.runner-probe.outputs.runner_long) }}
+    # Hosted-only routing (owner decision 2026-11-18): the env-bound
+    # native module (aarch cross-compiler + exec-permitted fixtures —
+    # proven RED on ubuntu-latest) is DESELECTED for portable-subset
+    # parity; the full-suite slot returns when a self-hosted runner is
+    # registered again.
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
