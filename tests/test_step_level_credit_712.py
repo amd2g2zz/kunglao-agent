@@ -193,7 +193,7 @@ def test_claim_terminal_calibration_corrects_cumulative_beta(tmp_path):
     destination. Exact at the explicit γ=1 calibration face."""
     from rlvr import scalar
     cited = {"id": "F80-cited", "creator": "C-73", "status": "PROVEN",
-             "verify_status": "passes", "cited_by_deliverable": True,
+             "verify_status": "passes", "cited_by_deliverable": True, "verified_deliverable_use": True,
              "answers_question": False, "oracle_backed_refutation": False}
 
     def _rollout(claim, fact_status, fact_verify, steps):
@@ -252,7 +252,7 @@ def test_backward_compatible_settlement_without_step_credit(tmp_path):
     ws = _ws(tmp_path, [{"id": "C-76", "status": "IN_PROGRESS"}])
     _dispatch(ws, "C-76")
     cited = {"id": "F86-cited", "creator": "C-76", "status": "PROVEN",
-             "verify_status": "passes", "cited_by_deliverable": True,
+             "verify_status": "passes", "cited_by_deliverable": True, "verified_deliverable_use": True,
              "answers_question": False, "oracle_backed_refutation": False}
     res = scalar.settle_round_credit(
         ws, [{"dispatch_id": "C-76", "round": 1}], [cited], [])
@@ -274,7 +274,7 @@ def test_terminal_endpoint_is_independent_of_step_count(tmp_path):
     calibration exists so dense credit never shifts the end state."""
     from rlvr import scalar
     cited = {"id": "F88-cited", "status": "PROVEN", "verify_status": "passes",
-             "cited_by_deliverable": True, "answers_question": False,
+             "cited_by_deliverable": True, "verified_deliverable_use": True, "answers_question": False,
              "oracle_backed_refutation": False}
 
     # stepped: three provisional (0.3) steps then a full settlement
@@ -325,7 +325,7 @@ def test_calibration_never_claws_back_band_valued_steps(tmp_path):
     assert (out or {}).get("step_credit") == pytest.approx(0.05)
     assert _cell(ws).success == pytest.approx(0.0)  # band: no mass banked
     cited = {"id": "F813-cited", "creator": "C-81", "status": "PROVEN",
-             "verify_status": "passes", "cited_by_deliverable": True,
+             "verify_status": "passes", "cited_by_deliverable": True, "verified_deliverable_use": True,
              "answers_question": False, "oracle_backed_refutation": False}
     scalar.settle_round_credit(
         ws, [{"dispatch_id": "C-81", "round": 1}], [cited], [])

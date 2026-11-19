@@ -44,7 +44,7 @@ from rlvr import strategy_store as store  # noqa: E402
 def _artifact(fid: str, creator: str, *, cited: bool = True) -> dict:
     return {"id": fid, "creator": creator, "status": "PROVEN",
             "verify_status": "passes",
-            "cited_by_deliverable": cited, "answers_question": False,
+            "cited_by_deliverable": cited, "verified_deliverable_use": cited, "answers_question": False,
             "oracle_backed_refutation": False}
 
 

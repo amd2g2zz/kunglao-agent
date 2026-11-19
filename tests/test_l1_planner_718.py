@@ -75,7 +75,7 @@ T0 = datetime(2026, 10, 16, 8, 0, 0, tzinfo=timezone.utc)
 FAM = "static-symbolic"
 
 CITED = {"id": "F718-cited", "status": "PROVEN", "verify_status": "passes",
-         "cited_by_deliverable": True, "answers_question": False,
+         "cited_by_deliverable": True, "verified_deliverable_use": True, "answers_question": False,
          "oracle_backed_refutation": False}
 
 

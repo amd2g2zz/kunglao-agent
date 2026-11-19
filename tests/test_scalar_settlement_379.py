@@ -136,7 +136,7 @@ class TestRulesFileV2:
         follows the body. ``rlvr`` joins the allowlist for the intra-
         package ledger face (rlvr.ledger — the same U1 ledger the shim
         used to import bare); it is not a model-call path."""
-        ALLOW = {"__future__", "json", "sys", "os", "re", "time",
+        ALLOW = {"__future__", "hashlib", "json", "sys", "os", "re", "time",
                  "datetime", "pathlib", "typing", "yaml",
                  "harness_common", "kunglao_log",
                  # issue 420: numpy for the ordered-float reductions in the
@@ -380,7 +380,7 @@ def _artifact(aid, creator, status="PROVEN", verify="passes",
     # answers_question: the claim-provenance citation leg (issue 433) —
     # the fact feeds a question-bearing claim (used toward the stage)
     return {"id": aid, "creator": creator, "status": status,
-            "verify_status": verify, "cited_by_deliverable": cited,
+            "verify_status": verify, "cited_by_deliverable": cited, "verified_deliverable_use": cited,
             "answers_question": answers,
             "oracle_backed_refutation": refutation}
 
@@ -739,6 +739,7 @@ class TestFactProvenanceFace:
                          "status": "PROVEN", "verify_status": "passes",
                          "claim_id": None, "answers_question": False,
                          "cited_by_deliverable": False,
+                         "verified_deliverable_use": False,
                          "oracle_backed_refutation": False}]
 
     def test_trace_id_fallback_attributes_to_the_mission(self, tmp_path):

@@ -1623,7 +1623,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: f439f3a3ac86659bb889d0d86861b4d2b1f19306028eba24df40004fd7e1d70f
+    sha256: 95a670816b3f44e620fcc256e76c9121518475ab37f6ab5c9cd1c04e88f0362c
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
@@ -2631,7 +2631,7 @@ files:
   - src: skills/kunglao-agent/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: f1867b11f1212f923f1d1942c5f7583bd04c34101fb151c7ad7f55eef5fdc872
+    sha256: 268384a0d8ab12559b886a5124f5477dde604f35ca5e3c419499221e9c855ab9
   - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
     kind: asset
