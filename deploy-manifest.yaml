@@ -1623,7 +1623,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: 95a670816b3f44e620fcc256e76c9121518475ab37f6ab5c9cd1c04e88f0362c
+    sha256: e2b189b26857852fdff57419b5b82c6aecc99b2e1ee087a4013c461dcd84fd1c
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold

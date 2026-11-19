@@ -771,6 +771,25 @@ def _settlement_routes(dispatches: list[dict],
     return routes
 
 
+def _add_deliverable_audit(settlement, artifacts, dispatch_id):
+    # Textual references are audit-only; they do not establish use.
+    refs = sorted((str(a["id"]),
+                   "verified" if a.get("verified_deliverable_use") else "unknown",
+                   a.get("deliverable_reference_evidence") or [])
+                  for a in artifacts
+                  if str(a.get("creator") or "").strip() == str(dispatch_id)
+                  and a.get("id") and a.get("cited_by_deliverable"))
+    if refs:
+        settlement["deliverable_references"] = [
+            {"id": aid, "use": use, **({"sources": sources} if sources else {})}
+            for aid, use, sources in refs]
+    used = [{"id": str(a["id"]), **a["deliverable_use_evidence"]}
+            for a in artifacts if a.get("deliverable_use_evidence")
+            and str(a.get("creator") or "").strip() == str(dispatch_id)]
+    if used:
+        settlement["deliverable_use_evidence"] = sorted(used, key=lambda x: x["id"])
+
+
 def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                         waste: list[dict] | None = None,
                         now=None) -> dict:
@@ -861,23 +880,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                       "round": row["round"],
                       "untraced": doc["untraced"],
                       "settled_ts": ts}
-        # Textual references are audit-only; they do not establish use.
-        refs = sorted((str(a["id"]),
-                       "verified" if a.get("verified_deliverable_use") else "unknown",
-                       a.get("deliverable_reference_evidence") or [])
-                      for a in artifacts
-                      if str(a.get("creator") or "").strip()
-                      == str(row["dispatch_id"])
-                      and a.get("id") and a.get("cited_by_deliverable"))
-        if refs:
-            settlement["deliverable_references"] = [
-                {"id": aid, "use": use, **({"sources": sources} if sources else {})}
-                for aid, use, sources in refs]
-        used = [{"id": str(a["id"]), **a["deliverable_use_evidence"]}
-                for a in artifacts if a.get("deliverable_use_evidence")
-                and str(a.get("creator") or "").strip() == str(row["dispatch_id"])]
-        if used:
-            settlement["deliverable_use_evidence"] = sorted(used, key=lambda x: x["id"])
+        _add_deliverable_audit(settlement, artifacts, row["dispatch_id"])
         # additive-when-present fairness seams: the sorted observation
         # face (never the banked reward) and the budget-overrun audit
         # trail ride the settlement only when the dispatch carried the
@@ -1613,39 +1616,48 @@ def _verified_deliverable_use(ws, fact_bytes, fid, meta, claim_worker, agents):
         return None
     for path in paths:
         try:
-            if not path.resolve().is_relative_to(records.resolve()):
-                continue
-            record_bytes = path.read_bytes()
-            record = json.loads(record_bytes)
-            if not isinstance(record, dict) or record.get("schema") != "deliverable-use/1":
-                continue
-            if record.get("fact_id") != fid or record.get("verdict") != "used":
-                continue
-            verifier, reason = record.get("verifier_id"), record.get("reason")
-            excerpt, rel = record.get("excerpt"), record.get("deliverable")
-            if not all(isinstance(x, str) and x.strip()
-                       for x in (verifier, reason, excerpt, rel)):
-                continue
-            if verifier.strip().casefold() in makers or len(excerpt.strip()) < 32:
-                continue
-            target = (root / rel).resolve()
-            if not target.is_relative_to(root) or not any(
-                    target.is_relative_to((root / base).resolve())
-                    for base in CITED_DELIVERABLE_RELS):
-                continue
-            data = target.read_bytes()
-            if (hashlib.sha256(fact_bytes).hexdigest() != record.get("fact_sha256")
-                    or hashlib.sha256(data).hexdigest() != record.get("deliverable_sha256")):
-                continue
-            if excerpt in fact_body and excerpt in data.decode("utf-8"):
-                return {"record": path.relative_to(root).as_posix(),
-                        "record_sha256": hashlib.sha256(record_bytes).hexdigest(),
-                        "deliverable": target.relative_to(root).as_posix(),
-                        "deliverable_sha256": record["deliverable_sha256"],
-                        "fact_sha256": record["fact_sha256"],
-                        "verifier_id": verifier}
+            matched = _check_deliverable_use_record(path, records, root, fact_bytes,
+                                                    fact_body, fid, makers)
+            if matched:
+                return matched
         except (OSError, ValueError, UnicodeError, TypeError, RuntimeError):
             continue
+    return None
+
+
+def _check_deliverable_use_record(path, records, root, fact_bytes, fact_body, fid, makers):
+    if not path.resolve().is_relative_to(records.resolve()):
+        return None
+    record_bytes = path.read_bytes()
+    record = json.loads(record_bytes)
+    if not isinstance(record, dict) or record.get("schema") != "deliverable-use/1":
+        return None
+    if record.get("fact_id") != fid or record.get("verdict") != "used":
+        return None
+    verifier, reason = record.get("verifier_id"), record.get("reason")
+    excerpt, rel = record.get("excerpt"), record.get("deliverable")
+    if not all(isinstance(x, str) and x.strip()
+               for x in (verifier, reason, excerpt, rel)):
+        return None
+    if verifier.strip().casefold() in makers or len(excerpt.strip()) < 32:
+        return None
+    target = (root / rel).resolve()
+    if not target.is_relative_to(root) or not any(
+            target.is_relative_to((root / base).resolve())
+            for base in CITED_DELIVERABLE_RELS):
+        return None
+    data = target.read_bytes()
+    if (hashlib.sha256(fact_bytes).hexdigest() != record.get("fact_sha256")
+            or hashlib.sha256(data).hexdigest() != record.get("deliverable_sha256")):
+        return None
+    if excerpt in fact_body and excerpt in data.decode("utf-8"):
+        return {"record": path.relative_to(root).as_posix(),
+                "record_sha256": hashlib.sha256(record_bytes).hexdigest(),
+                "deliverable": target.relative_to(root).as_posix(),
+                "deliverable_sha256": record["deliverable_sha256"],
+                "fact_sha256": record["fact_sha256"],
+                "verifier_id": verifier}
+
     return None
 
 
