@@ -2631,7 +2631,7 @@ files:
   - src: skills/kunglao-agent/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: 268384a0d8ab12559b886a5124f5477dde604f35ca5e3c419499221e9c855ab9
+    sha256: 88987959a517df852f81e3992af1b1612cfb53a93b252c7b97682701d13679fd
   - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
     kind: asset
