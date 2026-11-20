@@ -570,3 +570,35 @@ is `PYTHONPATH=scripts python -m rlvr.production_terminal <workspace>`; it repor
 the checkpoint, episodes, pending ledger rows and terminal-only spans separately.
 Windows runtime locking and durability have not been exercised in this change.
 Dispatch/worker/checker spans and the paired development evaluator remain pending.
+
+Deliverable-use credit (#1068): fact IDs found in `notes/`, `analyses/`,
+`runs/deliverables/`, or passed through the legacy `cited_ids` argument
+remain textual references for audit; by themselves they do not establish
+use. No qualifying record means use is unknown, including for old references.
+The existing question-link and independently verified rule-out paths retain
+their separate semantics.
+
+A separate checker records a `deliverable-use/1` JSON file in
+`runs/deliverable-use/`. The record names the exact fact ID and
+workspace-relative deliverable path, SHA-256 of each complete file, an exact
+shared excerpt of at least 32 characters, `verdict: "used"`, a non-empty
+`reason` explaining the contribution, and `verifier_id` identifying a checker
+other than the producer. The checker must inspect the deliverable in context:
+matching bytes alone do not establish contribution, and a refuted or unused
+excerpt must not be marked used. Example:
+
+```json
+{"schema":"deliverable-use/1","fact_id":"F001-example",
+ "fact_sha256":"<sha256 of full fact file>","deliverable":"notes/answer.md",
+ "deliverable_sha256":"<sha256 of full deliverable file>",
+ "excerpt":"<exact contribution in both fact body and deliverable>",
+ "verdict":"used","reason":"<how it supports the deliverable>",
+ "verifier_id":"<independent checker identity>"}
+```
+
+A missing, malformed, stale, self-signed, or unverifiable record stays unknown;
+editing either file requires a new check. Duplicate records do not add credit.
+The checker identity is a workspace assertion using the existing rule-out
+signoff trust model, not an authenticated host identity; #1055 tracks that
+separate limitation. This local fixture shows credit and posterior movement,
+not a change in dispatch behavior or final task outcome.

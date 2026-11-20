@@ -52,6 +52,7 @@ machine signals — no model-call path, no judgment slots (U3 extended).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -508,15 +509,15 @@ _REFUTATION_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
 def _artifact_cited(artifact: dict) -> bool:
     """The citation relation — the issue-433 single chokepoint.
 
-    An artifact is CITED iff it is named by a deliverable
-    (``cited_by_deliverable`` — the deliverable citation face) OR linked
+    An artifact is credited iff independently checked downstream use is
+    recorded (``verified_deliverable_use``) OR it is linked
     via claim provenance to a question-bearing claim
     (``answers_question`` — the fact frontmatter claim_id resolving in
     claim-register.yaml to a claim with a non-null answers_question; the
     same surface the verdict scorer walks pq -> claim -> linked fact).
     Pure: same artifact face -> same verdict; the workspace-side
     determination of both legs lives in fact_artifacts."""
-    return bool(artifact.get("cited_by_deliverable")
+    return bool(artifact.get("verified_deliverable_use")
                 or artifact.get("answers_question"))
 
 
@@ -770,6 +771,25 @@ def _settlement_routes(dispatches: list[dict],
     return routes
 
 
+def _add_deliverable_audit(settlement, artifacts, dispatch_id):
+    # Textual references are audit-only; they do not establish use.
+    refs = sorted((str(a["id"]),
+                   "verified" if a.get("verified_deliverable_use") else "unknown",
+                   a.get("deliverable_reference_evidence") or [])
+                  for a in artifacts
+                  if str(a.get("creator") or "").strip() == str(dispatch_id)
+                  and a.get("id") and a.get("cited_by_deliverable"))
+    if refs:
+        settlement["deliverable_references"] = [
+            {"id": aid, "use": use, **({"sources": sources} if sources else {})}
+            for aid, use, sources in refs]
+    used = [{"id": str(a["id"]), **a["deliverable_use_evidence"]}
+            for a in artifacts if a.get("deliverable_use_evidence")
+            and str(a.get("creator") or "").strip() == str(dispatch_id)]
+    if used:
+        settlement["deliverable_use_evidence"] = sorted(used, key=lambda x: x["id"])
+
+
 def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                         waste: list[dict] | None = None,
                         now=None) -> dict:
@@ -860,6 +880,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                       "round": row["round"],
                       "untraced": doc["untraced"],
                       "settled_ts": ts}
+        _add_deliverable_audit(settlement, artifacts, row["dispatch_id"])
         # additive-when-present fairness seams: the sorted observation
         # face (never the banked reward) and the budget-overrun audit
         # trail ride the settlement only when the dispatch carried the
@@ -1544,6 +1565,102 @@ def _independent_rule_out(meta: dict, claim_worker: str | None = None,
         meta, claim_worker, dispatch_agents or {})
 
 
+def _deliverable_reference_sources(ws):
+    """Audit reference paths and byte digests; never infer contribution."""
+    root = Path(ws).resolve()
+    found = {}
+    for rel in CITED_DELIVERABLE_RELS:
+        base = root / rel
+        try:
+            if not base.is_dir() or not base.resolve().is_relative_to(root):
+                continue
+            for path in sorted(base.rglob("*")):
+                if (path.is_symlink() or not path.is_file()
+                        or path.suffix.lower() not in CITED_DELIVERABLE_SUFFIXES
+                        or not path.resolve().is_relative_to(root)):
+                    continue
+                try:
+                    data = path.read_bytes()
+                    ids = set(FACT_ID_CITE_RE.findall(data.decode("utf-8", errors="replace")))
+                    ref = {"path": path.relative_to(root).as_posix(),
+                           "sha256": hashlib.sha256(data).hexdigest()}
+                    for fid in ids:
+                        found.setdefault(fid, []).append(ref)
+                except OSError:
+                    continue
+        except (OSError, RuntimeError):
+            continue
+    return found
+
+
+def _verified_deliverable_use(ws, fact_bytes, fid, meta, claim_worker, agents):
+    """Validate a checker's explicit, byte-bound finding of downstream use.
+
+    Workspace checker identity follows the existing verifier-signoff model;
+    host-level authentication of that identity is tracked separately.
+    """
+    root = Path(ws).resolve()
+    makers = _maker_ids(meta, claim_worker, agents)
+    if not makers:
+        return False
+    try:
+        fact_body = fact_bytes.decode("utf-8").split("---", 2)[2]
+    except (OSError, UnicodeError, IndexError):
+        return False
+    records = root / "runs" / "deliverable-use"
+    try:
+        if not records.resolve().is_relative_to(root):
+            return False
+        paths = sorted(records.glob("*.json"))
+    except (OSError, RuntimeError):
+        return None
+    for path in paths:
+        try:
+            matched = _check_deliverable_use_record(path, records, root, fact_bytes,
+                                                    fact_body, fid, makers)
+            if matched:
+                return matched
+        except (OSError, ValueError, UnicodeError, TypeError, RuntimeError):
+            continue
+    return None
+
+
+def _check_deliverable_use_record(path, records, root, fact_bytes, fact_body, fid, makers):
+    if not path.resolve().is_relative_to(records.resolve()):
+        return None
+    record_bytes = path.read_bytes()
+    record = json.loads(record_bytes)
+    if not isinstance(record, dict) or record.get("schema") != "deliverable-use/1":
+        return None
+    if record.get("fact_id") != fid or record.get("verdict") != "used":
+        return None
+    verifier, reason = record.get("verifier_id"), record.get("reason")
+    excerpt, rel = record.get("excerpt"), record.get("deliverable")
+    if not all(isinstance(x, str) and x.strip()
+               for x in (verifier, reason, excerpt, rel)):
+        return None
+    if verifier.strip().casefold() in makers or len(excerpt.strip()) < 32:
+        return None
+    target = (root / rel).resolve()
+    if not target.is_relative_to(root) or not any(
+            target.is_relative_to((root / base).resolve())
+            for base in CITED_DELIVERABLE_RELS):
+        return None
+    data = target.read_bytes()
+    if (hashlib.sha256(fact_bytes).hexdigest() != record.get("fact_sha256")
+            or hashlib.sha256(data).hexdigest() != record.get("deliverable_sha256")):
+        return None
+    if excerpt in fact_body and excerpt in data.decode("utf-8"):
+        return {"record": path.relative_to(root).as_posix(),
+                "record_sha256": hashlib.sha256(record_bytes).hexdigest(),
+                "deliverable": target.relative_to(root).as_posix(),
+                "deliverable_sha256": record["deliverable_sha256"],
+                "fact_sha256": record["fact_sha256"],
+                "verifier_id": verifier}
+
+    return None
+
+
 def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     """Read <ws>/facts/*.md frontmatter into round-credit artifact rows.
 
@@ -1567,6 +1684,7 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
         cited = cited_ids_from_deliverables(ws)
     else:
         cited = {str(c) for c in cited_ids}
+    reference_sources = _deliverable_reference_sources(ws)
     question_bearing = question_claims(ws)
     # the maker-checker's identity sources (once per read)
     workers = _claim_workers(ws)
@@ -1577,10 +1695,12 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
         return out
     for path in sorted(facts_dir.glob("F*.md")):
         try:
-            parts = path.read_text(
-                encoding="utf-8", errors="replace").split("---", 2)
+            if path.is_symlink() or not path.resolve().is_relative_to(Path(ws).resolve()):
+                continue
+            fact_bytes = path.read_bytes()
+            parts = fact_bytes.decode("utf-8", errors="replace").split("---", 2)
             meta = yaml.safe_load(parts[1]) if len(parts) >= 3 else None
-        except OSError:
+        except (OSError, RuntimeError):
             continue
         except yaml.YAMLError:
             continue
@@ -1590,6 +1710,8 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
         creator = str(meta.get("creator") or meta.get("trace_id") or "")
         claim_id = str(meta.get("claim_id") or "").strip()
         stamped = str(meta.get("created_by_dispatch") or "").strip()
+        use_evidence = _verified_deliverable_use(
+            ws, fact_bytes, fid, meta, workers.get(claim_id or None), agents)
         out.append({"id": fid,
                     "creator": creator or None,
                     **({"created_by_dispatch": stamped} if stamped else {}),
@@ -1604,6 +1726,13 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
                     and claim_id in question_bearing,
                     "cited_by_deliverable": _deliverable_cited(fid,
                                                                cited),
+                    **({"deliverable_reference_evidence": reference_sources.get(
+                        (FACT_ID_CITE_RE.search(fid).group(0)), [])}
+                       if FACT_ID_CITE_RE.search(fid) and reference_sources.get(
+                           FACT_ID_CITE_RE.search(fid).group(0)) else {}),
+                    "verified_deliverable_use": bool(use_evidence),
+                    **({"deliverable_use_evidence": use_evidence}
+                       if use_evidence else {}),
                     "oracle_backed_refutation": str(
                         meta.get("status") or "").strip().upper()
                         in _REFUTATION_STATUSES})

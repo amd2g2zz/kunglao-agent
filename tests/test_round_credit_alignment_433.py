@@ -69,7 +69,7 @@ RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
 def _artifact(aid, creator, status="PROVEN", verify="passes",
               cited=False, answers=False, refutation=False):
     return {"id": aid, "creator": creator, "status": status,
-            "verify_status": verify, "cited_by_deliverable": cited,
+            "verify_status": verify, "cited_by_deliverable": cited, "verified_deliverable_use": cited,
             "answers_question": answers,
             "oracle_backed_refutation": refutation}
 

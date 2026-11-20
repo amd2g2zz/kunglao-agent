@@ -49,7 +49,7 @@ def _sig(type_: str, source: str, value, ts: str = TS) -> dict:
 def _artifact(aid: str, creator: str = "C-005", *, status: str = "PROVEN",
               cited: bool = False) -> dict:
     return {"id": aid, "creator": creator, "status": status,
-            "verify_status": "passes", "cited_by_deliverable": cited,
+            "verify_status": "passes", "cited_by_deliverable": cited, "verified_deliverable_use": cited,
             "answers_question": False, "oracle_backed_refutation": False}
 
 
