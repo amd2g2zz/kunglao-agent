@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 151b1f7e43b193c464ece9c1357b700b1908ca86e9c1cf99705e641cf55138a2
+    sha256: d514417ea30f88f5fee860eac5edda5a5c3d61800e404c0ae18fdbc00650329d
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1408,6 +1408,10 @@ files:
     dest: .claude/scripts/rlvr/crystallize.py
     kind: scaffold
     sha256: 52676b2d7a60321ca9047c7d547246d0e7e7ff24f9390fb6633b1fbfdf45be13
+  - src: scripts/rlvr/deliverable_checker.py
+    dest: .claude/scripts/rlvr/deliverable_checker.py
+    kind: scaffold
+    sha256: 6858701224d9c8451b9d849cc3e93f8061a52331ada6bd923800e89092fe8a46
   - src: scripts/rlvr/dispatch_reject.py
     dest: .claude/scripts/rlvr/dispatch_reject.py
     kind: scaffold
@@ -1623,7 +1627,7 @@ files:
   - src: scripts/rlvr/scalar.py
     dest: .claude/scripts/rlvr/scalar.py
     kind: scaffold
-    sha256: e2b189b26857852fdff57419b5b82c6aecc99b2e1ee087a4013c461dcd84fd1c
+    sha256: a1c546cc530b333c5a13407b2d47163644ddbdfb9a5a6e88e5d4410c2fa9daca
   - src: scripts/rlvr/settlement_scorer.py
     dest: .claude/scripts/rlvr/settlement_scorer.py
     kind: scaffold
@@ -2631,7 +2635,7 @@ files:
   - src: skills/kunglao-agent/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: 88987959a517df852f81e3992af1b1612cfb53a93b252c7b97682701d13679fd
+    sha256: 1c6b5ae33f04ee08bebf473a77dd92ddbdcb6521646d58085b80e909113a9e10
   - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
     kind: asset

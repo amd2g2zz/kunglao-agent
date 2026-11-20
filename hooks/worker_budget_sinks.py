@@ -1815,6 +1815,13 @@ def _record_dispatch_failure(paths: dict, worker_id: str,
 
 
 def post_check(payload: dict, paths: dict) -> int:
+    if paths.get("workspace") and payload.get("tool_name") == "Agent":
+        try:
+            from rlvr import deliverable_checker
+
+            deliverable_checker.capture(paths["workspace"], payload)
+        except (OSError, ValueError, RuntimeError) as exc:
+            warn("deliverable_checker", f"{type(exc).__name__}: {exc}")
     _record_executed_method(payload, paths)
     worker_id = payload.get('tool_input', {}).get('name') or ''
     tool_result = str(payload.get('tool_result', ''))

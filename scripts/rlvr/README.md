@@ -578,27 +578,23 @@ use. No qualifying record means use is unknown, including for old references.
 The existing question-link and independently verified rule-out paths retain
 their separate semantics.
 
-A separate checker records a `deliverable-use/1` JSON file in
-`runs/deliverable-use/`. The record names the exact fact ID and
-workspace-relative deliverable path, SHA-256 of each complete file, an exact
-shared excerpt of at least 32 characters, `verdict: "used"`, a non-empty
-`reason` explaining the contribution, and `verifier_id` identifying a checker
-other than the producer. The checker must inspect the deliverable in context:
-matching bytes alone do not establish contribution, and a refuted or unused
-excerpt must not be marked used. Example:
+The delivery skill dispatches a fresh checker for a specific fact and deliverable.
+On an armed learning channel, the Agent completion hook records its result in
+`runs/deliverable-use/`. The hook takes the checker ID from the host event and
+seals the record with its workspace and call identity. Settlement requires
+that seal alongside the full file hashes and the exact shared excerpt.
 
-```json
-{"schema":"deliverable-use/1","fact_id":"F001-example",
- "fact_sha256":"<sha256 of full fact file>","deliverable":"notes/answer.md",
- "deliverable_sha256":"<sha256 of full deliverable file>",
- "excerpt":"<exact contribution in both fact body and deliverable>",
- "verdict":"used","reason":"<how it supports the deliverable>",
- "verifier_id":"<independent checker identity>"}
-```
+A successful checker returns a `deliverable-use/1` JSON object with the
+assigned `fact_id` and workspace-relative `deliverable`, the full file
+hashes (`fact_sha256` and `deliverable_sha256`), an exact shared
+`excerpt` of at least 32 characters, `verdict: "used"`, and a `reason`
+explaining how the excerpt contributes to the answer. The checker inspects
+the deliverable in context, distinguishing affirmative use from quoted
+material, rejection, and incidental mentions.
 
-A missing, malformed, stale, self-signed, or unverifiable record stays unknown;
-editing either file requires a new check. Duplicate records do not add credit.
-The checker identity is a workspace assertion using the existing rule-out
-signoff trust model, not an authenticated host identity; #1055 tracks that
-separate limitation. This local fixture shows credit and posterior movement,
-not a change in dispatch behavior or final task outcome.
+Missing, malformed, stale, self-signed, or unverifiable records leave use
+unknown. Armed workspaces need a new checker receipt for prior unsigned
+records. Unarmed fixture and legacy reads still recognize the existing
+record format. Duplicate receipts do not add credit. Host attribution
+uses the existing learning-seal trust boundary for processes under the
+workspace user's account.
