@@ -1596,8 +1596,7 @@ def _deliverable_reference_sources(ws):
 def _verified_deliverable_use(ws, fact_bytes, fid, meta, claim_worker, agents):
     """Validate a checker's explicit, byte-bound finding of downstream use.
 
-    Workspace checker identity follows the existing verifier-signoff model;
-    host-level authentication of that identity is tracked separately.
+    Armed settlement requires a host-issued checker receipt.
     """
     root = Path(ws).resolve()
     makers = _maker_ids(meta, claim_worker, agents)
@@ -1632,6 +1631,11 @@ def _check_deliverable_use_record(path, records, root, fact_bytes, fact_body, fi
     record = json.loads(record_bytes)
     if not isinstance(record, dict) or record.get("schema") != "deliverable-use/1":
         return None
+    if _seal.armed():
+        from rlvr.deliverable_checker import is_host_bound
+
+        if not is_host_bound(root, record):
+            return None
     if record.get("fact_id") != fid or record.get("verdict") != "used":
         return None
     verifier, reason = record.get("verifier_id"), record.get("reason")

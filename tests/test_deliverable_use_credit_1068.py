@@ -215,3 +215,78 @@ def test_deployed_delivery_skill_provides_schema_and_executable_settlement(tmp_p
     assert all(field in text for field in ("deliverable-use/1", "fact_sha256",
                                            "deliverable_sha256", "verifier_id"))
     assert process.returncode == 0, process.stderr
+
+
+def test_armed_use_requires_completed_orchestrator_checker(tmp_path, monkeypatch):
+    import claims_store
+    import kunglao_log
+    import settle_round_credit
+    import worker_budget_sinks
+    from _dispatch_fixture import mint_one
+    from _factories import seed_verifier_dispatch
+    from rlvr import incremental_reward, learning_seal, q_cells
+    from test_sampled_binds_794 import _min_paths
+
+    ws, fact, deliverable = _fixture(tmp_path)
+    key = tmp_path / "learning.key"
+    key.write_bytes(b"f" * 64)
+    monkeypatch.setattr(learning_seal, "KEY_PATH", key)
+    claim = {"id": "C-1", "status": "PROVEN", "answers_question": None}
+    did = mint_one(ws, claim, agent="maker")
+    assert claims_store.confirm_dispatch(ws, "C-1")
+    incremental_reward.append_transition(ws, "C-1", "completed")
+    seed_verifier_dispatch(ws, "C-1")
+    kunglao_log.emit(ws, "hook:worker_budget", "dispatch", claim="C-1",
+                     detail="tier=1 tools=Read agent=kunglao-redteam")
+    fact.write_text(
+        f"---\nid: F001-test\nstatus: PROVEN\ncreator: C-1\n"
+        f"created_by_dispatch: {did}\nclaim_id: C-1\n---\n{EXCERPT}\n",
+        encoding="utf-8")
+    deliverable.write_text(EXCERPT, encoding="utf-8")
+    _attest(ws, fact, deliverable)
+    unsigned_path = ws / "runs" / "deliverable-use" / "1.json"
+    result = json.loads(unsigned_path.read_text(encoding="utf-8"))
+    result["verifier_id"] = "self-reported-checker"
+    assignment = json.dumps({
+        "schema": "deliverable-use-review/1", "fact_id": result["fact_id"],
+        "deliverable": result["deliverable"],
+    })
+    payload = {
+        "hook_event_name": "PostToolUse", "tool_name": "Agent",
+        "agent_type": "named-orchestrator",
+        "session_id": "parent-session", "tool_use_id": "toolu_checker",
+        "tool_input": {"subagent_type": "general-purpose",
+                       "name": "deliverable-use-F001", "run_in_background": False,
+                       "prompt": assignment + "\nfacts-snapshot: 1 facts\nReview downstream use."},
+        "tool_response": {"status": "completed", "agentId": "host-checker",
+                          "content": [{"type": "text", "text": json.dumps(result)}]},
+    }
+
+    assert not scalar.fact_artifacts(ws)[0]["verified_deliverable_use"]
+    settle_round_credit.run(ws)
+    assert q_cells.banked_mass(ws, did)[:2] == (0.0, 0.0)
+    paths = _min_paths(ws)
+    worker_budget_sinks.post_check({**payload, "agent_id": "maker-child"}, paths)
+    pending = {**payload["tool_response"], "status": "async_launched"}
+    worker_budget_sinks.post_check({**payload, "tool_response": pending}, paths)
+    wrong = {**payload["tool_response"], "content": [
+        {"type": "text", "text": json.dumps({**result, "fact_id": "F002-other"})}]}
+    worker_budget_sinks.post_check({**payload, "tool_response": wrong}, paths)
+    assert not scalar.fact_artifacts(ws)[0]["verified_deliverable_use"]
+    assert worker_budget_sinks.pre_check(
+        {**payload, "hook_event_name": "PreToolUse"}, paths) == 0
+    worker_budget_sinks.post_check(payload, paths)
+    worker_budget_sinks.post_check(payload, paths)
+
+    assert not worker_budget_sinks.read_active_workers(paths["state"])
+    sealed_path, = unsigned_path.parent.glob("host-*.json")
+    artifact, = scalar.fact_artifacts(ws)
+    assert artifact["verified_deliverable_use"]
+    assert artifact["deliverable_use_evidence"]["verifier_id"] == "host-checker"
+    settle_round_credit.run(ws)
+    settle_round_credit.run(ws)
+    assert q_cells.banked_mass(ws, did)[:2] == (1.0, 0.0)
+    sealed = json.loads(sealed_path.read_text(encoding="utf-8"))
+    sealed_path.write_text(json.dumps({**sealed, "verifier_id": "renamed-checker"}),
+                           encoding="utf-8")
+    assert not scalar.fact_artifacts(ws)[0]["verified_deliverable_use"]

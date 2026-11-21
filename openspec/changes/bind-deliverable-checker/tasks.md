@@ -1,0 +1,3 @@
+- [x] Replay unsigned, nested, and completed top-level checker results.
+- [x] Bind the host result to its assigned fact and deliverable and enforce the seal on the armed reader.
+- [ ] Verify settlement, deployment, and independent review.
