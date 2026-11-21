@@ -94,6 +94,7 @@ from . import timeout_triage
 from . import triples
 from . import verification_debt
 from . import winrate
+from . import deliverable_checker
 
 __all__ = [
     "action_params",
@@ -106,6 +107,7 @@ __all__ = [
     "consolidated_ledger",
     "constants_ref",
     "crystallize",
+    "deliverable_checker",
     "dispatch_reject",
     "disposition",
     "disposition_measure",
