@@ -1494,15 +1494,15 @@ def record_posteriors(ws, report: dict) -> Path | None:
     updates = _settled_rows(report)
     if not updates:
         return None
-    led = po.PosteriorLedger.load(ws)
-    for cid, passed in updates.items():
-        cp = led.cases.get(cid) or po.CasePosterior(cid)
-        before = (cp.alpha, cp.beta)
-        cp.update(passed)
-        led.cases[cid] = cp
-        _emit_posterior_update(ws, cid, before, (cp.alpha, cp.beta), report)
-    record_pq_updates(ws, report, led)  # ΔH face, same save
-    return led.save(ws)
+    with po.PosteriorLedger.for_update(ws) as led:
+        for cid, passed in updates.items():
+            cp = led.cases.get(cid) or po.CasePosterior(cid)
+            before = (cp.alpha, cp.beta)
+            cp.update(passed)
+            led.cases[cid] = cp
+            _emit_posterior_update(ws, cid, before, (cp.alpha, cp.beta), report)
+        record_pq_updates(ws, report, led)  # ΔH face, same save
+        return led.save(ws)
 
 
 # ------------------------------------------------- #146 case abandonment

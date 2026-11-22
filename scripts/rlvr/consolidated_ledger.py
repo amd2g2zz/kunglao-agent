@@ -205,12 +205,17 @@ def family_lock(ws, family: str):
     mutating-but-not-appending faces (the revocation rewrite) run
     INSIDE it so a concurrent ``append`` between their read and their
     atomic write can never be lost (issue-1004 R2c review fix). The
-    same lock file and fallback posture as ``_locked_append``: flock
-    where available, unlocked where not (single writes stay atomic, CI
-    is single-tenant). Never raises on lock failure."""
+    knowledge family always takes a real lock shared with append; an
+    unavailable lock refuses the rewrite. Other families retain their
+    existing append-only fallback posture."""
     p = family_path(ws, family)
     p.parent.mkdir(parents=True, exist_ok=True)
     lock = _lock_path(p)
+    if family == "knowledge":
+        from platform_matrix import exclusive_file_lock
+        with exclusive_file_lock(lock):
+            yield
+        return
     lock.touch(exist_ok=True)
     fd = None
     try:
@@ -248,6 +253,11 @@ def _locked_append(p: Path, data: bytes) -> bool:
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         lock = _lock_path(p)
+        if p.name == KNOWLEDGE_REL:
+            from platform_matrix import exclusive_file_lock
+            with exclusive_file_lock(lock), p.open("ab") as stream:
+                stream.write(data)
+            return True
         lock.touch(exist_ok=True)
         fd = None
         try:

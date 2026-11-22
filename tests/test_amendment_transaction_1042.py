@@ -36,6 +36,7 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -155,26 +156,12 @@ def test_append_refusal_leaves_belief_and_ledger_unchanged(
     _flip_register(ws, "C-1", "q2", "REFUTED")
     _refuse_experience_appends(monkeypatch)
 
-    out = src.reconcile_case_settlements(ws)
-    assert out.get("case_amendments_error"), out
-    assert out["case_amendments"] == 0
-    assert _belief(ws, "case-q2") == (2.0, 1.0)   # untouched
-    assert _amendment_rows(ws) == []              # nothing landed
-
-
-def test_repeated_refused_passes_do_not_drift(tmp_path, monkeypatch):
-    ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN",
-                         "answers_question": "q2"}])
-    _arm_case(ws, "case-q2", "q2")
-    _observe(ws, "case-q2", "C-1", True)
-    _flip_register(ws, "C-1", "q2", "REFUTED")
-    _refuse_experience_appends(monkeypatch)
-
     for _ in range(4):
         out = src.reconcile_case_settlements(ws)
         assert out.get("case_amendments_error"), out
+        assert out["case_amendments"] == 0
         assert _belief(ws, "case-q2") == (2.0, 1.0)
-    assert _amendment_rows(ws) == []
+        assert _amendment_rows(ws) == []
 
 
 # ---------- 2. the save window stays loud -----------------------------------
@@ -308,6 +295,7 @@ def test_pre_move_stale_row_is_discovered_and_retried(
     _observe(ws, "case-q2", "C-1", True)
     _flip_register(ws, "C-1", "q2", "REFUTED")
     import consolidate_ledgers as _migrate_cli
+    from rlvr.strategy_store import workspace_id_of
 
     rel = "marl-negative.jsonl"
     assert rel in _migrate_cli.LEGACY_SOURCES["knowledge"]
@@ -315,7 +303,7 @@ def test_pre_move_stale_row_is_discovered_and_retried(
         "schema": "marl-negative/1", "ts": "2026-11-17T00:00:00Z",
         "signature_class": "unknown", "agent_type": None,
         "method_family": "upx-unpack", "tool_chain": "upx", "fails": 1,
-        "claim_ref": "C-1", "step_ref": "step-1"}) + "\n",
+        "workspace_id": workspace_id_of(ws), "claim_ref": "C-1", "step_ref": "step-1"}) + "\n",
         encoding="utf-8")
 
     def _boom(*_a, **_k):
@@ -380,3 +368,233 @@ def test_mixed_land_and_refuse_counts_per_entry(tmp_path, monkeypatch):
     assert len(_amendment_rows(ws)) == 2
     assert _belief(ws, "case-q1") == (1.0, 2.0)   # no double-apply
     assert _belief(ws, "case-q2") == (1.0, 2.0)
+
+
+def _concurrent_writer(ws, role, at_save, proceed):
+    """Yield after the first snapshot read. Let the competing writer either
+    queue on the OS lock or actually finish (pre-fix unlocked behavior)."""
+    import platform_matrix
+    import plan_epistemics
+    from posteriors_case import PosteriorLedger
+
+    if role == "amend":
+        load = PosteriorLedger.load
+
+        def pause_after_read(root):
+            ledger = load(root)
+            at_save.set()
+            assert proceed.wait(30), "competing writer did not run"
+            return ledger
+
+        PosteriorLedger.load = staticmethod(pause_after_read)
+        assert src.reconcile_case_settlements(ws)["case_amendments"] == 1
+        return
+    lock = platform_matrix.fd_lock
+
+    def signal_then_lock(fd, **kwargs):
+        proceed.set()
+        return lock(fd, **kwargs)
+
+    platform_matrix.fd_lock = signal_then_lock
+    if role == "seed":
+        plan_epistemics.seed_situational_pqs(ws, [
+            {"boundary_type": "epistemic", "answers_question": "q-other",
+             "candidates": {"first": 1, "second": 1}}], {})
+    else:
+        src.reconcile_case_settlements(ws)
+    proceed.set()
+
+
+@pytest.mark.parametrize("role", ["seed", "second-amend"])
+def test_concurrent_writer_preserves_posterior_and_single_amendment(tmp_path, role):
+    import multiprocessing
+    from posteriors_case import PosteriorLedger
+
+    ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN", "answers_question": "q2"}])
+    _arm_case(ws, "case-q2", "q2")
+    _observe(ws, "case-q2", "C-1", True)
+    _flip_register(ws, "C-1", "q2", "REFUTED")
+    ctx = multiprocessing.get_context("spawn")
+    at_save, proceed = ctx.Event(), ctx.Event()
+    first, other = [ctx.Process(target=_concurrent_writer, args=(ws, r, at_save, proceed))
+                    for r in ("amend", role)]
+    first.start()
+    try:
+        assert at_save.wait(30)
+        other.start()
+        for process in (first, other):
+            process.join(30)
+            assert process.exitcode == 0
+    finally:
+        for process in (first, other):
+            if process.is_alive():
+                process.terminate()
+                process.join()
+    assert _belief(ws, "case-q2") == (1.0, 2.0)
+    assert len(_amendment_rows(ws)) == 1
+    if role == "seed":
+        assert "q-other" in PosteriorLedger.load(ws).pqs
+
+
+def test_ambiguous_knowledge_preserved_and_reported_after_restart(tmp_path):
+    ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN", "answers_question": "q2"}])
+    ws = ws.rename(ws.with_name("ab12cd34ef56"))
+    _arm_case(ws, "case-q2", "q2")
+    _observe(ws, "case-q2", "C-1", True)
+    _flip_register(ws, "C-1", "q2", "REFUTED")
+    path = cl.family_path(ws, "knowledge")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    original = b'{ "schema":"marl-negative/1", "claim_ref":"C-1" }\r\n\n'
+    legacy = {"schema": "marl-negative/1", "claim_ref": "C-1", "workspace_id": ws.name}
+    path.write_bytes(original)
+    _seed_negative(ws, "C-1")
+    for expected in (1, 0):
+        out = src.reconcile_case_settlements(ws)
+        assert out["case_amendments"] == expected
+        assert path.is_file() and path.read_bytes() == original
+        assert "C-1" in out["case_revocations_unavailable"]
+        assert out["revoked_claims"] == (["C-1"] if expected else [])
+    for identity, unavailable in (("old-name", True), (ws.name, True), (42, True), ("aaaaaaaaaaaa", False)):
+        legacy["workspace_id"] = identity
+        before = (json.dumps(legacy) + "\n").encode()
+        path.write_bytes(before)
+        replay = src.reconcile_case_settlements(ws)
+        assert ("C-1" in replay.get("case_revocations_unavailable", ())) is unavailable
+        assert not replay["revoked_claims"] and path.read_bytes() == before
+
+
+def test_unreadable_knowledge_retried_by_production_settlement(tmp_path, monkeypatch):
+    import errno
+
+    ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN", "answers_question": "q2"}])
+    _arm_case(ws, "case-q2", "q2")
+    _observe(ws, "case-q2", "C-1", True)
+    _seed_negative(ws, "C-1")
+    _flip_register(ws, "C-1", "q2", "REFUTED")
+    target = ws / "marl-negative.jsonl"
+    cl.family_path(ws, "knowledge").rename(target)
+    original = target.read_bytes()
+    real_open = Path.open
+
+    def reject_knowledge_read(path, *args, **kwargs):
+        if path == target and (not args or "r" in args[0]):
+            raise OSError(errno.EIO, "injected knowledge read error")
+        return real_open(path, *args, **kwargs)
+
+    with monkeypatch.context() as fault:
+        fault.setattr(Path, "open", reject_knowledge_read)
+        out = src.run(ws)
+        assert "knowledge" in out.get("case_observations_error", "")
+    assert target.read_bytes() == original
+    assert src.run(ws)["case_amendments"] == 0
+    assert not target.exists()
+    assert _neg_rows(ws) == []
+    assert len(_amendment_rows(ws)) == 1
+
+
+def test_knowledge_lock_unavailable_preserves_bytes(tmp_path, monkeypatch):
+    import platform_matrix
+
+    ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN", "answers_question": "q2"}])
+    _seed_negative(ws, "C-1")
+    target = cl.family_path(ws, "knowledge")
+    original = target.read_bytes()
+    monkeypatch.setattr(platform_matrix, "fd_lock", lambda fd: "unlocked-noop")
+    assert not cl.append(ws, "knowledge", {"schema": "feature-table/1"})
+    with pytest.raises(OSError, match="lock"):
+        crystallize.revoke_claim(ws, "C-1")
+    assert target.read_bytes() == original
+
+
+def test_unreadable_posterior_refuses_amendment_without_side_effects(tmp_path, monkeypatch):
+    import errno
+    from posteriors_case import LEDGER_REL, PosteriorLedger
+    import plan_epistemics
+
+    ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN", "answers_question": "q2"}])
+    _arm_case(ws, "case-q2", "q2")
+    _observe(ws, "case-q2", "C-1", True)
+    plan_epistemics.seed_situational_pqs(ws, [
+        {"boundary_type": "epistemic", "answers_question": "q-other",
+         "candidates": {"first": 1, "second": 1}}], {})
+    _seed_negative(ws, "C-1")
+    _flip_register(ws, "C-1", "q2", "REFUTED")
+    paths = [ws / LEDGER_REL, cl.family_path(ws, "experience"), cl.family_path(ws, "knowledge")]
+    before = [p.read_bytes() for p in paths]
+    real_read = Path.read_text
+
+    def unreadable(path, *args, **kwargs):
+        if path == ws / LEDGER_REL:
+            raise OSError(errno.EIO, "injected posterior read error")
+        return real_read(path, *args, **kwargs)
+
+    with monkeypatch.context() as fault:
+        fault.setattr(Path, "read_text", unreadable)
+        assert PosteriorLedger.load(ws).degraded
+        assert src.reconcile_case_settlements(ws)["case_amendments_error"]
+    assert [p.read_bytes() for p in paths] == before
+    assert src.reconcile_case_settlements(ws)["case_amendments"] == 1
+    assert "q-other" in PosteriorLedger.load(ws).pqs
+
+
+def _competing_knowledge_writer(ws, mode, reading, contended):
+    import errno
+    import os
+    import platform_matrix
+
+    if mode == "revoke":
+        read = crystallize.knowledge_lines
+        target = cl.family_path(ws, "knowledge")
+
+        def pause_inside_rewrite(path):
+            lines = read(path)
+            if path == target and not reading.is_set():
+                reading.set()
+                assert contended.wait(30)
+            return lines
+
+        crystallize.knowledge_lines = pause_inside_rewrite
+        assert crystallize.revoke_claim(ws, "C-1")["negatives_removed"] == 1
+    else:
+        lock = platform_matrix.fd_lock
+
+        def check_contended(fd):
+            # The append's actual fd must hit the same byte held by the rewriter.
+            if os.name == "nt":
+                import msvcrt
+                attempt, args = msvcrt.locking, (fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                attempt, args = fcntl.flock, (fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with pytest.raises(OSError) as error:
+                attempt(*args)
+            assert error.value.errno in (errno.EACCES, errno.EAGAIN, errno.EDEADLK)
+            contended.set()
+            return lock(fd)
+
+        platform_matrix.fd_lock = check_contended
+        assert cl.append(ws, "knowledge", {"schema": "feature-table/1", "key": "new"})
+
+
+def test_knowledge_append_waits_for_inflight_rewrite(tmp_path):
+    import multiprocessing
+    ws = _ws(tmp_path, [{"id": "C-1", "status": "PROVEN", "answers_question": "q2"}])
+    _seed_negative(ws, "C-1")
+    ctx = multiprocessing.get_context("spawn")
+    reading, contended = ctx.Event(), ctx.Event()
+    revoke, append = [ctx.Process(target=_competing_knowledge_writer,
+                                  args=(ws, mode, reading, contended))
+                      for mode in ("revoke", "append")]
+    revoke.start()
+    try:
+        assert reading.wait(30)
+        append.start()
+        for process in (revoke, append):
+            process.join(30)
+            assert process.exitcode == 0
+    finally:
+        for process in (revoke, append):
+            if process.is_alive():
+                process.terminate()
+                process.join()
+    assert cl.read(ws, "knowledge") == [{"schema": "feature-table/1", "key": "new"}]

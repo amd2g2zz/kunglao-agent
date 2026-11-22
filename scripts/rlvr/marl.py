@@ -161,6 +161,9 @@ def record_negative(ws, *, method_family: str,
     for key, val in (("claim_ref", claim_ref), ("step_ref", step_ref)):
         if val:
             row[key] = str(val)
+    if claim_ref and ws is not None:
+        from rlvr.strategy_store import workspace_id_of
+        row["workspace_id"] = workspace_id_of(ws)
     appended = _cl.append(ws, "knowledge", row)
     return {"appended": bool(appended), "reason": None if appended
             else "write-failed", "signature_class": cls, "row": row}

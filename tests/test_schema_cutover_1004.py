@@ -358,11 +358,12 @@ class TestRevocationTransitiveOverMigration:
         family read (pre-move rels resolve ws-relative since the store
         went workspace-local)."""
         from rlvr import crystallize as crystallize_mod  # noqa: PLC0415
+        from rlvr.strategy_store import workspace_id_of
         monkeypatch.delenv(cl.STORE_ENV, raising=False)
         ws = _ws(tmp_path)
         _seed(ws / "marl-negative.jsonl", [
             {"schema": "marl-negative/1", "ts": TS,
-             "claim_ref": "C-9", "method_family": "old",
+             "workspace_id": workspace_id_of(ws), "claim_ref": "C-9", "method_family": "old",
              "fails": 1},
             {"schema": "marl-negative/1", "ts": TS,
              "claim_ref": "C-keep", "method_family": "keep",
