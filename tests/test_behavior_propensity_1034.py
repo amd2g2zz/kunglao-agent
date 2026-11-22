@@ -7,16 +7,19 @@ from rlvr import policy_compare as pc
 from e2e.checkpoints import _stamp_ope_propensity
 
 
-def _record(ws, claim, family, *, propensity=0.5, reward=1.0, **env_extra):
+def _record(ws, claim, family, *, propensity=0.5, reward=1.0, dispatch_id=None, **env_extra):
     (ws / 'runs' / 'logs').mkdir(parents=True, exist_ok=True)
-    env = {'family': family, 'propensity': propensity,
+    decision_id = dispatch_id or claim
+    env = {'family': family, 'dispatch_id': decision_id, 'propensity': propensity,
            'candidates': {'a': {'weight': 1.0}, 'b': {'weight': 1.0}}}
     env.update(env_extra)
     with (ws / 'runs' / 'logs' / 'e2e-audit.jsonl').open('a') as f:
         f.write(json.dumps({'event': 'method_family_recorded', 'claim': claim,
                             'detail': {'method_family': family, 'envelope': env}}) + '\n')
-    transition = {'schema': 'transition/1', 'dispatch_id': claim, 'a': family,
-                  'propensity': propensity}
+    transition = {'schema': 'transition/1', 'dispatch_id': decision_id, 'a': family,
+                  'probability_action': 'method_family',
+                  'probability_source': env.get('probability_source'),
+                  'information_set': env.get('information_set'), 'propensity': propensity}
     if reward != 'absent':
         transition['r_incr'] = reward
     assert cl.append(ws, 'experience', transition)
@@ -48,11 +51,12 @@ def test_dispatch_source_labels_never_authorize_ope(tmp_path):
     assert stamps[2]['propensity'] == 0.5
     assert stamps[2]['probability_source'] == 'selection_law_exact'
     ws = tmp_path / 'ws'
-    for i, source in enumerate(('unknown', 'uniform_exact', 'legacy_mc_estimate')):
+    sources = ('unknown', 'uniform_exact', 'legacy_mc_estimate', 'randomized_control')
+    for i, source in enumerate(sources):
         _record(ws, f'C{i}', 'a', probability_source=source)
     report = pc.compare(ws, bootstrap=0)
     assert report['decisions'] == 0
-    assert report['skipped_unknown_probability'] == 3
+    assert report['skipped_unknown_probability'] == len(sources)
 
 
 def test_repeated_claim_family_never_joins_last_receipt(tmp_path):
@@ -64,12 +68,93 @@ def test_repeated_claim_family_never_joins_last_receipt(tmp_path):
     assert report['skipped_ambiguous_dispatch'] == 2
 
 
-def test_randomized_label_alone_does_not_authorize_probability(tmp_path):
+def test_recipe_probability_is_not_method_evidence_even_if_numbers_match(tmp_path, monkeypatch):
+    from rlvr import incremental_reward as ir, learning_seal, q_cells
+
     ws = tmp_path / 'ws'
-    _record(ws, 'C1', 'a', probability_source='randomized_control')
-    report = pc.compare(ws, bootstrap=0)
+    key = tmp_path / 'key'
+    key.write_bytes(b'k' * 64)
+    monkeypatch.setattr(learning_seal, 'KEY_PATH', key)
+    design = pc.ControlledOPE(seed=7, weights={'a': 1.0}, decision_ids=['C1'])
+    expected = design.receipts()['C1']
+    _record(ws, 'C1', 'a', propensity=1.0, candidates={'a': {'weight': 1}},
+            probability_source=expected['probability_source'],
+            information_set=expected['information_set'])
+    (ws / 'runs/experience.jsonl').unlink()
+    q_cells.append_observation(ws, 'aaaaaaaaaaaa', 'a', None, source='dispatch',
+                               claim='C1', recipe_id='inspect', recipe_propensity=1.0,
+                               recipe_source='sampled', arm_key_col='a|inspect|none|0')
+    ir.record_launch(ws, 'C1', 'a', phi=0, propensity=1.0)
+    row = ir.append_transition(ws, 'C1', 'completed', r_settle=1.0)
+    assert row['propensity'] == 1.0
+    report = pc.compare(ws, bootstrap=0, experiment=design)
     assert report['decisions'] == 0
-    assert report['skipped_unknown_probability'] == 1
+    assert report['skipped_unbound_method_probability'] == 1
+    assert report['verdict'] == 'incomplete_experiment'
+
+
+def test_two_executions_of_one_claim_match_their_own_method_receipts(tmp_path):
+    design = pc.ControlledOPE(seed=7, weights={'a': 1.0, 'b': 1.0},
+                              decision_ids=['000000000001', '000000000002'])
+    for did, receipt in design.receipts().items():
+        _record(tmp_path, 'C1', receipt['family'], dispatch_id=did,
+                probability_source=receipt['probability_source'],
+                information_set=receipt['information_set'])
+    report = pc.compare(tmp_path, bootstrap=0, experiment=design)
+    assert report['decisions'] == 2
+    assert report['verdict'] == 'underpowered'
+
+
+def test_qcell_conflicts_belong_to_a_single_execution(tmp_path):
+    from rlvr import q_cells
+
+    ids = ['000000000001', '000000000002']
+    design = pc.ControlledOPE(seed=2, weights={'a': 1.0}, decision_ids=ids)
+    for did, receipt in design.receipts().items():
+        _record(tmp_path, 'C1', 'a', dispatch_id=did, candidates={'a': {'weight': 1.0}},
+                propensity=1.0, probability_source=receipt['probability_source'],
+                information_set=receipt['information_set'])
+    assert cl.append(tmp_path, 'experience', {
+        'schema': q_cells.OBS_SCHEMA, 'source': 'dispatch', 'claim': 'C1',
+        'dispatch_id': ids[0], 'method_family': 'b', 'sampled_family': 'b',
+        'arm_key': 'b|facts_snapshot|none|0'})
+    report = pc.compare(tmp_path, bootstrap=0, experiment=design)
+    assert report['skipped_family_mismatch'] == 1 and report['decisions'] == 1
+    assert report['verdict'] == 'incomplete_experiment'
+
+
+def test_conflicting_explicit_carriers_are_not_method_receipts(tmp_path):
+    ids = ['good', 'family', 'type', 'scope', 'claim', 'arm', 'action_key', 'source']
+    design = pc.ControlledOPE(seed=7, weights={'2': 1.0}, decision_ids=ids)
+    for did, receipt in design.receipts().items():
+        _record(tmp_path, 'C1', '2', dispatch_id=did, propensity=1.0,
+                candidates={'2': {'weight': 1.0}}, probability_source=receipt['probability_source'],
+                information_set=receipt['information_set'])
+    audits = tmp_path / 'runs/logs/e2e-audit.jsonl'
+    transitions = tmp_path / 'runs/experience.jsonl'
+    rows = [json.loads(line) for line in audits.read_text().splitlines()]
+    rows[1]['detail']['envelope']['family'] = '3'
+    rows[2]['detail']['envelope']['family'] = rows[2]['detail']['method_family'] = 2
+    rows[3]['detail']['envelope']['probability_action'] = 'recipe'
+    rows[5]['arm'] = '3'
+    rows[7]['detail']['envelope']['method_source'] = 'declared'
+    audits.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    rows = [json.loads(line) for line in transitions.read_text().splitlines()]
+    rows[4]['claim_ref'] = 'C-other'
+    rows[6]['action_key'] = '3'
+    transitions.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+    result = pc.compare(tmp_path, bootstrap=0, experiment=design)
+    assert result['decisions'] == 1
+    assert result['experiment_integrity']['rejected_planned'] == len(ids)-1
+
+
+def test_invalid_id_cannot_escape_population_checks(tmp_path):
+    design = pc.ControlledOPE(seed=7, weights={'a': 1.0}, decision_ids=['C1'])
+    _record(tmp_path, 'C1', 'a', dispatch_id=['C1'], propensity=1.0,
+            candidates={'a': {'weight': 1.0}}, probability_source='experiment_owned_rng',
+            information_set='fixed_observed_weights')
+    result = pc.compare(tmp_path, experiment=design)
+    assert result['decisions'] == 0 and result['verdict'] == 'incomplete_experiment'
 
 
 def test_invalid_probability_and_support_are_counted_without_crashing(tmp_path):
@@ -77,10 +162,11 @@ def test_invalid_probability_and_support_are_counted_without_crashing(tmp_path):
     _record(ws, 'C1', 'a', propensity=float('nan'))
     _record(ws, 'C2', 'a', propensity='bad')
     _record(ws, 'C3', 'a', candidates={'b': {'weight': 1}})
+    _record(ws, 'C4', 'a', candidates={'a': {'weight': True}, 'b': {'weight': True}})
     report = pc.compare(ws, bootstrap=0)
     assert report['decisions'] == 0
     assert report['skipped_invalid_probability'] == 2
-    assert report['skipped_invalid_support'] == 1
+    assert report['skipped_invalid_support'] == 2
 
 
 def test_trusted_control_design_replays_through_real_compare(tmp_path):
