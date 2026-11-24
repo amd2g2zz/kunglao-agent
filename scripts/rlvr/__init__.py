@@ -79,6 +79,7 @@ from . import route_ledger
 from . import scalar
 from . import settlement_scorer
 from . import settlement_wire
+from . import signal_arrival
 from . import signal_guard
 from . import source_reliability
 from . import state

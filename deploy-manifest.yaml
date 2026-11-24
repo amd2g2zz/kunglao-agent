@@ -1367,7 +1367,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: c3072033abae810c9943916b21d99f1b5f423c3278c4037eb2d6a80c369d7c94
+    sha256: 8c0e071695b81e0b9ad9d4b989f99b075832262f5fd530d000320c0f039ae1bc
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1636,6 +1636,10 @@ files:
     dest: .claude/scripts/rlvr/settlement_wire.py
     kind: scaffold
     sha256: 94d7b38f2cf20ed6fcb31dd6c3a94d4ac4cb4c082ee61f5a87134c7b98b45af7
+  - src: scripts/rlvr/signal_arrival.py
+    dest: .claude/scripts/rlvr/signal_arrival.py
+    kind: scaffold
+    sha256: 947c010a69d61e366a37a009880a3876ee66d2ce425db134ef60b5ee947fdc94
   - src: scripts/rlvr/signal_guard.py
     dest: .claude/scripts/rlvr/signal_guard.py
     kind: scaffold
