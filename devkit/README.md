@@ -17,6 +17,7 @@ devkit/
 ├── reports/                  ← 工具产出的证据报告(#807 测试清单/删除台账)
 ├── pass_rate_metric.py       ← CI metric 提取
 ├── install_git_hooks.py      ← 把 githooks/ 部署到 .git/hooks/
+├── chain_acceptance.py       ← #1079 链状态读侧校验器(closeout accepted 必带 merge_sha;触发点=下一链启动与每段「接」,非常驻)
 ├── githooks/                 ← hook 模板(原样,带 __KUNGLAO_DEVKIT_ROOT__ 占位符)
 │   └── pre-commit
 ├── docs/                     ← devkit 自己的文档
