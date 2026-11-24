@@ -11,6 +11,7 @@
 | KPI 跟踪 (`quality_roadmap.md`) | CHANGELOG(发布给用户) |
 | Defect Escape 跟踪 (`defect_escape_rate.md`) | API reference |
 | 单元测试编写规范 (`unit_test_spec.md`) | |
+| 开发流程规范 (`development-standard.md`) | |
 | 内部 ADR / 设计 rationale | |
 | 故障注入技术规范 (Phase 2) | |
 
