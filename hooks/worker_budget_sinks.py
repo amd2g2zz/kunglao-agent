@@ -1453,6 +1453,18 @@ def pre_check(payload: dict, paths: dict) -> int:
         'tier': tier,
         'tools': tools,
     })
+    # The release tail's dispatch-face span - ONE start row per
+    # released face, keyed on the ONE dispatch ledger id (the id the
+    # claims txn just wrote into the launch stash; a txn that did not
+    # land leaves no phantom row). The closure pair lands at
+    # round_closure. CAGE_FACE: a span failure never disturbs the
+    # released dispatch.
+    try:
+        from rlvr import face_spans as _fs1005
+        _fs1005.span_start(paths.get('workspace'), dispatch_id=_did800,
+                           claim=cid, agent=row_agent)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
+        warn('face_span.dispatch_start', f'{type(exc).__name__}: {exc}')
     return 0
 
 

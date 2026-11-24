@@ -47,6 +47,25 @@ The end-to-end link tests SHALL settle their missions through the production Sto
 - **WHEN** only a completed span marks the mission and the settlement line itself fails
 - **THEN** the link-layer closed-loop assertions do not pass and no episode is written
 
+### Requirement: Every released dispatch face rides a start/completed span pair
+
+Each dispatch face the battery releases SHALL land one start/completed span pair on the ``face-spans`` surface, keyed on the ONE dispatch id the claims transaction writes into the launch stash, and the pair SHALL never be closure evidence.
+
+#### Scenario: Release tail writes the start row
+
+- **WHEN** the dispatch battery releases a face and the claims transaction lands
+- **THEN** one start row keyed on that dispatch id is appended to ``runs/face-spans.jsonl``, and a transaction that did not land leaves no row
+
+#### Scenario: Round closure writes the paired end row
+
+- **WHEN** the dispatched worker's round closes
+- **THEN** the paired end row (``completed`` on a done worker, ``failed`` on a failure outcome) is appended with the same dispatch id, trace id and span id
+
+#### Scenario: A span write failure never disturbs the release or the closure
+
+- **WHEN** the span sink is unwritable or the face-span writer fails
+- **THEN** the release still commits and the round closure still returns clean, and ``usage`` stays ``"unknown"``
+
 ### Requirement: Terminal certification postconditions
 
 Terminal certification SHALL distinguish unknown obligations, invalid learning seals and missing committed-dispatch credit from successful completion, and SHALL persist a diagnostic retry state for recoverable postcondition failures.
