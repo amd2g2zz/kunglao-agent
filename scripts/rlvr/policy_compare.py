@@ -15,10 +15,12 @@ propensity p_i, realized reward r_i):
     V̂_SNIPS(π) = Σ_i w_i·r_i / Σ_i w_i,   w_i = π(a_i | s_i) / p_i
 
 π is read from the SAME evidence the behavior policy left: the envelope's
-per-family candidate weights (the Thompson draw distribution at decision
-time) give π_thompson; the greedy arm of ε-greedy takes the envelope's
-argmax; uniform is 1/K. Rows without a propensity (pre-fix logs) are
-skipped and counted — never silently imputed. 4-L8 discipline: rows
+per-candidate weights give π_thompson — the proportional selection law's
+weights on the draw that was made, a probability conditional on that
+draw's posterior sample, never a marginal over fresh draws; the greedy
+arm of ε-greedy takes the envelope's argmax; uniform is 1/K. Rows
+without a propensity (pre-fix logs) are skipped and counted — never
+silently imputed. 4-L8 discipline: rows
 whose envelope carries ``declared: true`` are skipped and counted (π=1.0
 by fiat — no draw receipt backs it, so the SNIPS mixing assumption does
 not hold for them), and the two on-disk π carriers stamped from the same
@@ -36,13 +38,32 @@ envelope and every q-cell dispatch record for that decision. A carrier
 whose ``sampled_family`` names a different family than the logged arm,
 with no explicit override marker, makes the (action, propensity) pair
 incoherent — the decision is skipped, counted
-(``skipped_family_mismatch``) and warned, never weighted. An earlier
-incoherent dispatch for the same claim is not masked by a later coherent
-one.
+(``skipped_family_mismatch``) and warned, never weighted. The cross-check
+is per execution: an incoherent carrier refuses its own dispatch only —
+an earlier incoherent dispatch of the same claim is neither masked by,
+nor masks, a later coherent one.
+
+Admission rule: a transition joins an envelope only through an
+explicit dispatch id both carry. The claim names work, not an execution,
+and a missing id is never inferred from it. A transition keyed by its
+claim (the production transition writer's shape) beside an envelope
+keyed by the minted execution id is unbound — counted
+(``skipped_unbound_method_probability``), never weighted. The weighted
+cohort is a preregistered one: the envelope's family, weights, propensity
+and information set must equal the receipt a ``ControlledOPE`` design
+regenerates from its own seed, else ``skipped_experiment_mismatch`` — and
+with no design at all, every row that reaches that gate is
+``skipped_unknown_probability``. A joined row that matches the design but
+whose transition does not name the method-family decision, its
+probability source and its information set is unbound the same way — a
+recipe sampler's probability can equal a method receipt's by coincidence.
 
 Small-sample honesty (the design doc §6 risk): below MIN_DECISIONS the
-report carries `"verdict": "underpowered"` and no ranking — an ε-greedy
-win at N=20 is noise dressed as a conclusion.
+report carries ``"verdict": "underpowered"`` and no ranking — an
+ε-greedy win at N=20 is noise dressed as a conclusion. When the two
+leading estimates are equal the verdict is ``"tie"``: the estimates stay
+in the report, but there is no ranking and no best — a winner picked by
+list order is a conclusion the evidence does not support.
 
 Usage:
     python scripts/rlvr/policy_compare.py <workspace> [--bootstrap 1000]
@@ -92,8 +113,14 @@ class ControlledOPE:
                 or not all(isinstance(x, str) and x for x in decision_ids)
                 or not isinstance(weights, dict) or not weights
                 or not all(isinstance(k, str) and k and isinstance(v, (float, int))
-                           and math.isfinite(v) and v > 0 for k, v in weights.items())):
+                           and not isinstance(v, bool) and math.isfinite(v) and v > 0
+                           for k, v in weights.items())):
             raise ValueError("invalid controlled experiment design")
+        scale = max(weights.values())
+        scaled = [weight / scale for weight in weights.values()]
+        total = math.fsum(scaled)
+        if min(scaled) / total == 0:
+            raise ValueError("controlled experiment support underflows")
         self.seed = seed
         self.weights = dict(weights)
         self.decision_ids = tuple(decision_ids)
@@ -138,6 +165,8 @@ def _audit_envelopes(ws: Path) -> list[dict]:
             row = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(row, dict):
+            continue
         det = row.get("detail")
         if isinstance(det, str):
             try:
@@ -147,42 +176,56 @@ def _audit_envelopes(ws: Path) -> list[dict]:
         if (row.get("event") or row.get("action")) != \
                 "method_family_recorded" or not isinstance(det, dict):
             continue
-        env = det.get("envelope") or {}
-        fam = str(det.get("method_family") or env.get("family") or "")
-        if not fam:
+        env = det.get("envelope")
+        if not isinstance(env, dict):
             continue
+        fam = _text_id(det.get("method_family") or env.get("family"))
+        claim = _text_id(row.get("claim"))
+        did = _text_id(env.get("dispatch_id"))
+        coherent = (_agree(fam, det.get("method_family"), row.get("arm"),
+                           env.get("family"), env.get("actual_method_family"))
+                    and _agree(claim, env.get("claim"), env.get("claim_ref"))
+                    and _agree(did, row.get("dispatch_id"), det.get("dispatch_id"))
+                    and _agree("method_family", env.get("probability_action")))
         cands = env.get("candidates")
         if not isinstance(cands, dict):
             cands = {}
         out.append({
-            "claim": str(row.get("claim") or ""),
+            "claim": claim, "dispatch_id": did, "coherent": coherent,
             "family": fam,
             "weights": {str(k): v.get("weight") if isinstance(v, dict) else None
                         for k, v in cands.items()},
             "propensity": env.get("propensity"),
             "probability_source": env.get("probability_source"),
             "information_set": env.get("information_set"),
-            "declared": bool(env.get("declared")),
+            "declared": bool(env.get("declared") or env.get("method_source") == "declared"),
             "sampled_family": env.get("sampled_family"),
-            "family_override": env.get("family_override"),
+            "family_override": env.get("family_override") or env.get("method_source") == "override",
         })
     return out
 
 
-def _qcell_attribution(ws: Path) -> dict[tuple[str, str], list[dict]]:
-    """(claim, declared family) -> EVERY dispatch observation row for
-    that decision — the q-cell substrate's sampler attribution history.
-    A re-dispatch appends another row, so the index keeps them all: one
-    incoherent dispatch must not be masked by a later coherent one.
-    Empty on any read failure (the honest gap: the decision keeps its
-    own carriers)."""
-    out: dict[tuple[str, str], list[dict]] = {}
+def _text_id(value) -> str:
+    return value if isinstance(value, str) and value.strip() else ""
+
+
+def _agree(expected, *carriers) -> bool:
+    """Optional aliases may be absent; an explicit conflicting value cannot be dropped."""
+    return all(value is None or value == expected for value in carriers)
+
+
+def _qcell_attribution(ws: Path) -> dict[tuple, list[dict]]:
+    """Index execution receipts by dispatch; claim/family serves legacy diagnostics."""
+    out: dict[tuple, list[dict]] = {}
     try:
         for row in _qc.dispatch_rows(ws):
             claim = str(row.get("claim") or "").strip()
             fam = str(row.get("method_family") or "").strip()
+            did = _text_id(row.get("dispatch_id"))
+            if did:
+                out.setdefault(("dispatch", did), []).append(row)
             if claim and fam:
-                out.setdefault((claim, fam), []).append(row)
+                out.setdefault(("claim", claim, fam), []).append(row)
     except Exception as exc:  # noqa: BLE001 — attribution is telemetry
         warn("policy_compare.attribution", f"{type(exc).__name__}: {exc}")
     return out
@@ -190,7 +233,7 @@ def _qcell_attribution(ws: Path) -> dict[tuple[str, str], list[dict]]:
 
 def _attribution_conflict(
         t: dict, env: dict,
-        index: dict[tuple[str, str], list[dict]]) -> dict | None:
+        index: dict[tuple, list[dict]]) -> dict | None:
     """The first carrier whose (arm, sampler) pair is incoherent, or
     None when every carrier is coherent. Every sampler-attribution
     carrier present is consulted — the decision row, the audit envelope
@@ -206,17 +249,29 @@ def _attribution_conflict(
          "sampled_family": env.get("sampled_family"),
          "family_override": env.get("family_override")},
     ]
-    carriers.extend(index.get((claim, family)) or ())
+    if (not env["coherent"] or not _agree(env["claim"], t.get("claim_ref"), t.get("claim"))
+            or not _agree(family, t.get("action_key"), t.get("method_family"), t.get("arm"))):
+        return t
+    did = env["dispatch_id"]
+    key = ("dispatch", did) if did else ("claim", claim, family)
+    for row in index.get(key, ()):
+        if did and (row.get("claim") != env["claim"] or row.get("method_family") != family
+                    or _qc.attribution_arm(row) != family or row.get("family_override")
+                    or row.get("method_source") in ("declared", "override")):
+            return row
+        carriers.append(row)
     for carrier in carriers:
-        if not _qc.attribution_consistent(carrier):
+        if (carrier.get("sampled_family") is not None and not _text_id(carrier["sampled_family"])
+                or not _qc.attribution_consistent(carrier)):
             return carrier
     return None
 
 
 def _pi(policy: str, family: str, weights: dict[str, float]) -> float:
     """π(a | s) under each comparison policy, read off the SAME envelope
-    the behavior policy left (its candidate weights ARE the Thompson
-    sampling distribution at decision time)."""
+    the behavior policy left: its candidate weights are the proportional
+    selection law's weights on the draw that was made — conditional on
+    that draw's posterior sample, not a marginal over fresh draws."""
     if not weights:
         return 0.0
     if policy == "uniform":
@@ -294,8 +349,8 @@ def _bootstrap_ci(decisions: list[dict], policy: str, draws: int,
 def _valid_support(weights, family):
     try:
         return (bool(weights) and str(family) in weights
-                and all(math.isfinite(float(v)) and float(v) >= 0
-                        for v in weights.values())
+                and all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                        and math.isfinite(v) and v >= 0 for v in weights.values())
                 and float(weights[str(family)]) > 0)
     except (TypeError, ValueError, OverflowError):
         return False
@@ -314,6 +369,12 @@ def _observed_reward(row):
     return result if math.isfinite(result) else None
 
 
+def unobserved_families(decisions: list[dict]) -> list[str]:
+    """Uniform assigns positive weight to each eligible family."""
+    support = {family for row in decisions for family in row["weights"]}
+    return sorted(support - {row["family"] for row in decisions})
+
+
 def compare(  # noqa: C901
         ws: Path, *, bootstrap: int = DEFAULT_BOOTSTRAP,
         experiment: ControlledOPE | None = None) -> dict:
@@ -321,13 +382,22 @@ def compare(  # noqa: C901
     ws = Path(ws)
     transitions = read_transitions(ws)
     envelopes = _audit_envelopes(ws)
-    by_key = {f"{e['claim']}|{e['family']}": e for e in envelopes}
-    envelope_counts = Counter(f"{e['claim']}|{e['family']}" for e in envelopes)
-    transition_counts = Counter(f"{t.get('dispatch_id')}|{t.get('a')}" for t in transitions)
+    # Historical envelopes identify only a claim. Keep them for diagnostic
+    # counts; only an explicit execution ID can enter the weighted cohort.
+    keys = [(e["dispatch_id"] or e["claim"], e["family"]) for e in envelopes]
+    by_key = dict(zip(keys, envelopes))
+    envelope_counts = Counter(keys)
+    # The production transition writer keys a row by its claim while the
+    # envelope carries the minted execution id. Such a row names work, not
+    # an execution: unbound, never merely propensity-less.
+    execution_keyed_claims = {e["claim"] for e in envelopes
+                              if e["claim"] and e["dispatch_id"] != e["claim"]}
+    transition_counts = Counter((_text_id(t.get("dispatch_id")), _text_id(t.get("a")))
+                                for t in transitions)
     attribution = _qcell_attribution(ws)
     receipts = experiment.receipts() if isinstance(experiment, ControlledOPE) else {}
-    audit_ids = Counter(str(e.get('claim') or '') for e in envelopes)
-    transition_ids = Counter(str(t.get('dispatch_id') or '') for t in transitions)
+    audit_ids = Counter(key[0] for key in keys)
+    transition_ids = Counter(_text_id(t.get('dispatch_id')) for t in transitions)
     accepted_ids = set()
 
     decisions: list[dict] = []
@@ -341,12 +411,16 @@ def compare(  # noqa: C901
     skipped_invalid_support = 0
     skipped_experiment_mismatch = 0
     skipped_invalid_reward = 0
+    skipped_unbound_method_probability = 0
     for t in transitions:
-        key = f"{t.get('dispatch_id')}|{t.get('a')}"
+        key = (_text_id(t.get("dispatch_id")), _text_id(t.get("a")))
+        env = by_key.get(key)
+        if env is None and key[0] in execution_keyed_claims:
+            skipped_unbound_method_probability += 1
+            continue
         if envelope_counts[key] > 1 or transition_counts[key] > 1:
             skipped_ambiguous_dispatch += 1
             continue
-        env = by_key.get(key)
         if env is None or env.get("propensity") is None:
             skipped_no_propensity += 1
             continue
@@ -357,12 +431,9 @@ def compare(  # noqa: C901
             # probability is recorded, so it cannot be re-weighted.
             skipped_family_mismatch += 1
             warn("policy_compare.compare",
-                 f"refused decision {key!r}: sampled_family "
-                 f"{conflict.get('sampled_family')!r} != arm family "
-                 f"{str(t.get('a') or '')!r} with no explicit override — "
-                 f"excluded from off-policy weighting")
+                 f"refused decision {key!r}: attribution conflicts with the sampled method")
             continue
-        if env.get("declared"):
+        if env.get("declared") or t.get("method_source") == "declared":
             # 4-L8: declared selection rode π=1.0 by fiat — no draw
             # receipt backs it, so the SNIPS mixing assumption does not
             # hold; the row leaves the weighted join, counted.
@@ -375,7 +446,8 @@ def compare(  # noqa: C901
         except (TypeError, ValueError, OverflowError):
             skipped_invalid_probability += 1
             continue
-        if (not math.isfinite(propensity) or not 0 < propensity <= 1
+        if (isinstance(env["propensity"], bool) or isinstance(t_prop, bool)
+                or not math.isfinite(propensity) or not 0 < propensity <= 1
                 or actual is not None and (not math.isfinite(actual) or not 0 < actual <= 1)):
             skipped_invalid_probability += 1
             continue
@@ -402,8 +474,14 @@ def compare(  # noqa: C901
         if (any(env.get(field) != expected[field] for field in
                 ('family', 'weights', 'propensity', 'information_set', 'probability_source'))
                 or t.get('a') != expected['family'] or t_prop is None
-                or env.get('family_override') or t.get('family_override')):
+                or env.get('family_override') or t.get('family_override')
+                or t.get('method_source') == 'override'):
             skipped_experiment_mismatch += 1
+            continue
+        if (not env["dispatch_id"] or t.get("probability_action") != "method_family"
+                or t.get("information_set") != expected["information_set"]
+                or t.get("probability_source") != expected["probability_source"]):
+            skipped_unbound_method_probability += 1
             continue
         reward = _observed_reward(t)
         if reward is None:
@@ -429,6 +507,7 @@ def compare(  # noqa: C901
         "skipped_invalid_support": skipped_invalid_support,
         "skipped_experiment_mismatch": skipped_experiment_mismatch,
         "skipped_invalid_reward": skipped_invalid_reward,
+        "skipped_unbound_method_probability": skipped_unbound_method_probability,
         "epsilon": EPSILON,
         "policies": {},
         "verdict": None,
@@ -453,6 +532,11 @@ def compare(  # noqa: C901
     if len(decisions) < MIN_DECISIONS:
         report["verdict"] = "underpowered"
         report["min_decisions"] = MIN_DECISIONS
+        return report
+    missing_families = unobserved_families(decisions)
+    if missing_families:
+        report["missing_target_families"] = missing_families
+        report["verdict"] = "insufficient_overlap"
         return report
     missing_interval = False
     insufficient_overlap = False
@@ -479,9 +563,15 @@ def compare(  # noqa: C901
         ((p, v["snips"]) for p, v in report["policies"].items()
          if v["snips"] is not None),
         key=lambda kv: kv[1], reverse=True)
-    report["verdict"] = ({"ranking": [p for p, _ in ranked],
-                          "best": ranked[0][0] if ranked else None}
-                         if ranked else "no-estimate")
+    if not ranked:
+        report["verdict"] = "no-estimate"
+    elif ranked[0][1] == ranked[1][1]:
+        # the leaders are indistinguishable on this evidence: a best
+        # picked by list order would be a conclusion it does not support
+        report["verdict"] = "tie"
+    else:
+        report["verdict"] = {"ranking": [p for p, _ in ranked],
+                             "best": ranked[0][0]}
     return report
 
 
