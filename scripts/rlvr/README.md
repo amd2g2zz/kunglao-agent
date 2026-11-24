@@ -432,6 +432,7 @@ the one-line pointer (name — the docstring's opening line):
 - `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned
 - `refutation_fold` — rlvr/refutation_fold.py — the refutation fold (deterministic).
 - `settlement_scorer` — rlvr/settlement_scorer.py — the BLIND settlement entry (issue-687).
+- `signal_arrival` — rlvr/signal_arrival.py — the READ-ONLY signal-arrival report (issue-1005, slice N0): seven counts of how far a learning signal travelled, each a number or `no data` with the reason; standard library only, writes nothing.
 - `source_reliability` — rlvr/source_reliability.py — the learned source-reliability Betas.
 - `step_credit` — rlvr/step_credit.py — step-level ladder credit (#712): dense reward
 - `step_grain` — rlvr/step_grain.py — the settlement grain (#690): step := one
