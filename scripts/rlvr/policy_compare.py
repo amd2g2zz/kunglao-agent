@@ -15,10 +15,12 @@ propensity p_i, realized reward r_i):
     V̂_SNIPS(π) = Σ_i w_i·r_i / Σ_i w_i,   w_i = π(a_i | s_i) / p_i
 
 π is read from the SAME evidence the behavior policy left: the envelope's
-per-family candidate weights (the Thompson draw distribution at decision
-time) give π_thompson; the greedy arm of ε-greedy takes the envelope's
-argmax; uniform is 1/K. Rows without a propensity (pre-fix logs) are
-skipped and counted — never silently imputed. 4-L8 discipline: rows
+per-candidate weights give π_thompson — the proportional selection law's
+weights on the draw that was made, a probability conditional on that
+draw's posterior sample, never a marginal over fresh draws; the greedy
+arm of ε-greedy takes the envelope's argmax; uniform is 1/K. Rows
+without a propensity (pre-fix logs) are skipped and counted — never
+silently imputed. 4-L8 discipline: rows
 whose envelope carries ``declared: true`` are skipped and counted (π=1.0
 by fiat — no draw receipt backs it, so the SNIPS mixing assumption does
 not hold for them), and the two on-disk π carriers stamped from the same
@@ -36,13 +38,32 @@ envelope and every q-cell dispatch record for that decision. A carrier
 whose ``sampled_family`` names a different family than the logged arm,
 with no explicit override marker, makes the (action, propensity) pair
 incoherent — the decision is skipped, counted
-(``skipped_family_mismatch``) and warned, never weighted. An earlier
-incoherent dispatch for the same claim is not masked by a later coherent
-one.
+(``skipped_family_mismatch``) and warned, never weighted. The cross-check
+is per execution: an incoherent carrier refuses its own dispatch only —
+an earlier incoherent dispatch of the same claim is neither masked by,
+nor masks, a later coherent one.
+
+Admission rule: a transition joins an envelope only through an
+explicit dispatch id both carry. The claim names work, not an execution,
+and a missing id is never inferred from it. A transition keyed by its
+claim (the production transition writer's shape) beside an envelope
+keyed by the minted execution id is unbound — counted
+(``skipped_unbound_method_probability``), never weighted. The weighted
+cohort is a preregistered one: the envelope's family, weights, propensity
+and information set must equal the receipt a ``ControlledOPE`` design
+regenerates from its own seed, else ``skipped_experiment_mismatch`` — and
+with no design at all, every row that reaches that gate is
+``skipped_unknown_probability``. A joined row that matches the design but
+whose transition does not name the method-family decision, its
+probability source and its information set is unbound the same way — a
+recipe sampler's probability can equal a method receipt's by coincidence.
 
 Small-sample honesty (the design doc §6 risk): below MIN_DECISIONS the
-report carries `"verdict": "underpowered"` and no ranking — an ε-greedy
-win at N=20 is noise dressed as a conclusion.
+report carries ``"verdict": "underpowered"`` and no ranking — an
+ε-greedy win at N=20 is noise dressed as a conclusion. When the two
+leading estimates are equal the verdict is ``"tie"``: the estimates stay
+in the report, but there is no ranking and no best — a winner picked by
+list order is a conclusion the evidence does not support.
 
 Usage:
     python scripts/rlvr/policy_compare.py <workspace> [--bootstrap 1000]
@@ -248,8 +269,9 @@ def _attribution_conflict(
 
 def _pi(policy: str, family: str, weights: dict[str, float]) -> float:
     """π(a | s) under each comparison policy, read off the SAME envelope
-    the behavior policy left (its candidate weights ARE the Thompson
-    sampling distribution at decision time)."""
+    the behavior policy left: its candidate weights are the proportional
+    selection law's weights on the draw that was made — conditional on
+    that draw's posterior sample, not a marginal over fresh draws."""
     if not weights:
         return 0.0
     if policy == "uniform":
@@ -365,6 +387,11 @@ def compare(  # noqa: C901
     keys = [(e["dispatch_id"] or e["claim"], e["family"]) for e in envelopes]
     by_key = dict(zip(keys, envelopes))
     envelope_counts = Counter(keys)
+    # The production transition writer keys a row by its claim while the
+    # envelope carries the minted execution id. Such a row names work, not
+    # an execution: unbound, never merely propensity-less.
+    execution_keyed_claims = {e["claim"] for e in envelopes
+                              if e["claim"] and e["dispatch_id"] != e["claim"]}
     transition_counts = Counter((_text_id(t.get("dispatch_id")), _text_id(t.get("a")))
                                 for t in transitions)
     attribution = _qcell_attribution(ws)
@@ -387,10 +414,13 @@ def compare(  # noqa: C901
     skipped_unbound_method_probability = 0
     for t in transitions:
         key = (_text_id(t.get("dispatch_id")), _text_id(t.get("a")))
+        env = by_key.get(key)
+        if env is None and key[0] in execution_keyed_claims:
+            skipped_unbound_method_probability += 1
+            continue
         if envelope_counts[key] > 1 or transition_counts[key] > 1:
             skipped_ambiguous_dispatch += 1
             continue
-        env = by_key.get(key)
         if env is None or env.get("propensity") is None:
             skipped_no_propensity += 1
             continue
@@ -533,9 +563,15 @@ def compare(  # noqa: C901
         ((p, v["snips"]) for p, v in report["policies"].items()
          if v["snips"] is not None),
         key=lambda kv: kv[1], reverse=True)
-    report["verdict"] = ({"ranking": [p for p, _ in ranked],
-                          "best": ranked[0][0] if ranked else None}
-                         if ranked else "no-estimate")
+    if not ranked:
+        report["verdict"] = "no-estimate"
+    elif ranked[0][1] == ranked[1][1]:
+        # the leaders are indistinguishable on this evidence: a best
+        # picked by list order would be a conclusion it does not support
+        report["verdict"] = "tie"
+    else:
+        report["verdict"] = {"ranking": [p for p, _ in ranked],
+                             "best": ranked[0][0]}
     return report
 
 
