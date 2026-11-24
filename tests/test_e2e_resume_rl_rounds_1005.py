@@ -79,10 +79,14 @@ def test_resume_to_learning_and_settlement(tmp_path, seed, monkeypatch):
     assert tuple(posterior) != (1.0, 1.0), (
         f"posterior did not move off the uniform prior: {posterior}")
 
-    # ---- mission terminal: one episode, idempotent ---------------------
+    # ---- mission terminal: the production Stop, evidence-gated ---------
+    H.terminalize_mission(ws)
     episode = H.settle_mission(ws)
+    assert episode["status"] == "completed", episode
     assert episode["episodes_written"] == 1, episode
-    assert H.settle_mission(ws)["episodes_written"] == 0
+    again = H.settle_mission(ws)
+    assert again["status"] == "completed", again
+    assert again["episodes_written"] == 0
 
 
 def test_scenario_plan_is_seeded_and_varies():

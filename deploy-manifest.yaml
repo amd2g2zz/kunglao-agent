@@ -59,7 +59,7 @@ files:
   - src: hooks/round_closure.py
     dest: .claude/hooks/round_closure.py
     kind: hook
-    sha256: c8f0108c105a73db84b42ee6bc7dd1a28b7d3e1b753e986c3867734fddcbbada
+    sha256: a7d290d2a4919e754a2d0cedcd9dfef1054e9e1a1b37465e9b2bdd65553b8f27
   - src: hooks/rt_read_barrier.py
     dest: .claude/hooks/rt_read_barrier.py
     kind: hook
@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: d514417ea30f88f5fee860eac5edda5a5c3d61800e404c0ae18fdbc00650329d
+    sha256: 9fbb47ac2c1b95d03db1afca85985ad1ef6f364623ea0436d4f846e59060a585
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -1367,7 +1367,7 @@ files:
   - src: scripts/rlvr/__init__.py
     dest: .claude/scripts/rlvr/__init__.py
     kind: scaffold
-    sha256: 8c0e071695b81e0b9ad9d4b989f99b075832262f5fd530d000320c0f039ae1bc
+    sha256: 38e552157357b44a550b79c6217283fbce910d9bfcb5a47ddb32100762f8ceee
   - src: scripts/rlvr/action_params.py
     dest: .claude/scripts/rlvr/action_params.py
     kind: scaffold
@@ -1460,6 +1460,10 @@ files:
     dest: .claude/scripts/rlvr/expansion.py
     kind: scaffold
     sha256: a9a152e7047d07e162b76dd8e9936b4163a9e4b18f35a4f9659ba6af6d2b0294
+  - src: scripts/rlvr/face_spans.py
+    dest: .claude/scripts/rlvr/face_spans.py
+    kind: scaffold
+    sha256: 8df46118a827515069e74aba9e1f3233aa81836ff8923bbe8156832113ee14e5
   - src: scripts/rlvr/family_playbook.py
     dest: .claude/scripts/rlvr/family_playbook.py
     kind: scaffold

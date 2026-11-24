@@ -114,6 +114,34 @@ def _worker_outcome(ws, pending) -> str:
     return "completed"
 
 
+def _dispatch_face_span(ws: Path, pending: dict | None,
+                        act_outcome: str, agent_id: str = "") -> None:
+    """The closed dispatch face's end row, paired with the release
+    tail's start row (worker_budget_sinks.pre_check) on the ONE
+    dispatch ledger id. The id rides the launch stash - the settle
+    consumes it (append_transition unlinks the launch doc) - so this
+    face must run BEFORE the step settle; a missing id (legacy stash /
+    read problem) leaves the end row unwritten, never fabricated.
+    CAGE_FACE: any failure is one rate-limited warn and never disturbs
+    the stop."""
+    if not pending:
+        return
+    try:
+        with scripts_on_path():
+            from rlvr import face_spans as _fs1005
+            launch_dispatch_id = _fs1005.stash_dispatch_id(
+                ws, str(pending.get("claim") or ""))
+            if not launch_dispatch_id:
+                return
+            _fs1005.span_end(
+                ws, dispatch_id=launch_dispatch_id,
+                claim=pending.get("claim"), outcome=act_outcome,
+                agent=agent_id or None,
+                attempt_id=pending.get("attempt_id"))
+    except Exception as exc:  # noqa: BLE001 — face, never the stop
+        warn("round_closure_face_span", f"{type(exc).__name__}: {exc}")
+
+
 def process_event(payload: dict) -> int:
     """Resolve the workspace, append the closure row, run the kernel
     closure faces, rc 0. #779 face one: the SubagentStop payload's
@@ -368,6 +396,9 @@ def _kernel_faces(ws: Path, session_id: str = "",
             from rlvr import settlement_wire
             pending = step_grain.pending_step(ws)
             act_outcome = _worker_outcome(ws, pending)
+            # the face-span end row must read the launch stash BEFORE
+            # the settle - append_transition consumes it below
+            _dispatch_face_span(ws, pending, act_outcome, agent_id)
             receipt = step_grain.settle_step(
                 ws, session_id, outcome=act_outcome,
                 agent_id=agent_id or None, blind=True)

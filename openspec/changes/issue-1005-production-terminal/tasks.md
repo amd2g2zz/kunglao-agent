@@ -28,6 +28,7 @@
 - [x] Prove armed synthetic dispatch → SubagentStop park/ruling consumption → Stop → same-dispatch credit → non-uniform posterior → changed subsequent fixed-seed choices.
 - [x] Add terminal-only span writer and operator reader, including independent span/ledger failure tests.
 - [ ] Add production dispatch/worker/checker stage spans and crash-at-process-exit coverage.
+  <!-- S13 chain s2: dispatch-face start/completed span pair delivered (scripts/rlvr/face_spans.py + worker_budget_sinks.pre_check ALLOW tail + round_closure._dispatch_face_span, tests/test_dispatch_face_spans_1005.py, spec scenario "Every released dispatch face rides a start/completed span pair"). worker/checker faces and crash-at-process-exit coverage stay out of slice (NOT Building) — item remains open as a whole. -->
 - [ ] Implement `devkit/experiments/v016_within_task.py`, five environments and 200+200 paired evaluation.
 - [ ] Validate real Claude session liveness and real sample outcomes (outside frozen-model synthetic verification).
 

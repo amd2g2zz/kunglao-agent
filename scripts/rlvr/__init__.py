@@ -36,6 +36,7 @@ from . import episode_schema
 from . import episode_settle
 from . import production_terminal
 from . import expansion
+from . import face_spans
 from . import family_playbook
 from . import feature_prior
 from . import hypotheses
@@ -120,6 +121,7 @@ __all__ = [
     "episode_schema",
     "episode_settle", "production_terminal", "disposition_producer", "pool_indexer",
     "expansion",
+    "face_spans",
     "family_playbook",
     "feature_prior",
     "hypotheses",
