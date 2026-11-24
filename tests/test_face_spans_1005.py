@@ -1,4 +1,4 @@
-"""Terminal traces have an operator consumer; ledger remains authoritative —
+"""Terminal traces have an operator consumer; ledger remains authoritative -
 at the terminal layer and the end-to-end LINK layer alike."""
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def test_ledger_failure_cannot_be_certified_by_an_existing_span(tmp_path, monkey
 
 def test_span_alone_cannot_close_the_link(tmp_path, monkeypatch):
     """The same invariant at the LINK layer: one real round through the
-    harness chain, then the production Stop — a pre-existing completed
+    harness chain, then the production Stop - a pre-existing completed
     span never certifies the link's closure when the settlement line
     itself fails. The link's closed-loop assertions (``status ==
     completed``) must not pass on span-only evidence: the checkpoint
