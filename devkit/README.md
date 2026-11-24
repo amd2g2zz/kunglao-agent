@@ -24,7 +24,8 @@ devkit/
 │   ├── quality_gates.md      ← 质量门框架(#463 初版图示 + 后续门追加说明)
 │   ├── quality_roadmap.md    ← KPI 跟踪
 │   ├── defect_escape_rate.md
-│   └── unit_test_spec.md     ← 单元测试编写规范
+│   ├── unit_test_spec.md     ← 单元测试编写规范
+│   └── development-standard.md ← 开发流程规范(串行交接链;流程按"抓到的缺陷÷成本"取舍)
 └── tests/                    ← (Phase 2) devkit 自己的测试
 ```
 
@@ -137,4 +138,5 @@ claude mcp add --scope user duckdb --transport stdio -- \
 - `devkit/docs/quality_gates.md` — 质量门框架定义
 - `devkit/docs/quality_roadmap.md` — KPI 跟踪
 - `devkit/docs/unit_test_spec.md` — 单元测试编写规范
+- `devkit/docs/development-standard.md` — 开发流程规范(串行交接链)
 - `openspec/changes/issue-463-coverage-gate/` — 完整 spec
