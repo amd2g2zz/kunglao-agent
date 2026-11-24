@@ -187,6 +187,7 @@ EMIT_ACTIONS = [
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
     "case_bank_refused",  # #110 settlement->case-bank append refused (fail-open WARN face)
     "case_priors_seeded",  # #110 cold-start case-bank prior injection face
+    "case_revocation_unavailable",  # a claim's amended derived rows carry no confirmed workspace binding: the rows stay, revocation is reported unavailable (claim id in the claim field)
     "case_vacuous",       # #132 cadence separation observation: a case greened under >=2 distinct candidate clients (outcome invariant across the hypothesis space — the empirical twin of #126's declared update_map)
     "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",

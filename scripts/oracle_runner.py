@@ -1478,8 +1478,12 @@ def record_pq_updates(ws, report: dict, led) -> list[dict]:
 def record_posteriors(ws, report: dict) -> Path | None:
     """#106 reuse: a REAL verdict (pass/fail) is one Bernoulli observation on
     the case's CasePosterior (green -> alpha+1 / red -> beta+1). Pending is
-    not an observation — no update, no ledger touch. Missing/unreadable
-    ledger degrades per posteriors.py's fail-open load contract.
+    not an observation — no update, no ledger touch. A missing ledger
+    starts empty; an unreadable or incomplete one REFUSES the update with
+    a ValueError and nothing is applied. The read-modify-save interval
+    holds the workspace's process lock (``PosteriorLedger.for_update``),
+    so a verdict never replaces another writer's update with an older
+    snapshot.
 
     #157: each update additionally emits one ``posterior_update`` event
     (alpha/beta before -> after + the trigger fingerprint). ADDITIVE ONLY —
@@ -1494,15 +1498,15 @@ def record_posteriors(ws, report: dict) -> Path | None:
     updates = _settled_rows(report)
     if not updates:
         return None
-    led = po.PosteriorLedger.load(ws)
-    for cid, passed in updates.items():
-        cp = led.cases.get(cid) or po.CasePosterior(cid)
-        before = (cp.alpha, cp.beta)
-        cp.update(passed)
-        led.cases[cid] = cp
-        _emit_posterior_update(ws, cid, before, (cp.alpha, cp.beta), report)
-    record_pq_updates(ws, report, led)  # ΔH face, same save
-    return led.save(ws)
+    with po.PosteriorLedger.for_update(ws) as led:
+        for cid, passed in updates.items():
+            cp = led.cases.get(cid) or po.CasePosterior(cid)
+            before = (cp.alpha, cp.beta)
+            cp.update(passed)
+            led.cases[cid] = cp
+            _emit_posterior_update(ws, cid, before, (cp.alpha, cp.beta), report)
+        record_pq_updates(ws, report, led)  # ΔH face, same save
+        return led.save(ws)
 
 
 # ------------------------------------------------- #146 case abandonment

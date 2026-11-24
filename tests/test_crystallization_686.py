@@ -226,6 +226,28 @@ def test_revoke_claim_removes_the_broadcast(tmp_path):
             if r.get("claim") == "C-003"] == []
 
 
+def test_store_stays_readable_after_a_revoke_and_an_append_when_its_last_line_has_no_newline(
+        tmp_path):
+    """A store whose last line carries no newline: after a revocation
+    rewrote it, the next append glued the new row onto that line, and
+    the read face lost BOTH rows (one unparseable line)."""
+    from rlvr import consolidated_ledger as cl
+
+    ws = _ws(tmp_path)
+    _usage(ws, "C-007")
+    crystallize.crystallize_settlement(
+        ws, claim="C-007", step_id="step-1", outcome="blocked")
+    path = cl.family_path(ws, "knowledge")
+    survivor = {"schema": "feature-table/1", "key": "keep"}
+    path.write_bytes(path.read_bytes() + json.dumps(survivor).encode())
+    appended = {"schema": "feature-table/1", "key": "new"}
+
+    assert crystallize.revoke_claim(ws, "C-007")["negatives_removed"] == 1
+    assert cl.append(ws, "knowledge", appended)
+
+    assert cl.read(ws, "knowledge") == [survivor, appended]
+
+
 def test_worker_outcome_reads_retry_suffixed_log(tmp_path):
     sys.path.insert(0, str(ROOT / "hooks"))
     import round_closure as rc
