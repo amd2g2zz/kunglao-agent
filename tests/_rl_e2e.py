@@ -11,11 +11,14 @@ oracle verdict and the fault schedule vary per seed but replay identically
 for the same seed. Assertions are invariants (learning moved, settlement
 landed, faults classified/refused), never fixed values.
 
-The LLM settler is the mocked face: the harness writes the
-``settlement-verdict/1`` doc the kunglao-settler agent would write. Every
-other step (claims_store transaction, q-cell dispatch observation,
-round_closure blind park, settlement wire/scorer/ledger, round credit,
-posterior, episode settle) runs the REAL code.
+The LLM faces are mocked: the harness writes the ``settlement-verdict/1``
+doc the kunglao-settler agent would write and, at the mission terminal,
+the anchored checker record the verifier agent would leave
+(``terminalize_mission``); the claim statuses themselves are
+transitioned by the REAL chain's own settlement mints. Every other step
+(claims_store transaction, q-cell dispatch observation, round_closure
+blind park, settlement wire/scorer/ledger, round credit, posterior,
+production Stop settle) runs the REAL code.
 """
 from __future__ import annotations
 
@@ -311,9 +314,53 @@ def credit_round(ws: Path) -> dict:
     return settle_round_credit.run(ws)
 
 
+def terminalize_mission(ws: Path, *, maker: str = "e2e-worker",
+                        checker: str = "e2e-checker") -> Path:
+    """Close the mission's evidence face (the mocked verifier surface):
+    the production Stop admission (``production_terminal.evidence``)
+    requires, per terminal claim, a maker identity in the register and
+    an anchored checker record (identity != maker, digest-pinned in the
+    verdict-anchor ledger). Rewriting the harness's own verification
+    record and anchoring it is the verifier-agent face; the claim
+    statuses were already transitioned by the REAL chain's mints.
+    Idempotent: re-running keeps the same dict and record bytes."""
+    import yaml
+    import verifier_identity
+
+    register = ws / "claim-register.yaml"
+    doc = yaml.safe_load(register.read_text(encoding="utf-8"))
+    changed = False
+    for claim in doc.get("claims") or []:
+        if not isinstance(claim, dict) or not str(claim.get("id") or "").strip():
+            continue
+        cid = str(claim["id"]).strip()
+        status = str(claim.get("status") or "").strip().casefold()
+        if status not in {"proven", "verified", "negative", "refuted"}:
+            continue
+        if not str(claim.get("maker_identity") or "").strip():
+            claim["maker_identity"] = maker
+            changed = True
+        word = ("verified" if status in {"proven", "verified"}
+                else "refuted")
+        record = ws / "runs" / f"verification-{cid}.md"
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(
+            f"verifier-identity: {checker}\nverdict: {word}\n"
+            f"claim: {cid}\n", encoding="utf-8")
+        verifier_identity.anchor(ws, cid, record.name, checker)
+    if changed:
+        register.write_text(yaml.safe_dump(doc, sort_keys=False),
+                            encoding="utf-8")
+    return register
+
+
 def settle_mission(ws: Path) -> dict:
-    from rlvr import episode_settle
-    return episode_settle.settle_mission(ws)
+    """THE link end: the production Stop path — evidence-gated terminal
+    settlement, durable intent checkpoint and the face spans. The span
+    is never closure evidence; only the completed checkpoint/episode
+    writes certify."""
+    from rlvr import production_terminal as terminal
+    return terminal.settle_stop(ws)
 
 
 def pending_claims(ws: Path) -> list[dict]:

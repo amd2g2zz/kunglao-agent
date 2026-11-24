@@ -1,4 +1,5 @@
-"""Terminal traces have an operator consumer; ledger remains authoritative."""
+"""Terminal traces have an operator consumer; ledger remains authoritative —
+at the terminal layer and the end-to-end LINK layer alike."""
 from __future__ import annotations
 
 import json
@@ -9,6 +10,7 @@ import sys
 
 import pytest
 
+import _rl_e2e as H
 from test_production_terminal_1005 import terminal_workspace
 from rlvr import episode_pool, episode_settle, production_terminal as terminal
 
@@ -45,6 +47,31 @@ def test_ledger_failure_cannot_be_certified_by_an_existing_span(tmp_path, monkey
     with pytest.raises(OSError):
         terminal.settle_stop(ws)
     assert terminal.inspect(ws)["checkpoint"]["status"] == "retry"
+    assert episode_pool.list_episodes(ws) == []
+
+
+def test_span_alone_cannot_close_the_link(tmp_path, monkeypatch):
+    """The same invariant at the LINK layer: one real round through the
+    harness chain, then the production Stop — a pre-existing completed
+    span never certifies the link's closure when the settlement line
+    itself fails. The link's closed-loop assertions (``status ==
+    completed``) must not pass on span-only evidence: the checkpoint
+    stays ``retry`` and no episode lands."""
+    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
+                       str(tmp_path / "posterior-store"))
+    sc = H.Scenario(11)
+    plan = sc.plan(rounds=7)
+    ws = H.build_workspace(tmp_path, seed=11, n_claims=1)
+    H.run_rounds(ws, sc, plan[:1])
+    H.terminalize_mission(ws)
+    (ws / "runs" / "face-spans.jsonl").write_text(
+        json.dumps({"schema": "face-span/1", "event": "completed"}) + "\n")
+    monkeypatch.setattr(episode_settle, "settle_mission",
+                        lambda _: (_ for _ in ()).throw(OSError("injected")))
+    with pytest.raises(OSError):
+        H.settle_mission(ws)
+    checkpoint = ws / "runs" / "production-terminal.json"
+    assert json.loads(checkpoint.read_text())["status"] == "retry"
     assert episode_pool.list_episodes(ws) == []
 
 

@@ -33,6 +33,20 @@ The system SHALL distinguish maker, checker, settlement and mission terminal spa
 - **WHEN** either span persistence or ledger persistence fails independently
 - **THEN** the other surface does not falsely certify it and an actual consumer can report the failure
 
+### Requirement: Chain-level coverage rides the production Stop
+
+The end-to-end link tests SHALL settle their missions through the production Stop path and SHALL fail when the production settle call point is not exercised. An external span SHALL NOT close the link without persisted settlement.
+
+#### Scenario: Link end through the production Stop
+
+- **WHEN** the link tests finish their rounds and the workspace satisfies the production Stop admission
+- **THEN** their mission settles through the production terminal (durable checkpoint + spans + episode), and a stubbed production settle call point fails the link assertions
+
+#### Scenario: A span alone never closes the link
+
+- **WHEN** only a completed span marks the mission and the settlement line itself fails
+- **THEN** the link-layer closed-loop assertions do not pass and no episode is written
+
 ### Requirement: Terminal certification postconditions
 
 Terminal certification SHALL distinguish unknown obligations, invalid learning seals and missing committed-dispatch credit from successful completion, and SHALL persist a diagnostic retry state for recoverable postcondition failures.
