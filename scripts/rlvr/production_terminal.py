@@ -8,6 +8,11 @@ A terminal claim whose credit can never be banked (a dispatch was attempted,
 none committed) is a permanent condition, not a retryable fault: completion
 is still recorded, and the claims are listed under ``uncredited`` in the
 terminal record and the settlement span.
+
+A claim whose amended knowledge rows cannot be attributed to a workspace is
+the same kind of condition: the rows stay, completion is still recorded, and
+the claims are listed under ``case_revocations_unavailable`` in the terminal
+record, each with one durable ``case_revocation_unavailable`` event.
 """
 from __future__ import annotations
 
@@ -166,6 +171,8 @@ def settle_stop(ws) -> dict:
                    if key == "error" or key.endswith("_error")):
                 raise RuntimeError("round credit settlement failed")
             uncredited = list(credit.get("uncredited") or [])
+            unavailable = _report_revocations_unavailable(
+                ws, credit.get("case_revocations_unavailable"))
             _require_learning_seals(ws, bound)
             _require_dispatch_credit(ws, bound)
             if ledger.pending_settlement(ws):
@@ -176,7 +183,8 @@ def settle_stop(ws) -> dict:
             episode_pool.es.read_episode_file(episode)
             episode_settle.derived_views(ws)
             doc.update(status="completed", episode=str(episode.relative_to(ws)),
-                       uncredited=uncredited)
+                       uncredited=uncredited,
+                       case_revocations_unavailable=unavailable)
             _checkpoint(path, doc)
             _span(ws, bound, "settlement", "completed", uncredited)
             _span(ws, bound, "mission_terminal", "completed")
@@ -189,6 +197,30 @@ def settle_stop(ws) -> dict:
             if isinstance(exc, SettlementIncomplete):
                 return {"status": "retry", "reason": str(exc)}
             raise
+
+
+def _report_revocations_unavailable(ws: Path, claims) -> list[str]:
+    """Name the claims whose amended knowledge could not be attributed to
+    a workspace and so was not revoked: one console warn listing them and
+    one durable ``case_revocation_unavailable`` event per claim, however
+    many Stops see the condition. The settle pass only returns the list;
+    nothing else on this path reads it. Both faces never raise
+    (``kunglao_log``'s contract). Returns the list for the record."""
+    unavailable = [str(cid) for cid in claims or []]
+    if unavailable:
+        from kunglao_log import emit_once, warn  # noqa: PLC0415
+
+        warn("case_revocations_unavailable",
+             f"{len(unavailable)} amended claim(s) keep derived knowledge "
+             f"whose originating workspace is unknown — nothing was "
+             f"removed: {', '.join(unavailable)}")
+        for cid in unavailable:
+            emit_once(ws, "orchestrator", "case_revocation_unavailable", cid,
+                      claim=cid,
+                      detail=json.dumps({"claim": cid, "derived_rows": "kept",
+                                         "reason": "workspace-binding-unconfirmed"},
+                                        sort_keys=True))
+    return unavailable
 
 
 def _require_notes_queue(ws: Path) -> None:

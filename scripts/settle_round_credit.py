@@ -422,7 +422,10 @@ def reconcile_case_settlements(ws: Path,
     amendments have ALREADY landed re-attempt revocation while derived
     rows still match them in the knowledge family (see
     ``_pending_revoke_claims``); a failure surfaces on the sibling
-    ``case_revocations_error`` field. Telemetry never raises into the
+    ``case_revocations_error`` field. A derived row that matches the
+    amended claim but carries no confirmed workspace binding is kept,
+    never retried, and its claim is listed under
+    ``case_revocations_unavailable``. Telemetry never raises into the
     pass."""
     out: dict = {"case_amendments": 0, "case_amendments_error": None}
     try:
@@ -951,7 +954,9 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
     silently skipped: ``not_dispatched`` lists the claims no dispatch
     attempt ever touched (nothing is owed); ``uncredited`` lists those
     with an attempt but no commit, whose credit can never be banked (one
-    ``credit_unattributable`` event each, once)."""
+    ``credit_unattributable`` event each, once). A claim whose amended
+    knowledge could not be attributed to this workspace is listed under
+    ``case_revocations_unavailable``: those rows stay."""
     import claims_store as _cstore8
 
     claims = _terminal_claim_rows(ws)

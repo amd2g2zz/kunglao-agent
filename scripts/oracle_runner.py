@@ -1478,8 +1478,12 @@ def record_pq_updates(ws, report: dict, led) -> list[dict]:
 def record_posteriors(ws, report: dict) -> Path | None:
     """#106 reuse: a REAL verdict (pass/fail) is one Bernoulli observation on
     the case's CasePosterior (green -> alpha+1 / red -> beta+1). Pending is
-    not an observation — no update, no ledger touch. Missing/unreadable
-    ledger degrades per posteriors.py's fail-open load contract.
+    not an observation — no update, no ledger touch. A missing ledger
+    starts empty; an unreadable or incomplete one REFUSES the update with
+    a ValueError and nothing is applied. The read-modify-save interval
+    holds the workspace's process lock (``PosteriorLedger.for_update``),
+    so a verdict never replaces another writer's update with an older
+    snapshot.
 
     #157: each update additionally emits one ``posterior_update`` event
     (alpha/beta before -> after + the trigger fingerprint). ADDITIVE ONLY —

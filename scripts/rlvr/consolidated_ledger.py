@@ -22,10 +22,12 @@ Row contracts (unchanged, now enforced HERE):
   - every row carries a ``<name>/N`` schema stamp — ``append`` REFUSES a
     stampless row (an unattributable row inside a multi-schema file is
     the orphan-store bug class issue-721 exists to kill): ONE warn + False;
-  - flock single-writer: appends take ``.<stem>.lock`` in the file's own
-    dir via the house lock-file pattern (POSIX fcntl; unlocked O_APPEND
-    fallback where fcntl is unavailable — single writes stay atomic, CI
-    is single-tenant);
+  - single-writer appends take ``.<stem>.lock`` in the file's own dir via
+    the house lock-file pattern: the knowledge family takes the strict
+    platform lock it shares with the revocation rewrite and is REFUSED
+    (False, one warn) when no real lock can be taken; the other families
+    keep flock (POSIX fcntl) with an unlocked O_APPEND fallback where
+    fcntl is unavailable (single writes stay atomic, CI is single-tenant);
   - identity ts lives on the rows — this module adds nothing to a row.
 
 Post-cutover read contract (issue-1004 R3): the compat window is GONE.
@@ -247,9 +249,12 @@ def family_lock(ws, family: str):
 
 
 def _locked_append(p: Path, data: bytes) -> bool:
-    """Append one chunk under the file lock. flock (POSIX) with an
-    unlocked O_APPEND fallback where fcntl is unavailable (the
-    rollout-ledger pattern). Never raises."""
+    """Append one chunk under the file lock. The knowledge family takes
+    the strict platform lock it shares with the revocation rewrite: when
+    no real lock can be taken the append is refused (False, one warn).
+    The other families keep flock (POSIX) with an unlocked O_APPEND
+    fallback where fcntl is unavailable (the rollout-ledger pattern).
+    Never raises."""
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         lock = _lock_path(p)

@@ -161,7 +161,9 @@ def knowledge_lines(path):
 
 def _rewrite_without(path: Path, drop) -> int:
     """Atomically rewrite one JSONL store without the dropped rows.
-    Surviving lines keep their exact bytes, including blank separators.
+    Surviving lines keep their exact bytes, including blank separators;
+    the file ends with a newline, so a later append never glues onto the
+    last survivor.
     Returns the removed count; a zero-removal rewrite never touches the
     file. The write rides the canonical atomic face (writer-unique tmp,
     failed writes unlink their tmp, parents created)."""
@@ -188,9 +190,13 @@ def _rewrite_without(path: Path, drop) -> int:
                      f"{type(exc).__name__}: {exc}")
                 return 0
             return removed
+        data = b"".join(kept)
+        if not data.endswith(b"\n"):
+            # the next append must start on its own line
+            data += b"\n"
         try:
             from _common import atomic_write_bytes  # noqa: PLC0415 — lazy
-            atomic_write_bytes(path, b"".join(kept), unique=True)
+            atomic_write_bytes(path, data, unique=True)
         except OSError as exc:
             warn("crystallize.rewrite", f"{type(exc).__name__}: {exc}")
             return 0
