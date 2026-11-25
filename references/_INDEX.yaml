@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: b87731efe510c49125983e2f14af8eb2cb28d8bb961f90103545d7531fcb06bf
+  references/_INDEX.md: 11d9f6b40b640b5b92a54b8c5e43461facdd479f39576b8d8c16f729629a9442
   references/_index-android.md: 4bf60c34cdb8d0302f6bd16efb45bb22e7b29138a9c49acef34d473b01714af1
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-dynamic.md: f116cbab64c9017fc86b61980b0c7928684db7322acc84bccb2a8948f08cabab
@@ -17,7 +17,7 @@ files:
   references/_index-web.md: f18f62a2934bd7a0a9edce03579ee75230c9ef09c87ac58a264443534085061f
   references/contracts/agent-three-state-charter.md: 8719241ce2e1479d770b317598cad3acfd453899dda4b02015851a7acea2cfce
   references/contracts/cli-script-checklist.md: 5119b9be3a005d8a55a73df276eacf3298dfbbea121fe72867fe663a475fc5a5
-  references/contracts/cold-start-contract.md: d7766aa74effcfa771e258f7bb83f978554f924ff165126c3cce2bb2aa39fd13
+  references/contracts/cold-start-contract.md: a51bf9b39ba3adca6dfddb228c9bc5cf75a9959ff3afae038328b2b10e0efb95
   references/contracts/convergence-loop.md: 3b13ca682f013bd365d64081678ba5416d3556957f312b8b593e0ff95cffc076
   references/contracts/distill-pipeline.md: 2964b9f9f3d5099441d0b296271f82b941083d00d4e4c284fdddc36be4a460eb
   references/contracts/downstream-contract.md: 6b753a2089cfa7420188bbc907424e5db1de5f6bf7012386124524c7d40e2f9b
@@ -33,7 +33,7 @@ files:
   references/contracts/xml-injection-standard.md: 83a5e7bcc951b27389b898b4f28985023dc569d7bc3ec22f82b9f8702d637619
   references/governance/decision-rights.md: df3711f0f534e54a04f6841f8e0c08bfc8a69ff8f287a5dd9760dac3053f4163
   references/governance/excerpt-lint.md: ae0c1ea36b2087099044095e2f400c9154eb053f1d2b1a170da81477988ddbb0
-  references/governance/guardrails.md: f3a6e4ba3b95bac18a0d503b0d299beb4e2a14594d5d2203228c349e036f5757
+  references/governance/guardrails.md: ade6c2d85b92d2abb40678e1e75dd6225fda0de078a3937ce63deb65069fc1eb
   references/governance/mechanisms.md: 70c8771900fc9e47ee7179f1a8f1d8ee5a5a688be09faa0aade054e360bf997f
   references/lessons/README.md: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
   references/orchestration/anomaly-baseline.md: a0f5d4177803568f70e4693fcd32787e03e29e4a19a88ab15fb09b5036b84f89

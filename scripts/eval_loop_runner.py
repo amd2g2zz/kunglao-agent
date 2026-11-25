@@ -854,8 +854,12 @@ def _tick_gate_skip_row(ws: Path, task: dict, tdir: Path, out: Path, *,
         "action": TICK_GATE_REFUSED_ACTION,
         "arm": arm,
         "detail": why[-800:],
-        "remedy": "arm the loop first: heartbeat_loop_prompt.py <ws> -> "
-                  "CronCreate (or /loop 5m); the loop's first action marks "
+        "remedy": "arm the loop first: heartbeat_wake_gate.py <ws> "
+                  "--print-registration -> install the emitted OS-cron line "
+                  "(--wake-gate: QUIET injects nothing, WAKE injects the /loop "
+                  "prompt); then heartbeat_loop_prompt.py <ws> -> "
+                  "CronCreate (or /loop 5m) as the durable watchdog — the "
+                  "loop's first action marks "
                   "loop_registered=true — then re-run",
     }
     with (out / "harness-events.jsonl").open("a", encoding="utf-8") as fh:

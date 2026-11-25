@@ -430,8 +430,12 @@ working path. See `method-constraints.md` for Go-specific frida rules.
 
 
 - **§6.1 — heartbeat loop (mandatory, start at first dispatch).** The moment
-  the first worker is dispatched, self-schedule a heartbeat: `/loop 5m <poll
-  prompt>` (or CronCreate `*/5 * * * *`), so worker state is polled every 5
+  the first worker is dispatched, arm the wake GATE: run
+  `scripts/heartbeat_wake_gate.py <ws> --print-registration` and install the
+  emitted OS-cron line (it carries `--wake-gate` — a QUIET verdict injects
+  nothing, a WAKE verdict injects the /loop prompt once), and keep the durable
+  /loop watchdog (`/loop 5m <poll prompt>` or CronCreate `*/5 * * * *`) as the
+  armed carrier, so worker state is polled every 5
   minutes WITHOUT relying on notifications. Each heartbeat tick: (1) read ALL
   `runs/worker-status-*.md` in every worker worktree (`.wt-*/`), record last
   update time; (2) worker silent >5 min → run `scripts/active_intervention.py`,
