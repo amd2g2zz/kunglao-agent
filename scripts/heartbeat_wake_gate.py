@@ -105,15 +105,11 @@ def _ts(now: datetime | None = None) -> str:
 
 
 def _loud(ws, message: str) -> None:
-    """The fault face: a stderr banner + the canonical ledger warn. A fault
+    """The fault face: a stderr banner + the canonical ledger trace. A fault
     that only changed the exit code would be silent to anyone not watching
-    cron mail; the warn row keeps it visible in the workspace ledger."""
+    cron mail; the ledger row keeps it visible in the workspace."""
     print(f"{_LOUD_PREFIX} FAULT ({ws}): {message}", file=sys.stderr)
-    try:
-        warn("wake_gate_wrapper", message)
-    except Exception:  # noqa: BLE001 — telemetry must never mask the banner
-        print(f"{_LOUD_PREFIX}: ledger warn unavailable for: {message}",
-              file=sys.stderr)
+    warn("wake_gate_wrapper", message)
 
 
 def _validate_interval(interval_min: int) -> None:
@@ -428,8 +424,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         import kunglao_log
         kunglao_log.set_warn_workspace(Path(parsed.workspace))
-    except Exception:  # noqa: BLE001 — ledger pinning is best-effort
-        pass
+    except Exception as exc:  # ledger pinning is best-effort; warn() is fail-open
+        warn("wake_gate_wrapper", f"set_warn_workspace failed: {exc}")
     receipt = wake_pass(
         parsed.workspace, python_exe=None, claude_bin=parsed.claude_bin,
         dry_run=parsed.dry_run, interval_min=parsed.interval_min,
