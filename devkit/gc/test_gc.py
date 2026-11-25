@@ -1,4 +1,4 @@
-# gc-harness/test_gc.py — Test lifecycle controller (#720 v1).
+# devkit/gc/test_gc.py — Test lifecycle controller (#720 v1).
 # Never judges quality; only "would deleting this lower system protection?"
 # Candidates: registered last_failure > 180d, or identical test function
 # names in 2+ files (no content analysis — spec-of-record prohibition).

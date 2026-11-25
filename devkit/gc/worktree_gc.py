@@ -1,4 +1,4 @@
-# gc-harness/worktree_gc.py — Worktree lifecycle controller (#720 v1).
+# devkit/gc/worktree_gc.py — Worktree lifecycle controller (#720 v1).
 # merged + merged_days -> candidate; abandoned (zero own commits) +
 # abandoned_days -> candidate. --apply removes worktree + branch and keeps
 # ONLY a record line (commit_hash / branch / pr_link). Main worktree never

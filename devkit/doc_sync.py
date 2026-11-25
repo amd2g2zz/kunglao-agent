@@ -49,6 +49,18 @@ Three sub-checks were shipped by #446 (design.md D2-D5, (a)-(c) below);
       reason) is the documented exception for a public API with no
       static consumer. Missing facade = N/A; malformed facade = FAIL
       (the declared surface is unreadable).
+  (f) devkit portability (#1091) — devkit/ declares cross-platform Python, so
+      a POSIX machine path (``/Users/``, ``/home/``) or a POSIX-only construct
+      (``/tmp/`` literal, ``fcntl``, ``flock``, ``os.fork`` — Python files; the
+      hook template is documented bash) inside a devkit script is a violation.
+      Docstring and comment prose is exempt: explaining a Windows escape is not
+      a defect, and neither is the ``#!`` shebang. Two axes only, deliberately —
+      tests/test_hardcode_purge.py already owns the Windows user-path shape over
+      the whole tracked tree and tests/test_no_absolute_paths.py owns drive
+      letters in tests/**.py, so restating either here would only be a weaker
+      copy of a gate that exists. Zero hits were measured on the live face before
+      this guard landed: it is the regression protection that comes with gc
+      living under devkit/, not a cleanup of anything it found.
 
 Exit codes: 0 = pass; 1 = violations found; 2 = HARD_PAUSE (references
 unpinned). Registered as Gate 7 in quality_gates.GATES; the pre-commit
@@ -544,12 +556,95 @@ def _check_declared_consumer_truth() -> list[str]:
     return fails
 
 
+# ---- sub-check (f): devkit portability (#1091) ------------------------------
+
+DEVKIT_FACE = "devkit"
+#: devkit/ declares cross-platform Python (devkit/README.md 不变性); a machine
+#: path or a POSIX-only call is how that declaration dies silently. These are
+#: the ONLY two axes nobody else guards: tests/test_hardcode_purge.py owns the
+#: Windows user-path shape over the whole tracked tree (git grep) and
+#: tests/test_no_absolute_paths.py owns drive letters in tests/**.py — a third
+#: copy of either would be weaker than the gate it duplicates, so neither is
+#: restated here. The POSIX-only axis stays devkit-scoped on purpose: the
+#: product tree uses conditional fcntl locks deliberately (44 sites measured),
+#: which is runtime degradation, not a defect.
+#: The forbidden spellings are written as bracketed classes (the
+#: ``grep '[f]oo'`` trick) so this guard matches its own source: a literal
+#: spelled in one piece would make the definition line a violation.
+_MACHINE_PATH_SUFFIXES = (".py", ".sh", ".bash", "")
+_PY_SUFFIXES = (".py",)
+_ABS_PATH_RE = re.compile(r"(?<![A-Za-z0-9_])(?:/[U]se[r]s/|/[h]om[e]/)")
+_POSIX_ONLY_RE = re.compile(
+    r"(?<![A-Za-z0-9_/])(?:/[t]m[p]/|\bfc[n]t[l]\b|\bfl[o]c[k]\b|\bos\.[f]or[k]\b)")
+
+
+def _prose_lines(text: str) -> set[int]:
+    """Lines that are documentation rather than code: comments (which covers
+    the shebang) and docstring ranges (the Windows-escape explanation shape).
+    Prose may name a path or a POSIX call — the guard is about what runs."""
+    lines = {i for i, ln in enumerate(text.splitlines(), 1)
+             if ln.lstrip().startswith("#")}
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return lines
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.FunctionDef,
+                                 ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if not ast.get_docstring(node, clean=False):
+            continue
+        stmt = node.body[0]
+        lines.update(range(stmt.lineno, (stmt.end_lineno or stmt.lineno) + 1))
+    return lines
+
+
+def _check_devkit_portability() -> list[str]:
+    """Sub-check (f). Returns violation strings (empty = pass).
+
+    Two axes over the devkit/** script face: a POSIX machine path
+    (``/Users/``, ``/home/``) and a POSIX-only construct (``/tmp/`` literal,
+    ``fcntl``, ``flock``, ``os.fork``, Python files only — the cross-platform
+    claim is about the Python devkit face, while the hook template is
+    documented bash). gc's relocation under devkit/ (#1091) has to hold the
+    invariant that comes with it. Zero hits measured on the live face, so this
+    is regression protection, not a cleanup of anything found.
+    """
+    fails: list[str] = []
+    for p in _iter_face_files():
+        rel = p.relative_to(REPO_ROOT).as_posix()
+        if not rel.startswith(DEVKIT_FACE + "/"):
+            continue
+        if p.suffix not in _MACHINE_PATH_SUFFIXES:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not text or "\x00" in text:
+            continue
+        prose = _prose_lines(text)
+        for i, ln in enumerate(text.splitlines(), 1):
+            if i in prose:
+                continue
+            m = _ABS_PATH_RE.search(ln)
+            if m is None and p.suffix in _PY_SUFFIXES:
+                m = _POSIX_ONLY_RE.search(ln)
+            if m is not None:
+                fails.append(
+                    f"{rel}:{i}: non-portable {m.group(0).strip()!r} — devkit/ is "
+                    "cross-platform Python (derive paths from Path(__file__) or "
+                    "tempfile; prose in a docstring or comment is exempt)")
+    return fails
+
+
 def check() -> int:
     claims = scan_gate_count_claims()
     pauses = _check_references_pins()
     warns = _check_new_script_registration()
     ext_fails, ext_warns = _check_ext_index()
     declared_fails = _check_declared_consumer_truth()
+    portability_fails = _check_devkit_portability()
     warns = warns + ext_warns
 
     for w in warns:
@@ -583,6 +678,15 @@ def check() -> int:
                     "devkit/doc_sync.py RLVR_CONSUMER_ALLOWLIST"))
         return RC_FAIL
 
+    if portability_fails:
+        print(_safe(f"FAIL Gate 7: {len(portability_fails)} devkit "
+                    f"portability violation(s) (cross-platform script face):"))
+        for f in portability_fails:
+            print(_safe(f"  {f}"))
+        print(_safe("  Fix: derive the path from Path(__file__) / tempfile and "
+                    "use a portable lock; devkit/ never gets to assume one OS"))
+        return RC_FAIL
+
     if claims:
         print(_safe(f"FAIL Gate 7: {len(claims)} numeric gate-count "
                     f"claim(s) on the devkit/workflows face "
@@ -597,7 +701,7 @@ def check() -> int:
 
     print("[PASS] Gate 7 doc sync: gate-count claim scan clean, "
           "references pins clean, ext index consistent, rlvr declared "
-          "surface consumed"
+          "surface consumed, devkit script face portable"
           + (f", {len(warns)} registration WARN(s)" if warns else ""))
     return RC_PASS
 

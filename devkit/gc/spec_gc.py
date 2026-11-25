@@ -1,4 +1,4 @@
-# gc-harness/spec_gc.py — Spec lifecycle controller (#720 v1).
+# devkit/gc/spec_gc.py — Spec lifecycle controller (#720 v1).
 # Creation gate (search) + Rule 1 (orphan → ARCHIVED, apply only)
 # + Rule 2 (zero tests → SUSPECT, report only) + Rule 3 (duplicates,
 # report only — never auto-merge). init registers, never adjudicates.
@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
-CODE_SUBDIRS = ("scripts", "hooks", "tools", "gc-harness")
+CODE_SUBDIRS = ("scripts", "hooks", "tools", "devkit/gc")
 
 
 def _next_id(entries: list[dict]) -> str:

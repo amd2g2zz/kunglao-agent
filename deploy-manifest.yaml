@@ -1055,7 +1055,7 @@ files:
   - src: scripts/relib_audit.py
     dest: .claude/scripts/relib_audit.py
     kind: scaffold
-    sha256: 3af9f7bfcdea0001d193035252eebffea4ffadd0f3e3ed1079930cbdad9e9278
+    sha256: 73f4cddbe8bbc873da8ce8fcf70cfe927229381ee78b2ffd37697136b247df0b
   - src: scripts/render_rl_visuals.py
     dest: .claude/scripts/render_rl_visuals.py
     kind: scaffold

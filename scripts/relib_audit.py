@@ -77,7 +77,7 @@ _PROD_DIAG_FACES = {
     "deploy_manifest": ("deploy-manifest.yaml",),
     "release_manifest": ("release-manifest.yaml",),
     "scripts_readme": ("scripts/README.md",),
-    "gc_harness": ("gc-harness/**",),
+    "gc": ("devkit/gc/**",),
     "eval": ("eval/**", "evals/**"),
     "kunglao_bench": ("kunglao-bench/**",),
 }

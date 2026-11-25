@@ -457,7 +457,7 @@ def _observation_artifact_budget(verbose: bool = True,
                                  repo_root: Path | None = None,
                                  sink=None) -> None:
     """Artifact-budget observation (#720): net NEW specs/tests/files added by
-    the current task vs gc-harness/config.yaml budgets.
+    the current task vs devkit/gc/config.yaml budgets.
 
     NOT a gate — WARN-level observation per #720 P1 (HARD-ification is a
     data-driven decision for a later release). Counts ADDED paths against a
@@ -488,7 +488,7 @@ def _observation_artifact_budget(verbose: bool = True,
                  if p.startswith("openspec/changes/") and p.count("/") >= 3}
     new_tests = [p for p in added
                  if p.startswith("tests/") and Path(p).name.startswith("test_")]
-    cfg_path = root / "gc-harness" / "config.yaml"
+    cfg_path = root / "devkit" / "gc" / "config.yaml"
     budgets = {"max_new_spec": 1, "max_new_test": 5, "max_new_files": 20}
     if cfg_path.is_file():
         try:
