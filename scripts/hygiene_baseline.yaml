@@ -1702,6 +1702,8 @@ files:
     r1: 2
   tests/test_scheduler_schema_679.py:
     r1: 1
+  tests/test_scheduler_switch_production_1005.py:
+    r1: 1
   tests/test_scorer_authority.py:
     r1: 10
   tests/test_script_discipline.py:

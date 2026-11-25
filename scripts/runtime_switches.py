@@ -136,9 +136,11 @@ _ENTRIES: tuple[tuple, ...] = (
      "eval-only; reader: eval_loop_runner's family-playbook session block "
      "(the warm-vs-cold A/B read and write legs); exact 1 enables"),
     ("KUNGLAO_SCHEDULER", "str", "", "learning", "operator",
-     "scripts/e2e/checkpoints.py",
-     "eval-only; reader: e2e checkpoints' scheduler face (uniform "
-     "flattens the learned prior); exact uniform flattens"),
+     "scripts/rlvr/strategy_store.py",
+     "flat-scheduler switch; exact uniform flattens the learned prior "
+     "at the production sampling entry (rlvr strategy_store "
+     "method_sample/reconcile_declaration) and at the e2e envelope "
+     "sampler (checkpoints.py scheduler face)"),
     # ------------------------------------------------------------ ops
     ("KUNGLAO_WG_DEBUG", "bool", False, "ops", "operator",
      "hooks/write_guard.py", "write-guard debug lines; exact 1 enables"),
