@@ -31,6 +31,8 @@ dist/
 
 # Workspace state snapshots (not skill code)
 .state/
+# Local tool state — never product content (#1089)
+.workbuddy/
 # Malware samples — NEVER tracked
 **/bins/
 test_workspace/
