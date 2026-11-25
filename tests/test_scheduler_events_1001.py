@@ -7,7 +7,8 @@ spine, additive to the old monitor stack (that removal is its own
 reviewed change):
 
   - ``runs/scheduler/events.jsonl`` — the append-only stream of the
-    scheduler's MATERIAL events (closed five-kind vocabulary), written
+    scheduler's MATERIAL events (closed vocabulary mapped onto BUS A's
+    wake classes — #1086 S19), written
     by the faces that already record the underlying facts (one fail-open
     append each, derived from data the producer has in hand). The events
     are EPHEMERAL WAKE SIGNALS, not learning rows — every kind has a
@@ -108,7 +109,7 @@ class TestEventStream:
     def test_reader_side_gate_drops_unknown_kinds(self, ws):
         """The materiality gate is also the READER-side closed-vocabulary
         check: a hand-placed non-material row is dropped, never woken."""
-        se.append(ws, se.KIND_WORKER_EXIT, claim="C-1")
+        se.append(ws, se.KIND_SETTLE_COMPLETED, claim="C-1")
         p = _events_file(ws)
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as fh:
@@ -116,7 +117,7 @@ class TestEventStream:
                                  "schema": se.SCHEMA,
                                  "kind": "heartbeat"}) + "\n")
         rows = se.material_rows(ws)
-        assert [r["kind"] for r in rows] == [se.KIND_WORKER_EXIT]
+        assert [r["kind"] for r in rows] == [se.KIND_SETTLE_COMPLETED]
 
     def test_events_are_ephemeral_wake_signals_no_ledger_row(self, ws):
         """The events-are-X decision, pinned: ephemeral wake signals ride
@@ -182,6 +183,7 @@ class TestEventStream:
         se.append(ws, se.KIND_GATE_REJECT, claim="C-1")
         se.append(ws, se.KIND_GATE_REJECT, claim="C-2")
         assert se.count_rows(ws) == 2
+
 
 
 # ------------------------------------------------ the producer seams ----
@@ -356,7 +358,7 @@ class TestWatcher:
         wake contract (the quiet-period economy: wakes are batched, the
         drain acts per type)."""
         for claim in ("C-1", "C-2", "C-3"):
-            se.append(ws, se.KIND_WORKER_EXIT, claim=claim)
+            se.append(ws, se.KIND_GATE_REJECT, claim=claim)
         contract = sw.poll_once(ws)
         assert contract is not None
         assert len(contract["events"]) == 3
@@ -411,7 +413,7 @@ class TestWatcher:
         assert "drain" in contract["prompt"].lower()
 
     def test_once_cli_emits_the_contract_to_stdout(self, ws, capsys):
-        se.append(ws, se.KIND_VERDICT_LANDED, claim="C-1")
+        se.append(ws, se.KIND_DEADLINE_FIRED, claim="C-1")
         rc = sw.main([str(ws), "--once"])
         assert rc == 0
         out = capsys.readouterr().out
@@ -588,10 +590,7 @@ class TestDrain:
         def _boom(w, rows):
             raise RuntimeError("face down")
         monkeypatch.setitem(ls.DRAIN_ACTIONS, se.KIND_GATE_REJECT, _boom)
-        # the worker reconcile face needs the initialized-workspace file
-        (ws / "analysis_state.txt").write_text(
-            "[active_workers]\n[/active_workers]\n", encoding="utf-8")
-        se.append(ws, se.KIND_WORKER_EXIT, claim="C-1")  # idx 0 — acts
+        se.append(ws, se.KIND_SETTLE_COMPLETED, claim="C-1")  # idx 0 — acts
         se.append(ws, se.KIND_GATE_REJECT, claim="C-2")  # idx 1 — fails
         receipt = ls.drain_events(ws)
         assert receipt["drained"] == 1          # the succeeded prefix only
@@ -656,17 +655,11 @@ class TestDrain:
     def test_drain_actions_dispatch_to_existing_faces(self, ws):
         """The per-type actions dispatch to the faces that already own
         each fact — the receipt carries each face's own result shape."""
-        # the worker reconcile face rewrites analysis_state.txt (the
-        # initialized-workspace contract) — seed the initialized shape
-        (ws / "analysis_state.txt").write_text(
-            "[active_workers]\n[/active_workers]\n", encoding="utf-8")
         se.append(ws, se.KIND_GATE_REJECT, claim="C-1", reason="granularity")
         se.append(ws, se.KIND_SETTLE_COMPLETED, claim="C-1")
         se.append(ws, se.KIND_DEADLINE_FIRED, claim="C-2", rollout_id="r-9")
-        se.append(ws, se.KIND_WORKER_EXIT, claim="C-1")
-        se.append(ws, se.KIND_VERDICT_LANDED, claim="C-1")
         receipt = ls.drain_events(ws)
-        assert receipt["drained"] == 5
+        assert receipt["drained"] == 3
         actions = receipt["actions"]
         # the dispatch-reject feedback face (its own shape)
         assert actions[se.KIND_GATE_REJECT]["retry_max"] == 3
@@ -675,10 +668,6 @@ class TestDrain:
         assert "digest" in actions[se.KIND_SETTLE_COMPLETED]
         # the timer-state read face for the fired rollout
         assert "r-9" in actions[se.KIND_DEADLINE_FIRED]["rollouts"]
-        # the worker reconcile face (active count)
-        assert "active" in actions[se.KIND_WORKER_EXIT]
-        # the verdict-status watch face (scan report)
-        assert "notes_scanned" in actions[se.KIND_VERDICT_LANDED]
 
     def test_drain_routes_per_event_type(self, ws, monkeypatch):
         """The action table routes each drained event to its own face —
