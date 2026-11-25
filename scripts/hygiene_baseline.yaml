@@ -1128,6 +1128,8 @@ files:
   tests/test_gate_machinery_measured_818.py:
     r1: 1
     r2: 1
+  tests/test_gate_pass_mechanisms_1086.py:
+    r1: 3
   tests/test_gate_policy_818.py:
     r1: 1
     r2: 1
