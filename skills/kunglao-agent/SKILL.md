@@ -117,7 +117,8 @@ Run hook + heartbeat activation before the first dispatch (orchestrator-only, 30
 ```bash
 uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --wire-up       # idempotent; before first dispatch
 uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-on  # worker_budget REJECTS dispatch without .heartbeat.json
-uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_loop_prompt.py <WORKSPACE>           # stdout = /loop prompt → CronCreate */5 * * * *
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_wake_gate.py <WORKSPACE> --print-registration  # the OS cron runs the GATE wrapper (*/5, carries --wake-gate): QUIET (rc 0) injects NOTHING, WAKE (rc 3) injects the /loop prompt once
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_loop_prompt.py <WORKSPACE>           # stdout = the /loop prompt body (what the gate injects on WAKE) → CronCreate */5 * * * * as the armed watchdog (the cron is demoted, never deleted)
 ```
 
 MUSTs: `--renew` every 30 min; `--reconcile` every tick (self-heals zombie workers); cron acceptance HARD — `heartbeat_loop_prompt.py --verify` non-zero = CronCreate did not take. A PASSING dispatch auto-renews the TTL, flips phase to DISPATCH, and writes the dispatch event.
@@ -138,9 +139,9 @@ The not-done counterexamples are the load-bearing half: concrete negatives in th
 
 ### 1.4 Tick binding
 
-Run `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention. Every convergence decision is a COMMAND with a required action; no action in a tick = idle fault.
+Run `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention. The scheduler is the pre-LLM wake gate (`heartbeat_wake_gate.py <WORKSPACE> --wake-gate`): a QUIET verdict (rc 0) is a legal outcome — nothing is injected, no model turn happens, and no action is owed for it (`sleep`/`none` are cost-0 actions in the registry). In a WAKEN tick (rc 3) every convergence decision is a COMMAND with a required action; no action in a tick = idle fault.
 
-- **THINK seat**: while the tick waits, heartbeat_tick writes `runs/.think-<ts>.md` — filling its three sections IS that tick's action (EMPTY forbidden); execute `suggested_searches` as the NEXT action.
+- **THINK seat**: in a WAKEN tick, while the tick waits, heartbeat_tick writes `runs/.think-<ts>.md` — filling its three sections IS that tick's action (EMPTY forbidden); execute `suggested_searches` as the NEXT action. Under a QUIET verdict there is no tick turn and no seat to fill.
 - **Premise expiry**: an env-class blocker unverified >12 ticks drops out; a premise contradicting a liveness PASS is SUSPECT → one-shot re-probe, the probe wins.
 - **Teardown**: stop the loop at closeout with `hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
 

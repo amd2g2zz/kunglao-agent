@@ -93,8 +93,10 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
   This is NOT a soft "orchestrator should self-schedule" instruction (those
   lost to context-forgetting across v1.9.12/13/18/25/26 — every recurrence
   was 'dispatched a task, forgot the heartbeat cron'). It is a hook-enforced
-  precondition: no live heartbeat = no dispatch. The `--heartbeat-on` +
-  `heartbeat_loop_prompt.py` (CronCreate) steps above are therefore
+  precondition: no live heartbeat = no dispatch. The `--heartbeat-on` step and
+  the wake-gate registration above (`heartbeat_wake_gate.py --print-registration`
+  → install the emitted OS-cron line; the `heartbeat_loop_prompt.py` CronCreate
+  step stays as the durable watchdog) are therefore
   MANDATORY before the first dispatch, not optional.
 - **ONLY the orchestrator may activate/renew. Subagents are forbidden**
   (a subagent renewing would let a stray worker keep the gates alive).

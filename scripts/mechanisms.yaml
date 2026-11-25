@@ -200,23 +200,27 @@ mechanisms:
       mechanical action of the woken session turn — or by hand.
 
   - name: wake_gate
-    entry: scripts/heartbeat_tick.py
+    entry: scripts/heartbeat_wake_gate.py
     channel: os
     trigger:
       type: tick
       gate: always
     cost_class: cheap
     depth: os
-    cockpit_signal: "runs/.heartbeat-tick.json wake face + runs/.wake-gate.json (quiet_streak) + rc3/0 from --wake-gate"
-    owner: scripts/heartbeat_tick.py
+    cockpit_signal: "runs/.heartbeat-tick.json wake face + runs/.wake-gate.json (quiet_streak) + runs/.wake-gate-receipt.json (the wrapper's pass receipt) + rc3/0 from --wake-gate"
+    owner: scripts/heartbeat_wake_gate.py
     description: >
-      The pre-LLM wake gate (#801 Face 1): the OS scheduler (cron/schtasks)
-      runs heartbeat_tick.py <ws> --origin cron --wake-gate DIRECTLY — zero
-      LLM. A quiet verdict (watchdog silent, no wake-class bus events, park
-      below expiry) exits 0 and injects NOTHING (idle burn 750k tok/h -> 0);
-      a wake verdict exits 3 and the wrapper injects the loop prompt.
-      Out-of-session like dead_session_kicker — declared here so the
-      cockpit answer stays complete; never tick-dispatched.
+      The pre-LLM wake gate (#801 Face 1) and its wrapper (#1086 S18): the
+      OS scheduler (cron/schtasks) runs heartbeat_wake_gate.py <ws>
+      --wake-gate — zero LLM. The wrapper runs heartbeat_tick.py --origin
+      cron --wake-gate; a quiet verdict (watchdog silent, no wake-class bus
+      events, park below expiry) exits 0 and injects NOTHING (idle burn
+      750k tok/h -> 0); a wake verdict exits 3 and the wrapper injects the
+      loop prompt exactly once (staged at runs/.wake-gate-prompt.txt;
+      out-of-session delivery is the kicker's D4 shape, skipped when a live
+      session owns the wake). Wrapper/gate faults are loud (rc 1, never a
+      silent QUIET). Out-of-session like dead_session_kicker — declared
+      here so the cockpit answer stays complete; never tick-dispatched.
 
   - name: decide_cli
     entry: scripts/kunglao-decide.py

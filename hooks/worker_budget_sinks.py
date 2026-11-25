@@ -219,9 +219,12 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'heartbeat NOT registered / STALE - dispatching without monitoring '
             'is the #1 recurring failure. Fix BEFORE dispatching: run '
             'uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on, '
-            'then register the cron (CronCreate */5 * * * * with the heartbeat '
-            'loop prompt, or /loop 5m) so monitoring ticks before the worker '
-            'starts.'
+            'then register the wake GATE first: heartbeat_wake_gate.py <ws> '
+            '--print-registration emits the OS-cron line to install (carries '
+            '--wake-gate: QUIET injects nothing, WAKE injects the /loop prompt '
+            'once), and keep the durable /loop watchdog (CronCreate */5 * * * * '
+            'with the heartbeat loop prompt, or /loop 5m) so monitoring ticks '
+            'before the worker starts.'
         ),
     },
     'drift': {
@@ -528,6 +531,9 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
         return (False,
                 'heartbeat NOT registered. BEFORE dispatching, run:\n'
                 '  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
+                '  register the wake GATE: heartbeat_wake_gate.py <ws> '
+                '--print-registration -> install that OS-cron line '
+                '(--wake-gate: QUIET injects nothing, WAKE injects the /loop prompt)\n'
                 '  CronCreate */5 * * * * <heartbeat_loop_prompt.py output>\n'
                 '#754: register it DURABLE (<ws>/.claude/scheduled_tasks.json via '
                 '/kunglao-agent:init or loop_scheduler.py) - session-only crons '
