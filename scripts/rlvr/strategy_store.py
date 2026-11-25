@@ -1116,7 +1116,13 @@ def _round_lead(ws) -> str | None:
 
 
 def method_decision(receipt: dict, declared: str | None) -> dict:
-    """Project one draw and the actual choice into a dispatch record."""
+    """Project one draw and the actual choice into a dispatch record.
+
+    An automatic adoption (a draw with no declared method) stamps the
+    draw's conditional probability under the law that produced it,
+    mirroring the e2e channel's ``selection_law_exact`` token; declared
+    and overridden rows and the flat scheduler arm stay on the honest
+    unknown face."""
     sampled = str(receipt.get("family") or "").strip() or None
     actual = declared or sampled
     candidates = receipt.get("candidates") or {}
@@ -1132,17 +1138,23 @@ def method_decision(receipt: dict, declared: str | None) -> dict:
     total = sum(weights.values())
     usable = total > 0 and math.isfinite(total)
     deviates = bool(declared and sampled and declared != sampled)
+    cond_weight = (weights.get(sampled, 0.0) / total
+                   if usable and sampled else None)
+    method_source = ("override" if deviates else "declared" if declared
+                     else "sampled-adoption" if sampled else None)
+    exact_law = (method_source == "sampled-adoption"
+                 and receipt.get("scheduler") != SCHEDULER_UNIFORM
+                 and bool(cond_weight))
     return {
         "actual_method_family": actual,
-        "method_source": ("override" if deviates else "declared" if declared
-                          else "sampled-adoption" if sampled else None),
+        "method_source": method_source,
         "sampled_family": sampled,
-        "propensity": None,
-        "probability_source": "unknown",
+        "propensity": cond_weight if exact_law else None,
+        "probability_source": ("selection_law_exact" if exact_law
+                               else "unknown"),
         "conditional_sampler_weight": (weights.get(actual, 0.0) / total
                                        if usable else None),
-        "sampled_conditional_weight": (weights.get(sampled, 0.0) / total
-                                       if usable and sampled else None),
+        "sampled_conditional_weight": cond_weight,
         "supported": actual in sources,
         "candidates": candidates,
         "candidate_sources": sources,

@@ -1683,7 +1683,7 @@ files:
   - src: scripts/rlvr/strategy_store.py
     dest: .claude/scripts/rlvr/strategy_store.py
     kind: scaffold
-    sha256: 83c0d127b97955ec7aaac0f7476e2ebcbe68bf1b8732d06b16eebae792bbfd22
+    sha256: 5bc3e0c2e4c9ca60d88bef2b7b91c86c0cc7db600e1feae55ad2691cd1dd2031
   - src: scripts/rlvr/termination.py
     dest: .claude/scripts/rlvr/termination.py
     kind: scaffold
@@ -1715,7 +1715,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: d59b1e5a29acb5962264c4da942d19350b05d08a9853697f29c18b557c4ae4b4
+    sha256: 7173752e34b44276259268163c461141f938b154991a7e40564ed36c48167c49
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
