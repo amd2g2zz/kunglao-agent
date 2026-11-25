@@ -171,6 +171,11 @@ _ENTRIES: tuple[tuple, ...] = (
     ("KUNGLAO_EVAL_SEED_STORE", "str", "", "ops", "operator",
      "scripts/eval_loop_runner.py",
      "eval arm seed: dir copied INTO the workspace store at init"),
+    ("KUNGLAO_EVAL_ROUND_SEED", "int", 0, "ops", "operator",
+     "scripts/rlvr/q_cells.py",
+     "eval matrix round seed anchor; the frozen (unit, round) pairing "
+     "anchor mixed into the q-cells seed hash when positive (absent = "
+     "byte-identical)"),
     ("KUNGLAO_EVAL_STORE_EXPORT", "str", "", "ops", "operator",
      "scripts/eval_loop_runner.py",
      "eval arm export: dir the workspace store is copied to at run end"),

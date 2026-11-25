@@ -1038,7 +1038,22 @@ def q_cells_seed_state(ws) -> tuple[random.Random, int]:
     evidence-free cold workspace (distinct rounds produce distinct
     seeds; the #251 per-round-cold-start property, 462 design-review
     MEDIUM-1: the round used to be computed and returned but never
-    hashed, freezing the cold draw); no wall clock anywhere."""
+    hashed, freezing the cold draw); no wall clock anywhere.
+
+    The M3 (unit, round) anchor face: KUNGLAO_EVAL_ROUND_SEED
+    — the eval matrix launcher's frozen per-(unit, round) pairing
+    anchor, read through the registered int switch — mixes into the
+    hashed payload as ONE more axis when present (a positive int).
+    ABSENT (unset, empty, or malformed-to-default) = the payload is
+    byte-identical to the pre-anchor face: production runs never set
+    it, so their streams are provably unchanged. PRESENT = the draw
+    stream moves with the (unit, round) anchor — the matrix's N rounds
+    of one unit decorrelate (variance honesty for pass@k), units of
+    the same round never collide on an empty fold, and the same
+    anchor + same fold + same round pairs the arms' streams. The fold
+    axis STAYS in the hash either way (the anti-degeneracy half of the
+    per-round seed contract: a stalled round must not repeat one draw
+    forever)."""
     from priority_ratio import round_index  # noqa: PLC0415
     rnd = round_index(ws)
     store = default_store(ws)
@@ -1055,10 +1070,33 @@ def q_cells_seed_state(ws) -> tuple[random.Random, int]:
         },
         "round": rnd,
     }
+    anchor = _round_seed_anchor()
+    if anchor is not None:
+        payload["anchor"] = anchor
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True,
                    ensure_ascii=False).encode("utf-8")).hexdigest()
     return random.Random(int(digest[:16], 16)), rnd
+
+
+#: the eval matrix's frozen (unit, round) pairing anchor env face
+#: (M3) — the launcher derives one anchor per (unit, round) and
+#: the child session carries it into the sampler here. Read ONLY
+#: through the registered switch face (an undeclared read fails
+#: closed). Non-positive or unparsable values mean ABSENT (the
+#: registered int face degrades malformed text to its default 0) —
+#: the byte-identical production face, never a crash inside a draw.
+ROUND_SEED_ENV = "KUNGLAO_EVAL_ROUND_SEED"
+
+
+def _round_seed_anchor() -> int | None:
+    """The (unit, round) anchor as a positive int, or None when the
+    face is absent (unset / empty / malformed-to-default / <= 0 — the
+    launcher's derivation is a 16-hex-digit int, so a real anchor can
+    never collide with the absent values)."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    value = runtime_switches.get_int(ROUND_SEED_ENV)
+    return value if value > 0 else None
 
 
 # ---------------------------------------------------------------------------

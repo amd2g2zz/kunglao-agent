@@ -325,16 +325,226 @@ def test_multisample_validation_refuses(tmp_path, mutate, frag):
         mx.load_config(p)
 
 
-def test_multisample_on_a_loop_arm_refuses(tmp_path):
-    doc = _minimal_multi_config(arms=[
+def _loop_multi_config(**over) -> dict:
+    doc = {
+        "schema": "ws5-five-arms/1",
+        "budget": {"budget_usd": 1.0, "wall_cap_s": 60},
+        "arms": [
+            {"id": "loop-multi", "runner_face": "loop", "store": "cold",
+             "env": {},
+             "sampling": {"mode": "multi-sample", "samples": 2,
+                          "budget_each": 0.5}},
+        ],
+        "units": [{"id": "py-derive-v1", "corpus": "repo",
+                   "tier": "smoke"}],
+        "warm_up": {"store_source": None, "warm_context_source": None},
+    }
+    doc.update(over)
+    return doc
+
+
+def test_multisample_on_a_loop_arm_is_now_permitted(tmp_path):
+    """The M3 multi-rollout face: a loop arm declares samples: N — N
+    independent rounds of the SAME unit at N x budget_each (the same-cost
+    contract, same as the B2 cc face). The refused-in-569 state is gone."""
+    doc = _loop_multi_config()
+    p = tmp_path / "arms.yaml"
+    p.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    doc = mx.load_config(p)  # must NOT refuse
+    plans = mx.plan_runs(doc, tmp_path / "matrix",
+                         arms_filter=None, units_filter=None)
+    assert [pl.sample_count for pl in plans] == [2, 2]
+    assert [pl.sample_index for pl in plans] == [0, 1]
+    assert all(pl.budget_each == 0.5 for pl in plans)
+
+
+def test_loop_multisample_must_keep_the_same_cost_contract(tmp_path):
+    """A sampled LOOP arm rides the same-cost contract too: N x
+    budget_each must equal the matrix budget — the multi-round rebuttal
+    is only honest at equal cost, whatever the face."""
+    doc = _loop_multi_config(arms=[
         {"id": "loop-multi", "runner_face": "loop", "store": "cold",
          "env": {},
          "sampling": {"mode": "multi-sample", "samples": 2,
-                      "budget_each": 0.5}}])
+                      "budget_each": 0.4}}])
     p = tmp_path / "arms.yaml"
     p.write_text(yaml.safe_dump(doc), encoding="utf-8")
-    with pytest.raises(mx.ConfigError, match="cc faces"):
+    with pytest.raises(mx.ConfigError, match="same-cost"):
         mx.load_config(p)
+
+
+def test_loop_multisample_forces_per_round_store_isolation(tmp_path):
+    """Multi-round loop cells force per-run store isolation even when the
+    registry declares the per-arm accumulating scope: one round's store
+    must never leak its rows into the next round — the rounds are the
+    independent samples the pairing compares."""
+    doc = _loop_multi_config()
+    doc["warm_up"]["store_mode"] = "per-arm"
+    p = tmp_path / "arms.yaml"
+    p.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    doc = mx.load_config(p)
+    plans = mx.plan_runs(doc, tmp_path / "matrix",
+                         arms_filter=None, units_filter=None)
+    assert all(pl.store_mode == "per-run" for pl in plans), \
+        "sampled cells are independent rounds, never an accumulating arm"
+    assert [pl.run_dir.name for pl in plans] == ["s0", "s1"]
+
+
+def test_round_seed_is_frozen_per_unit_and_round():
+    """The (unit, round) pairing anchor: the seed is a pure function of
+    unit + round — the SAME (unit, round) yields the SAME seed on every
+    derivation (and, by construction, across arms: the arm is never in
+    the hash), a different round of the same unit moves the seed, and
+    different units at the same round never collide."""
+    a0 = mx._round_seed("py-derive-v1", 0)
+    a0b = mx._round_seed("py-derive-v1", 0)
+    a1 = mx._round_seed("py-derive-v1", 1)
+    b0 = mx._round_seed("tf-toolflex-v1", 0)
+    assert a0 == a0b, "frozen: the same (unit, round) repeats the seed"
+    assert a0 != a1, "rounds of the same unit move the seed"
+    assert a0 != b0, "units of the same round never collide"
+    assert isinstance(a0, int) and 0 <= a0
+
+
+def test_dry_run_lists_one_line_per_round_with_the_seed(tmp_path, capsys):
+    """The dry-run face of a sampled loop arm: N rounds -> N progress
+    rows, each carrying the frozen seed, and N stdout lines (one per
+    round), so the pairing anchor is visible before anything launches."""
+    doc = _loop_multi_config()
+    cfg = tmp_path / "arms.yaml"
+    cfg.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    out = tmp_path / "matrix"
+    rc = mx.main(["--config", str(cfg), "--dry-run", "--out", str(out)])
+    assert rc == mx.RC_OK
+    progress = json.loads((out / "progress.json").read_text("utf-8"))
+    rows = [r for r in progress["runs"] if r["arm"] == "loop-multi"]
+    assert len(rows) == 2, "N rounds -> N child rows per unit"
+    seeds = {r["seed"] for r in rows}
+    assert len(seeds) == 2, "each round carries its own frozen seed"
+    for row in rows:
+        assert row["seed"] == mx._round_seed(row["unit"], row["sample"])
+        assert row["argv"][row["argv"].index("--budget-usd") + 1] == "0.5"
+    lines = [ln for ln in capsys.readouterr().out.splitlines()
+             if ln.startswith("  ")]
+    assert len(lines) == 2, "one stdout line per round"
+    assert any("s0" in ln for ln in lines) and any("s1" in ln for ln in lines)
+
+
+def test_child_env_carries_the_frozen_round_seed(tmp_path):
+    """The (unit, round) anchor travels to the child session env; an
+    ambient shell value can never masquerade as the plan's seed (the
+    hermetic strip applies to the seed face like every ablation face)."""
+    plan = mx.RunPlan(
+        arm_id="loop-multi", runner_face="loop", unit="u-1", tier="release",
+        corpus="repo", run_dir=tmp_path / "a" / "u", store_kind="cold",
+        env_extra=(), seed=123456789)
+    env = mx.child_env(plan, {"KUNGLAO_EVAL_ROUND_SEED": "999", "PATH": "x"})
+    assert env["KUNGLAO_EVAL_ROUND_SEED"] == "123456789", \
+        "the plan's seed wins; the ambient value is stripped first"
+    assert "KUNGLAO_EVAL_ROUND_SEED" in mx.STRIPPED_ENV
+
+
+# ---- 5. the consumer face: the anchor reaches the sampler stream -----------
+# (appeal-1 fix A: an emitted anchor with zero consumers contributes
+# nothing to multi-round comparability — the chain gotcha "otherwise
+# rounds are not comparable" demands the sampler honor it. Env-gated:
+# absent = the seed hash stays BYTE-IDENTICAL to the pre-anchor face
+# (production never sets it — the protocol's default-unchanged switch
+# class); present = the draw stream moves with the (unit, round)
+# anchor, so the matrix's N rounds decorrelate and the same anchor
+# pairs the arms' streams at equal fold state.)
+
+from rlvr import q_cells as _qc  # noqa: E402
+import hashlib as _hashlib  # noqa: E402
+import random as _random  # noqa: E402
+from priority_ratio import round_index as _round_index  # noqa: E402
+
+
+def _anchored_ws(tmp_path: Path, monkeypatch) -> Path:
+    """A workspace with a NON-empty fold (store rows), so the
+    byte-identity pin below exercises the real payload, not the empty
+    corner."""
+    ws = _ws(tmp_path)
+    _seed_warm_store(ws, monkeypatch)
+    return ws
+
+
+def _pre_anchor_seed_int(ws: Path) -> int:
+    """The pre-anchor face's seed int, recomputed locally from the SAME
+    payload axes the per-round seed contract names (cells fold, gamma schedule,
+    round): the byte-identity golden. If the consumer ever changes the
+    absent case's payload, this pin goes red."""
+    fold_view = _qc.fold(_qc.default_store(ws), gamma=_qc._resolve_schedule(
+        None))
+    schedule = _qc._resolve_schedule(None)
+    payload = {
+        "cells": sorted(
+            [sig, fam, round(c.success, 9), round(c.failure, 9),
+             c.n_pending]
+            for (sig, fam), c in fold_view.cells.items()),
+        "gamma_schedule": {
+            "floor": schedule.gamma_floor,
+            "ema_lambda": schedule.ema_lambda,
+        },
+        "round": _round_index(ws),
+    }
+    digest = _hashlib.sha256(
+        json.dumps(payload, sort_keys=True,
+                   ensure_ascii=False).encode("utf-8")).hexdigest()
+    return int(digest[:16], 16)
+
+
+def test_anchor_absent_keeps_the_seed_bytes(tmp_path, monkeypatch):
+    """Absent = zero behavior change on the production path: the draw
+    stream equals the pre-anchor face's stream, bit for bit."""
+    ws = _anchored_ws(tmp_path, monkeypatch)
+    monkeypatch.delenv("KUNGLAO_EVAL_ROUND_SEED", raising=False)
+    rng, _rnd = _qc.q_cells_seed_state(ws)
+    assert rng.random() == _random.Random(_pre_anchor_seed_int(ws)).random()
+
+
+def test_anchor_present_moves_the_stream_deterministically(
+        tmp_path, monkeypatch):
+    """Present = the stream moves with the anchor: same anchor → the
+    same stream twice; different anchor → a different stream; unset →
+    the pre-anchor stream. Malformed values degrade to absent (the
+    registered int face's documented default)."""
+    ws = _anchored_ws(tmp_path, monkeypatch)
+    monkeypatch.setenv("KUNGLAO_EVAL_ROUND_SEED", "123456789")
+    r1 = _qc.q_cells_seed_state(ws)[0].random()
+    r1_again = _qc.q_cells_seed_state(ws)[0].random()
+    monkeypatch.setenv("KUNGLAO_EVAL_ROUND_SEED", "987654321")
+    r2 = _qc.q_cells_seed_state(ws)[0].random()
+    monkeypatch.setenv("KUNGLAO_EVAL_ROUND_SEED", "not-a-number")
+    r_bad = _qc.q_cells_seed_state(ws)[0].random()
+    monkeypatch.delenv("KUNGLAO_EVAL_ROUND_SEED", raising=False)
+    r0 = _qc.q_cells_seed_state(ws)[0].random()
+    assert r1 == r1_again, "the same anchor reproduces the same stream"
+    assert r1 != r2, "a different anchor moves the stream"
+    assert r_bad == r0, "a malformed anchor degrades to absent"
+    assert r1 != r0, "a present anchor is not the absent face"
+
+
+def test_matrix_round_seeds_reach_the_sampler_stream(tmp_path, monkeypatch):
+    """The producer→consumer contract end to end: the matrix's derived
+    (unit, round) seeds, carried as the child env, land in the sampler
+    stream — the N rounds of one unit decorrelate (variance honesty),
+    and the same (unit, round) pairs the arms' streams at equal fold
+    state."""
+    ws = _anchored_ws(tmp_path, monkeypatch)
+    monkeypatch.setenv("KUNGLAO_EVAL_ROUND_SEED",
+                       str(mx._round_seed("u-1", 0)))
+    round0 = _qc.q_cells_seed_state(ws)[0].random()
+    same_again = _qc.q_cells_seed_state(ws)[0].random()
+    monkeypatch.setenv("KUNGLAO_EVAL_ROUND_SEED",
+                       str(mx._round_seed("u-1", 1)))
+    round1 = _qc.q_cells_seed_state(ws)[0].random()
+    monkeypatch.setenv("KUNGLAO_EVAL_ROUND_SEED",
+                       str(mx._round_seed("u-2", 0)))
+    other_unit = _qc.q_cells_seed_state(ws)[0].random()
+    assert round0 == same_again
+    assert len({round0, round1, other_unit}) == 3, \
+        "rounds of one unit and units of one round never share a stream"
 
 
 # ---- 3. the dry-run B2 rows -------------------------------------------------
@@ -432,6 +642,79 @@ def test_b2_all_fail_reports_fail_and_zero_pass_at_k(tmp_path):
     cell = report["matrix"][0]
     assert cell["final_status"] == "FAIL"
     assert cell["pass_at_k"] == 0.0
+
+
+def _b2_cell_varied(tmp_path: Path, unit: str, samples: list[dict]) -> None:
+    """One multi-sample unit dir with PER-ROUND distinct costs and walls:
+    the aggregation口径 (cost summed, wall max) must be readable off the
+    round detail, not just off the aggregate."""
+    for k, spec in enumerate(samples):
+        sample_dir = tmp_path / "cc-multisample" / unit / f"s{k}"
+        sample_dir.mkdir(parents=True)
+        ws = tmp_path / "ws" / f"multi-{unit}-{k}"
+        ws.mkdir(parents=True)
+        (sample_dir / "eval-results-20260101T000000Z-1.json").write_text(
+            json.dumps({"schema": "kunglao-eval-results/1", "rows": [{
+                "task_id": unit, "verdict": spec["verdict"],
+                "loop": {"status": "completed",
+                         "session": {"session_cost": {
+                             "total_cost_usd": spec["cost"]},
+                                     "wall_s": spec["wall"]},
+                         "workspace": str(ws)}}]}),
+            encoding="utf-8")
+
+
+def test_b2_cells_retain_every_round_with_the_aggregation_note(tmp_path):
+    """The M3 report face: a multi-round cell keeps EVERY round's own
+    verdict/cost/wall (cell.rounds) and states the aggregation口径
+    (cell.aggregation + the report's aggregation_note) — the summed
+    spend and the max wall are declared semantics, never silent."""
+    _b2_cell_varied(tmp_path, "u-1", [
+        {"verdict": "FAIL", "cost": 0.2, "wall": 90.0},
+        {"verdict": "PASS", "cost": 0.3, "wall": 122.5},
+        {"verdict": "FAIL", "cost": 0.5, "wall": 60.0},
+    ])
+    report = mr.build_report(tmp_path)
+    cell = report["matrix"][0]
+    rounds = cell["rounds"]
+    assert [r["verdict"] for r in rounds] == ["FAIL", "PASS", "FAIL"]
+    assert [r["budget_usd"] for r in rounds] == [0.2, 0.3, 0.5]
+    assert [r["wall_s"] for r in rounds] == [90.0, 122.5, 60.0]
+    assert cell["budget_usd"] == pytest.approx(1.0), \
+        "the equal-cost face: the rounds' SUMMED spend"
+    assert cell["wall_s"] == 122.5, "the cell wall is the MAX round wall"
+    assert cell["aggregation"] == {
+        "verdict": "pass@k (any PASS passes)",
+        "budget_usd": "sum of the round costs",
+        "wall_s": "max of the round walls"}
+    assert "budget_usd SUMS" in report["aggregation_note"]
+    assert "wall_s is the MAX" in report["aggregation_note"]
+
+
+def test_pass_at_k_matches_the_per_round_verdicts(tmp_path):
+    """The VALIDATE contract: the aggregated pass@k is exactly the
+    any-PASS reading of the per-round verdicts — never a separate
+    number that could drift from the rounds it claims to summarize."""
+    _b2_cell_varied(tmp_path, "u-1", [
+        {"verdict": "FAIL", "cost": 0.4, "wall": 90.0},
+        {"verdict": "PASS", "cost": 0.4, "wall": 90.0},
+        {"verdict": "FAIL", "cost": 0.2, "wall": 90.0},
+    ])
+    report = mr.build_report(tmp_path)
+    cell = report["matrix"][0]
+    assert cell["pass_at_k"] == 1.0
+    assert cell["final_status"] == "PASS"
+    assert any(r["verdict"] == "PASS" for r in cell["rounds"])
+    _b2_cell_varied(tmp_path, "u-2", [
+        {"verdict": "FAIL", "cost": 0.5, "wall": 90.0},
+        {"verdict": "FAIL", "cost": 0.5, "wall": 90.0},
+    ])
+    report2 = mr.build_report(tmp_path)
+    cells2 = {(c["arm"], c["unit"]): c for c in report2["matrix"]}
+    cell2 = cells2[("cc-multisample", "u-2")]
+    assert cell2["pass_at_k"] == 0.0
+    assert cell2["final_status"] == "FAIL"
+    assert all(r["verdict"] == "FAIL" for r in cell2["rounds"])
 
 
 def _decomposition_fixture(tmp_path: Path) -> None:
