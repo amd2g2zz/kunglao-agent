@@ -651,7 +651,7 @@ files:
   - src: scripts/heartbeat_wake_gate.py
     dest: .claude/scripts/heartbeat_wake_gate.py
     kind: scaffold
-    sha256: 521fbe0da50ca0bae8f194bb9cb36f2a75ecc93a447ff972d1b86c1efe4f522f
+    sha256: 9c50ca749f27c35fc54b2d4883b77daf0c418f40007386cdfe58b134bafc01d2
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
