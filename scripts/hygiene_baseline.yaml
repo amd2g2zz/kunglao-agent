@@ -210,11 +210,11 @@ files:
   scripts/heartbeat_loop_prompt.py:
     r1: 6
   scripts/heartbeat_tick.py:
-    r1: 50
+    r1: 52
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/heartbeat_wake_gate.py:
-    r1: 5
+    r1: 7
   scripts/hook_activation.py:
     r1: 82
   scripts/hook_exit_codes.py:
@@ -300,7 +300,7 @@ files:
   scripts/mcp_probe.py:
     r1: 27
   scripts/mechanism_scheduler.py:
-    r1: 16
+    r1: 19
   scripts/method_families.py:
     r1: 5
   scripts/migrate_facts.py:

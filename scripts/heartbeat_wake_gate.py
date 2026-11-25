@@ -14,7 +14,7 @@ ran inside a turn whose tokens it existed to save.
 This module is the thing the OS scheduler runs:
 
     cron -> heartbeat_wake_gate.py <ws> --wake-gate        [zero LLM]
-              |- heartbeat_tick.py <ws> --origin cron --wake-gate
+              |- heartbeat_tick.py <ws> --origin cron --wake-gate --zero-llm
               |- rc 0 QUIET -> inject nothing, end   (quiet = zero model turns)
               |- rc 3 WAKE  -> inject the loop prompt EXACTLY ONCE
               |- rc 2 STOP  -> the #634 idle circuit breaker: MANDATORY stop,
@@ -72,7 +72,12 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 TICK_SCRIPT = SCRIPTS_DIR / "heartbeat_tick.py"
 
 #: the gate argv beyond the workspace: cron provenance (#616) + gate mode
-GATE_ARGS = ("--origin", "cron", "--wake-gate")
+#: + the zero-LLM host marker (#1086 S20) — THIS invocation has no model
+#: turn in the loop, so the tick caps its machinery pass at cheap and
+#: exempts the parked gate (the cheap clocks keep running through a quiet
+#: day). The in-session tick the loop prompt teaches carries --wake-gate
+#: WITHOUT this marker: its pass keeps the full cost-queued machinery.
+GATE_ARGS = ("--origin", "cron", "--wake-gate", "--zero-llm")
 
 #: the gate's verdict rc contract (heartbeat_tick.py --wake-gate)
 GATE_RC_QUIET = 0
@@ -133,7 +138,9 @@ def _validate_interval(interval_min: int) -> None:
 def gate_argv(ws, *, python_exe: str | None = None,
               tick: str | None = None) -> list[str]:
     """The command that runs the GATE: heartbeat_tick in --wake-gate mode
-    with cron provenance. Single source for execution and documentation."""
+    with cron provenance and the zero-LLM host marker (#1086 S20 — the
+    cheap-machinery ceiling this invocation owns). Single source for
+    execution and documentation."""
     python = python_exe or sys.executable
     tick_path = Path(tick) if tick is not None else TICK_SCRIPT
     return [python, str(tick_path), str(ws), *GATE_ARGS]

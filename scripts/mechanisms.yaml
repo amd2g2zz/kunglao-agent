@@ -25,7 +25,9 @@
 #                   (subset of event_classes)
 #   cost_class      cheap | medium | expensive — queue order within a tick
 #                   (cheap gates first; expensive mechanisms queue last and
-#                   are sacrificed first when the time cap is hit)
+#                   are sacrificed first when the time cap is hit). The
+#                   zero-LLM gate pass dispatches cheap ONLY; medium and
+#                   expensive keep their WAKE-turn host (#1086 S20).
 #   depth           os | session | workspace | mission
 #   cockpit_signal  THE observable the cockpit/statusline can read — a
 #                   mechanism with no signal is not allowed to go live
@@ -385,7 +387,10 @@ mechanisms:
       #759 H1 / #711 E1: the waiting period gets a cognitive action instead
       of an idle action_taken. The seat self-arbitrates waiting internally;
       the parked gate skips the seat entirely while the zero-work park
-      conjunction holds (nothing to think about yet).
+      conjunction holds (nothing to think about yet). WAKE-turn only under
+      #1086 S20: medium cost sits above the zero-LLM gate-pass ceiling —
+      a THINK artifact with no model turn to read it is waste, so the
+      in-session tick (the loop prompt's own line) stays the seat's host.
 
   - name: premise_expiry
     entry: scripts/premise_gate.py

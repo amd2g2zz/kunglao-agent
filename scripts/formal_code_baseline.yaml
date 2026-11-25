@@ -138,9 +138,9 @@ files:
   scripts/harness_common.py: 2
   scripts/heartbeat.py: 23
   scripts/heartbeat_loop_prompt.py: 17
-  scripts/heartbeat_tick.py: 67
+  scripts/heartbeat_tick.py: 70
   scripts/heartbeat_touch.py: 10
-  scripts/heartbeat_wake_gate.py: 8
+  scripts/heartbeat_wake_gate.py: 10
   scripts/hook_activation.py: 137
   scripts/hook_exit_codes.py: 10
   scripts/hooks_selfcheck.py: 62
@@ -185,7 +185,7 @@ files:
   scripts/loop_watchdog.py: 5
   scripts/mcp_probe.py: 43
   scripts/mcp_repair.py: 1
-  scripts/mechanism_scheduler.py: 22
+  scripts/mechanism_scheduler.py: 26
   scripts/method_families.py: 8
   scripts/migrate_facts.py: 12
   scripts/mission_ledger.py: 27
