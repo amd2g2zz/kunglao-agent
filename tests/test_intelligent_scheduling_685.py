@@ -334,8 +334,10 @@ class TestWatchdogDemotion:
         d3 = isch.decide(ws3, rng=random.Random(9), logits=_force("probe"))
         assert d3["watchdog"]["mode"] == "poll_fallback"
 
-        # the events the topology already delivers are first-class names
+        # the events the topology already delivers are first-class names:
+        # #1086 S19 — the wake classes (BUS A's vocabulary, the one
+        # wake_verdict wakes on); the legacy four-name tuple matched no
+        # flow and is gone
         assert set(d["wake_events"]) == set(isch.WAKE_EVENTS)
-        assert set(isch.WAKE_EVENTS) == {
-            "worker_completion", "dispatch_return", "oracle_result",
-            "user_signal"}
+        import mechanism_scheduler as _ms
+        assert set(isch.WAKE_EVENTS) == set(_ms.EVENT_CLASSES)
