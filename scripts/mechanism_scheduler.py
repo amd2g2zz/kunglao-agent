@@ -29,6 +29,10 @@ Design (issue #878):
      last_rc for the cockpit health probe.
   5. cockpit health section   — per mechanism {last_run, next_eligible,
      drops} rides the #883 statusline snapshot.
+  6. zero-LLM host face       — run_due(zero_llm=True) is the wake-gate
+     wrapper's pass (#1086 S20): cheap-only dispatch + parked-gate
+     exemption, so the tick-channel clocks keep running through a quiet
+     day; medium/expensive stay WAKE-turn (ceiling skips, not drops).
 
 CONSTITUTIONAL ISOLATION (non-negotiable): the scheduler is a pacemaker, not
 a power center. It dispatches PROPOSAL-class mechanisms declared
@@ -547,10 +551,19 @@ def mechanisms_health(ws: Path) -> list[str]:
 
 
 def run_due(ws: Path, *, budget_s: float | None = None, runner=None,
-            now: datetime | None = None) -> dict:
+            now: datetime | None = None, zero_llm: bool = False) -> dict:
     """One scheduling pass: registry traversal, cheap gates, cost-queued
     runs inside the time cap. Purely advisory — never raises, never gates a
-    decision (constitutional isolation)."""
+    decision (constitutional isolation).
+
+    zero_llm=True is the #1086 S20 zero-LLM host face (the wake-gate
+    wrapper's own invocation, no model turn in the loop): dispatch is
+    capped at cost_class 'cheap', and the 'parked' gate is exempt — the
+    pass IS the parked mechanisms' time host, so the cheap clocks (env
+    freshness, premise expiry, rotation induction) keep running through a
+    quiet day. Medium/expensive entries are ceiling SKIPS (WAKE-turn
+    only), never budget drops; the time cap and the cheap-first queue are
+    unchanged."""
     ws = Path(ws)
     now = now or datetime.now(timezone.utc)
     budget = DEFAULT_BUDGET_S if budget_s is None else float(budget_s)
@@ -592,6 +605,7 @@ def run_due(ws: Path, *, budget_s: float | None = None, runner=None,
     skipped: list[str] = []
     state_updates: dict[str, dict] = {}
     candidates: list[tuple[int, int, dict]] = []
+    prev_state = _read_state(ws).get("mechanisms") or {}
 
     for order, e in enumerate(entries):
         name = e["name"]
@@ -606,11 +620,32 @@ def run_due(ws: Path, *, budget_s: float | None = None, runner=None,
                              "stderr": "", "skipped": True}
             state_updates[name] = row
             continue
+        if zero_llm and e.get("cost_class") != "cheap":
+            # #1086 S20: the zero-LLM pass dispatches cheap mechanisms only;
+            # medium/expensive keep their WAKE-turn host. A skip, not a
+            # budget drop — and the persisted row is preserved (the pass
+            # fires all quiet day; erasing last_run/last_rc would hide a
+            # failed mechanism from the cockpit health face).
+            skipped.append(name)
+            results[name] = {"rc": 0,
+                             "stdout": "skipped: cost_class "
+                                       f"{e.get('cost_class')!r} above the "
+                                       "zero-LLM ceiling (cheap) — "
+                                       "WAKE-turn only (#1086 S20)",
+                             "stderr": "", "skipped": True}
+            state_updates[name] = {**(prev_state.get(name) or {}), **row}
+            continue
         gate_id = (e.get("trigger") or {}).get("gate") or "always"
-        try:
-            due = GATES[gate_id](ws, event_classes)
-        except Exception:  # noqa: BLE001 — a broken gate fails open to candidacy
+        if zero_llm and gate_id == "parked":
+            # #1086 S20: the zero-LLM pass is the parked mechanisms' time
+            # host — the parked posture suppresses the expensive tail (the
+            # ceiling above already cut it), not the cheap clocks.
             due = True
+        else:
+            try:
+                due = GATES[gate_id](ws, event_classes)
+            except Exception:  # noqa: BLE001 — a broken gate fails open to candidacy
+                due = True
         if not due:
             skipped.append(name)
             results[name] = {"rc": 0,
@@ -628,7 +663,6 @@ def run_due(ws: Path, *, budget_s: float | None = None, runner=None,
     candidates.sort(key=lambda t: (t[0], t[1]))
 
     dropped: list[dict] = []
-    prev_state = _read_state(ws).get("mechanisms") or {}
     for _rank, _order, e in candidates:
         name = e["name"]
         row = {"next_eligible": next_eligible_for(e)}

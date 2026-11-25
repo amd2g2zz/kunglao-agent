@@ -643,7 +643,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: 83234a0b79a3745a1d9bab2be7d98b164048fae23cad940d7b3e558c30407c74
+    sha256: 6a01ff2f5d8a5e38001982cecb6636e7d03a4bc1e5e763a98c4ebffadf95057d
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -651,7 +651,7 @@ files:
   - src: scripts/heartbeat_wake_gate.py
     dest: .claude/scripts/heartbeat_wake_gate.py
     kind: scaffold
-    sha256: 9c50ca749f27c35fc54b2d4883b77daf0c418f40007386cdfe58b134bafc01d2
+    sha256: 20a3181c8cf6c4955b0df6d2c82cfef834e13cca9549e6682a6e93c6f5532145
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
@@ -871,7 +871,7 @@ files:
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
-    sha256: afa862eb7d71e6e78520d0926607d5fdaf9f3331c302eed8b483aec01117cb54
+    sha256: 21b19473e4ea136f5690bf3e9cd5f6d2fb810f3a42a336bd93264b390216d711
   - src: scripts/method_families.py
     dest: .claude/scripts/method_families.py
     kind: scaffold
@@ -1719,15 +1719,15 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: 6c5472e98955127e185fc4096cba494374d8a3d9dca77b03c2ea1aa752f7b047
+    sha256: c74a332bff21609ab3f5778632746794e2601dea926c4f1267670af28ee4da8f
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: bc6baea5b6d7835d755f568c451ef17b991fb719c8bfb0431de3a101d389124e
+    sha256: 498f64579f633e96a4db0c87489b4b1dea37b07599fa1f13c5c8e796a44b5019
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: f1fd37c059ae899275d9ea3d5b103b614a55b2c2a5191488c88a0d3be283bd1e
+    sha256: 2e0d535bdf9262127a43ccf5a816cbd04c59f2603cf5e6275e4c8aec6595a7df
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold

@@ -391,7 +391,7 @@ def _mission_history_due(ws: Path) -> bool:
     return _ml.history_due(ws)
 
 
-def _run_mechanisms(ws: Path, runner) -> dict:
+def _run_mechanisms(ws: Path, runner, *, zero_llm: bool = False) -> dict:
     """#878 mechanism-scheduler face: one registry-driven scheduling pass
     (mechanisms.yaml, schema-gated + fail-closed on a broken registry),
     with the legacy tick-report keys back-filled from the scheduler results.
@@ -400,10 +400,12 @@ def _run_mechanisms(ws: Path, runner) -> dict:
     prompt and the per-step wiring tests still consume
     env_state / monitor / feedback / verify_watch / rollup_sweep / think /
     backtrack verbatim, and `runner` stays THIS module's execution seam so
-    per-script wiring keeps its monkeypatch point. Returns
+    per-script wiring keeps its monkeypatch point. zero_llm=True routes
+    the #1086 S20 zero-LLM host posture into the scheduler (cheap-only
+    dispatch + parked-gate exemption). Returns
     {"mechanisms": <compact face>, <legacy_key>: <result>, ...}."""
     import mechanism_scheduler as ms
-    sched = ms.run_due(ws, runner=runner)
+    sched = ms.run_due(ws, runner=runner, zero_llm=zero_llm)
     payload = {"mechanisms": {
         "ts": sched["ts"], "ran": sched["ran"], "skipped": sched["skipped"],
         "dropped": sched["dropped"], "events_seen": sched["events_seen"],
@@ -469,7 +471,18 @@ def main(argv: list[str] | None = None) -> int:
              "(watchdog fired / wake-class events / park-expiry) -> stdout "
              "WAKE: + exit 3 (inject the loop prompt). rc=2 breaker stop "
              "still wins.")
+    parser.add_argument(
+        "--zero-llm", action="store_true",
+        help="#1086 S20: this pass is hosted with NO model turn in the loop "
+             "(the wake-gate wrapper's own invocation). The machinery pass "
+             "dispatches cheap tick mechanisms only — medium/expensive and "
+             "the think seat keep their WAKE-turn host; the parked posture "
+             "no longer suppresses the cheap clocks. The in-session tick "
+             "the loop prompt teaches does NOT carry this flag.")
     parsed = parser.parse_args(args)
+    if parsed.zero_llm and not parsed.wake_gate:
+        parser.error("--zero-llm requires --wake-gate "
+                     "(the zero-LLM host is the wake-gate wrapper)")
     ws_arg = parsed.workspace or None
     # A path-shaped positional must EXIST: the tick writes telemetry into the
     # ws (runs/ via the report write + noop_breaker), so a nonexistent path
@@ -557,24 +570,33 @@ def main(argv: list[str] | None = None) -> int:
     # The zero-work park posture: when the parked conjunction holds (zero
     # dispatchable actions, zero fresh active workers, no fresh wake-class
     # bus rows, state fingerprint unchanged since the persisted noop hash;
-    # a cold start never parks), the machinery pass AND the settlement/
-    # cockpit block are skipped — the tick budget stays with the analysis
-    # instead of re-proving a quiet workspace every interval. The liveness
-    # core above, the watchdog verdict and the noop breaker below stay
-    # armed on every parked pass; the breaker (not the park) owns the stop
-    # verdict, so a parked chain escalates exactly as an idle chain always
-    # did. The park never lengthens cadence past the activation TTL — it
-    # is the cadence advisor's quiet branch at its ceiling, nothing more.
-    # Fail-open: a crashed park evaluation degrades to NOT-parked (the
-    # machinery runs), and action_taken names the park (an empty field is
-    # the idle fault).
+    # a cold start never parks), the settlement/cockpit block is skipped
+    # and the machinery runs at the host's ceiling — the tick budget stays
+    # with the analysis instead of re-proving a quiet workspace. The
+    # liveness core above, the watchdog verdict and the noop breaker below
+    # stay armed on every parked pass; the breaker (not the park) owns the
+    # stop verdict, so a parked chain escalates exactly as an idle chain
+    # always did. The park never lengthens cadence past the activation TTL
+    # — it is the cadence advisor's quiet branch at its ceiling, nothing
+    # more. Fail-open: a crashed park evaluation degrades to NOT-parked
+    # (the machinery runs), and action_taken names the park (an empty field
+    # is the idle fault).
+    # #1086 S20 — the zero-LLM host split: a pass driven by the wake-gate
+    # wrapper (--zero-llm; no model turn in the loop) runs the machinery at
+    # the CHEAP ceiling with the parked gate exempted — the cheap clocks
+    # (env freshness / premise expiry / rotation induction) keep running
+    # through a quiet day, or they lose their only run window the moment
+    # the park engages. An in-session pass (with or without --wake-gate;
+    # the loop prompt's own tick line) keeps the #740 posture verbatim:
+    # parked -> full machinery skip, unparked -> the full cost-queued pass
+    # (medium/expensive and the think seat keep their WAKE-turn host).
     parked = False
     try:
         import mechanism_scheduler as _ms
         parked = _ms.is_parked(ws)
     except Exception as exc:  # noqa: BLE001 — a failed park never parks
         warn("park_evaluation", f"{type(exc).__name__}: {exc}")
-    if parked:
+    if parked and not parsed.zero_llm:
         report["mechanisms"] = {"ran": [], "skipped": [], "dropped": [],
                                 "events_seen": [], "parked": True}
         report["parked"] = {
@@ -586,12 +608,28 @@ def main(argv: list[str] | None = None) -> int:
             "active worker, no fresh event; machinery skipped this pass")
     else:
         try:
-            payload = _run_mechanisms(ws, runner=run)
+            if parsed.zero_llm:
+                payload = _run_mechanisms(ws, runner=run, zero_llm=True)
+            else:
+                payload = _run_mechanisms(ws, runner=run)
         except Exception as exc:  # noqa: BLE001 — a crashed scheduler never fails the tick
             payload = {"mechanisms": {"error": [f"scheduler unavailable: {exc}"],
                                       "ran": [], "skipped": [], "dropped": []}}
         report["mechanisms"] = payload.pop("mechanisms")
         report.update(payload)
+        if parked:
+            # zero-LLM parked pass: the park posture still names itself and
+            # still skips the settlement/cockpit block below — only the
+            # machinery ceiling moved.
+            report["mechanisms"]["parked"] = True
+            report["parked"] = {
+                "reason": ("dispatchable=0 active=0 events=0 "
+                           "fingerprint=unchanged"),
+                "wake": []}
+            report["action_taken"] = (
+                "PARK zero-work idle posture — no dispatchable action, no "
+                "active worker, no fresh event; cheap mechanisms ran in "
+                "the zero-LLM gate pass")
     # H1a (autoresearch thin-base): the tick's forensics faces ride the
     # ledger event bus. `events_seen` = the wake classes this pass consumed
     # (settlement/stall/plan_review); no event -> the faces are skipped and
