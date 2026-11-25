@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""tests/test_gc_harness_735.py — gc-harness code_gc leg (report-only rot sweep).
+"""tests/test_gc_harness_735.py — devkit/gc code_gc leg (report-only rot sweep).
 
 Subprocess-fixture suite (the test_gc_harness_720 pattern): a tmp git repo
 is planted with the detection targets and the module runs against it via
-`sys.executable gc-harness/code_gc.py scan`. Pins: dead-local CONFIRMED
+`sys.executable devkit/gc/code_gc.py scan`. Pins: dead-local CONFIRMED
 tier, orphan-module SUSPECT tripwire, dispatch-surface liveness override,
 --json report shape, and report-only safety (no mutation, no apply flag).
 """
@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-HARNESS = REPO / "gc-harness"
+HARNESS = REPO / "devkit/gc"
 
 README = """# scripts inventory (fixture)
 
@@ -51,7 +51,7 @@ def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
 
 
 def _harness(tmp_repo: Path, *args: str) -> subprocess.CompletedProcess:
-    """Run gc-harness/code_gc.py with cwd inside tmp_repo."""
+    """Run devkit/gc/code_gc.py with cwd inside tmp_repo."""
     return subprocess.run(
         [sys.executable, str(HARNESS / "code_gc.py"), *args],
         cwd=str(tmp_repo), capture_output=True, text=True,
@@ -151,7 +151,7 @@ def test_json_report_shape(tmp_path: Path) -> None:
     assert payload["leg"] == "code_gc"
     assert payload["generated"]
     assert len(payload["head"]) == 40
-    assert payload["scopes"] == ["scripts", "tools", "hooks", "gc-harness"]
+    assert payload["scopes"] == ["scripts", "tools", "hooks", "devkit/gc"]
     assert set(payload["counts"]) == {"confirmed", "suspect", "total"}
     counts = payload["counts"]
     assert counts["confirmed"] + counts["suspect"] == counts["total"]

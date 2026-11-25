@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """tests/test_gc_harness_720.py — Agent asset lifecycle controller v1 (#720).
 
-RED suite: gc-harness/ modules do not exist yet at authoring time — every
+RED suite: the devkit/gc/ legs did not exist yet at authoring time — every
 case below must fail against the bare tree (import/CLI errors) and pass
 once the minimal v1 lands. Determinism rules: no clock injection needed
 (ages come from registry dates / committer dates / explicit utime), and
@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parent.parent
-HARNESS = REPO / "gc-harness"
+HARNESS = REPO / "devkit" / "gc"
 
 import datetime as _dt
 
@@ -44,7 +44,7 @@ def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
 
 
 def _harness(tmp_repo: Path, module: str, *args: str) -> subprocess.CompletedProcess:
-    """Run gc-harness/<module>.py inside tmp_repo."""
+    """Run devkit/gc/<module>.py inside tmp_repo."""
     return subprocess.run(
         [sys.executable, str(HARNESS / f"{module}.py"), *args],
         cwd=str(tmp_repo), capture_output=True, text=True,

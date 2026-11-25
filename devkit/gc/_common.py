@@ -1,4 +1,4 @@
-# gc-harness/_common.py — shared config/registry/date helpers (#720 v1).
+# devkit/gc/_common.py — shared config/registry/date helpers (#720 v1).
 # Identity/status/linkage ONLY in registries — no scores, no embeddings,
 # no AI-judgment fields (spec-of-record prohibition list).
 from __future__ import annotations
@@ -23,7 +23,7 @@ def repo_root(cli_cwd: Path | None = None) -> Path:
 
 
 def load_config(root: Path) -> dict:
-    cfg_path = root / "gc-harness" / "config.yaml"
+    cfg_path = root / "devkit" / "gc" / "config.yaml"
     if not cfg_path.is_file():
         return {}
     try:

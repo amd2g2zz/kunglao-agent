@@ -1,4 +1,4 @@
-# gc-harness/code_gc.py — the code rot sweep leg (#735 v1). Report-only:
+# devkit/gc/code_gc.py — the code rot sweep leg (#735 v1). Report-only:
 # scan writes nothing, deletes nothing, edits nothing — there is no apply
 # flag to remove. Identity/status/linkage fields only (no scores, no
 # embeddings — the spec-of-record prohibition list).
@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _common as C  # noqa: E402
 
 LEG = "code_gc"
-CODE_SUBDIRS = ("scripts", "tools", "hooks", "gc-harness")
+CODE_SUBDIRS = ("scripts", "tools", "hooks", "devkit/gc")
 INVENTORY_SUBDIRS = ("scripts", "tools", "hooks")
 RUFF_SELECT = ("F401", "F841")
 RUFF_TIMEOUT = 300
@@ -52,7 +52,7 @@ DEFAULT_SURFACES = (
     "skills/**",
     "hooks/*.py",
     "tests/**",
-    "gc-harness/**",
+    "devkit/gc/**",
 )
 
 RUFF_LINE_RE = re.compile(

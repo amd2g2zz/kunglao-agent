@@ -1,4 +1,4 @@
-# gc-harness/config.yaml — #720 v1 defaults (spec-of-record §11).
+# devkit/gc/config.yaml — #720 v1 defaults (spec-of-record §11).
 spec:
   require_existing_check: true
   orphan_days: 90
@@ -23,7 +23,7 @@ code:
     - skills/**
     - hooks/*.py
     - tests/**
-    - gc-harness/**
+    - devkit/gc/**
 
 budget:
   max_new_spec: 1
