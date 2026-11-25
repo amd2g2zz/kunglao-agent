@@ -703,6 +703,26 @@ def _current_candidate_support(store) -> tuple:
     return _share(weights), source, sources
 
 
+# the harness-without-learning face — the SAME switch and semantics as
+# the e2e envelope sampler (scripts/e2e/checkpoints.py): an exact-match
+# KUNGLAO_SCHEDULER=uniform redirects every production sampling entry
+# (method_sample / method_lead / reconcile_declaration) to the flat
+# scheduler draw; any other value (set or unset) leaves the learned
+# face byte-identical.
+SCHEDULER_ENV = "KUNGLAO_SCHEDULER"
+SCHEDULER_UNIFORM = "uniform"
+
+
+def _scheduler_uniform() -> bool:
+    """True when the run demands the flat scheduler face: the envelope
+    prior goes flat (1.0 everywhere), the draw reads an EMPTY store
+    (every cell posterior stays the day-one Beta(1,1)) and the learned
+    extras are withheld — the learned state never influences selection.
+    Exact match only; registered so an undeclared read fails closed."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    return runtime_switches.get_str(SCHEDULER_ENV) == SCHEDULER_UNIFORM
+
+
 class PosteriorStrategyStore:
     """THE StrategyStore implementation over the landed faces."""
 
@@ -736,7 +756,12 @@ class PosteriorStrategyStore:
         Legacy history/case/store fallback applies only before intake or
         discovery material has been recorded. Candidate provenance is kept
         separate from the unknown probability of an external declaration.
+        KUNGLAO_SCHEDULER=uniform (exact match) redirects the draw to
+        :meth:`_uniform_draw` — every other value leaves this path
+        byte-identical.
         """
+        if _scheduler_uniform():
+            return self._uniform_draw(state_fingerprint)
         prior, source, sources = _current_candidate_support(self)
         if not prior:
             return None
@@ -752,6 +777,30 @@ class PosteriorStrategyStore:
             state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
         receipt["prior_source"] = source
         receipt["candidate_sources"] = sources
+        receipt["probability_source"] = "unknown"
+        return receipt
+
+    def _uniform_draw(self, state_fingerprint: str) -> dict | None:
+        """The flat scheduler's draw at this state — the exact mirror of
+        the e2e envelope sampler's uniform arm
+        (checkpoints.py:_sample_envelope_family): the candidate SET is
+        the live current support, the candidate prior is flat 1.0
+        everywhere, the draw reads an EMPTY cell store (day-one
+        Beta(1,1) posteriors) and the learned extras are withheld — the
+        learned state never influences selection. Recording is never
+        touched: only the draw law changes."""
+        prior, source, sources = _current_candidate_support(self)
+        if not prior:
+            return None
+        rng, _round = q_cells.q_cells_seed_state(self.ws)
+        receipt = q_cells.sample_method_family(
+            state_fingerprint, {family: 1.0 for family in prior},
+            q_cells.InMemoryStore(()), rng=rng)
+        receipt["scheduler"] = SCHEDULER_UNIFORM
+        receipt["prior_source"] = source
+        receipt["candidate_sources"] = {
+            family: [tag for tag in tags if not tag.endswith("_weight")]
+            for family, tags in sources.items()}
         receipt["probability_source"] = "unknown"
         return receipt
 
