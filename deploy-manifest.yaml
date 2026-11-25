@@ -99,7 +99,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 9fbb47ac2c1b95d03db1afca85985ad1ef6f364623ea0436d4f846e59060a585
+    sha256: d6e72cb8179a807527b71d0dfd2f91dfe7fef68930e4717e5ba12296dfcafde8
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -503,7 +503,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 0ff3ddfdb1f896f1e234535fa71c788860594f99bf5ea3543cb052284731ca99
+    sha256: 8c45ac641ae991210d8bed0d7f7e1160fb9545c887052659df41f717d387454e
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -639,7 +639,7 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: 9aae2e56faed1f1aae9af65a3cbd2cc7626b6ca3a3999ef0b6e1a1f12d565dee
+    sha256: c676ad366f3f769a9f9165e80333f729ae5401608831cb2b6f7c72ecdc73f49a
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
@@ -648,6 +648,10 @@ files:
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
     sha256: 2ef5ab14337c3f1c54068e013e0fb5c97f71684714946fcfec92c5981b7fdcd4
+  - src: scripts/heartbeat_wake_gate.py
+    dest: .claude/scripts/heartbeat_wake_gate.py
+    kind: scaffold
+    sha256: 521fbe0da50ca0bae8f194bb9cb36f2a75ecc93a447ff972d1b86c1efe4f522f
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
@@ -791,7 +795,7 @@ files:
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
-    sha256: 99d0d869b888b938635e05b91c05258114ffd563570b298e3cc4eaa320140cc5
+    sha256: a8319553c542e78d2197b1dbd5607fd8f596447c940a33632eedb7f6694c6ab8
   - src: scripts/kunglao_status.py
     dest: .claude/scripts/kunglao_status.py
     kind: scaffold
@@ -1715,15 +1719,15 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: b866f4664635bf9ae543f84174b2a264da09fc04576ff4a6f5aefaeedd5618fe
+    sha256: 3a029344b00cd4ed9c9672616d06639e02c07cf219e939221d7364e3eb4dd4b0
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 7173752e34b44276259268163c461141f938b154991a7e40564ed36c48167c49
+    sha256: 89a3a239928cdbd75fa9c6a20904c4197249cb2dc63653845a77d9f561680391
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: 178ffb4332a7ee1634d68fc84fd2df1a4e46268f6d740d480bce405fdd0a6801
+    sha256: 0ebf0b76a4dbc08b096a0390a0a9e5b9b34f4ce868e571a415c2e90013e9398f
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold
@@ -1739,11 +1743,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: b87731efe510c49125983e2f14af8eb2cb28d8bb961f90103545d7531fcb06bf
+    sha256: 11d9f6b40b640b5b92a54b8c5e43461facdd479f39576b8d8c16f729629a9442
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: c3818a29d5a7548b3e38e6c85be1891dd8a909bbcabab1be6109b9dc1b9e4cf5
+    sha256: 5c4227d6926fd941dc7d3a742a2ed8d2ac8947b8c3ef765e7005077e048050c2
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -1799,7 +1803,7 @@ files:
   - src: references/contracts/cold-start-contract.md
     dest: .claude/references/contracts/cold-start-contract.md
     kind: asset
-    sha256: d7766aa74effcfa771e258f7bb83f978554f924ff165126c3cce2bb2aa39fd13
+    sha256: a51bf9b39ba3adca6dfddb228c9bc5cf75a9959ff3afae038328b2b10e0efb95
   - src: references/contracts/convergence-loop.md
     dest: .claude/references/contracts/convergence-loop.md
     kind: asset
@@ -1867,7 +1871,7 @@ files:
   - src: references/governance/guardrails.md
     dest: .claude/references/governance/guardrails.md
     kind: asset
-    sha256: f3a6e4ba3b95bac18a0d503b0d299beb4e2a14594d5d2203228c349e036f5757
+    sha256: ade6c2d85b92d2abb40678e1e75dd6225fda0de078a3937ce63deb65069fc1eb
   - src: references/governance/mechanisms.md
     dest: .claude/references/governance/mechanisms.md
     kind: asset
@@ -2335,7 +2339,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: d3ec824608dfc06ccbf3984c06270bd6dca98554baae3875bce7f899f1a97eb4
+    sha256: 5520ede8ea5de9e89e1fbfa7802fa6192b40185c224a2beaa779fe1d063b1126
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -2647,7 +2651,7 @@ files:
   - src: skills/kunglao-agent/SKILL.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/SKILL.md
     kind: asset
-    sha256: 1c6b5ae33f04ee08bebf473a77dd92ddbdcb6521646d58085b80e909113a9e10
+    sha256: 1baf3ea4b05f104652ca6bc1e9b78b597a02d9523e342d37e76e76190fe9ee21
   - src: skills/kunglao-agent/rules/kunglao-convergence-loop.md
     dest: .claude/skills/kunglao-agent/skills/kunglao-agent/rules/kunglao-convergence-loop.md
     kind: asset
