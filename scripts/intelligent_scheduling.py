@@ -86,9 +86,14 @@ NULL_ACTION = "none"
 DECISION_REL = Path("runs") / ".scheduling-decision.json"
 
 CRON_ROLE = "watchdog"
-#: The event-first wake predicates the loop topology already delivers.
-WAKE_EVENTS = ("worker_completion", "dispatch_return", "oracle_result",
-               "user_signal")
+#: The event-first wake predicates the loop topology delivers — BUS A's
+#: wake classes (#1086 S19): the ledger event bus feeds them to
+#: wake_verdict (mechanism_scheduler.EVENT_CLASSES is the single
+#: source; pinned there in tests), and the scheduler events stream maps
+#: every kind onto them (scheduler_events.KIND_WAKE_CLASS). The legacy
+#: four-name tuple (worker_completion / dispatch_return / oracle_result /
+#: user_signal) matched no flow and is gone.
+WAKE_EVENTS = ("settlement", "stall", "plan_review")
 
 _UNSET = object()
 

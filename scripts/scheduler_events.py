@@ -22,20 +22,35 @@ remain the truth; this stream is the wake channel. Rows still carry a
 self-describing ``scheduler-event/1`` schema stamp (protocol, not a
 ledger registration).
 
-Closed vocabulary (all five material BY DEFINITION — the materiality
-gate keeps every other kind out at BOTH ends):
+Closed vocabulary — every kind maps EXPLICITLY onto a BUS A wake
+class (mechanism_scheduler.EVENT_CLASSES, the only vocabulary
+wake_verdict wakes on — #1086 S19 unified the two buses' semantics);
+the mapping IS the vocabulary and the materiality semantics:
 
-    worker-exit       a dispatched worker left the round boundary
-    verdict-landed    a verdict/verify report landed
-    gate-reject       the dispatch gate hard-rejected a dispatch
-    deadline-fired    a rollout's learned deadline fired
-    settle-completed  a step/round settlement closed
+    gate-reject       -> stall        the dispatch gate hard-rejected a
+                                     dispatch (the round's attempted
+                                     progress is blocked)
+    deadline-fired    -> stall        a rollout's learned deadline fired
+                                     (that rollout stalled)
+    settle-completed  -> settlement   a step/round settlement closed
+                                     (claim_settled's family)
+
+worker-exit and verdict-landed LEFT the vocabulary (#1086): neither
+had a producer anywhere — the event closure covers three facts, not
+five — and their durable wake already rides the ledger's claim_settled
+settlement rows (BUS A's settlement class), so keeping the words would
+have declared a coverage that never existed.
 
 Heartbeats and ticks NEVER enter the file: ``append`` REFUSES a kind
-outside the vocabulary (one warn + False — the writer-side gate), and
-``material_rows`` drops any row whose kind is unknown (the reader-side
-gate, byte-tolerant against hand-edited files). The materiality gate
-runs BEFORE any LLM turn: the watcher and the drain are both mechanical.
+outside the mapping (one warn + False — the writer-side gate), and
+``material_rows`` drops any row whose kind is unmapped (the reader-side
+gate, byte-tolerant against hand-edited files — including legacy rows
+of the removed kinds). Materiality is DERIVED from the mapping, never
+declared by a static set: the gate's semantic half is the mapped wake
+class, its state half is the consumer's cursor (the watcher's byte
+cursor, the drain's row cursor) — an already-consumed row is not
+material to that consumer. The materiality gate runs BEFORE any LLM
+turn: the watcher and the drain are both mechanical.
 
 House pattern: the outcome-signal stream (signals_stream.py) —
 append-only via one O_APPEND write, tolerant reads (a corrupted row is
@@ -58,23 +73,43 @@ EVENTS_REL = Path("runs") / "scheduler" / "events.jsonl"
 #: the rows never enter a consolidated file)
 SCHEMA = "scheduler-event/1"
 
-KIND_WORKER_EXIT = "worker-exit"
-KIND_VERDICT_LANDED = "verdict-landed"
 KIND_GATE_REJECT = "gate-reject"
 KIND_DEADLINE_FIRED = "deadline-fired"
 KIND_SETTLE_COMPLETED = "settle-completed"
 
-#: the closed event vocabulary — material BY DEFINITION (all five)
-KINDS = (KIND_WORKER_EXIT, KIND_VERDICT_LANDED, KIND_GATE_REJECT,
-         KIND_DEADLINE_FIRED, KIND_SETTLE_COMPLETED)
+#: kind -> BUS A wake class — THE worth-waking semantics (#1086 S19).
+#: The values are mechanism_scheduler.EVENT_CLASSES members (the
+#: vocabulary ``wake_verdict`` wakes on via the tick's events_seen);
+#: pinned against it in tests/test_scheduler_events_1001.py rather
+#: than imported, so the watcher process keeps its light import
+#: surface (the no-model AST wall's allowlist).
+KIND_WAKE_CLASS = {
+    KIND_GATE_REJECT: "stall",          # the refused dispatch blocks the round
+    KIND_DEADLINE_FIRED: "stall",       # the fired deadline IS that rollout's stall
+    KIND_SETTLE_COMPLETED: "settlement",  # the round closed — claim_settled's family
+}
 
-_MATERIAL = frozenset(KINDS)
+#: the closed event vocabulary — the mapping's key set, DERIVED (there
+#: is no parallel kind list and no static material set beside the
+#: mapping)
+KINDS = tuple(KIND_WAKE_CLASS)
+
+
+def wake_class(kind) -> str | None:
+    """The kind's BUS A wake class — the only worth-waking semantics.
+    None for a kind outside the mapping (noise, or a removed legacy
+    kind)."""
+    return KIND_WAKE_CLASS.get(str(kind or ""))
 
 
 def is_material(kind) -> bool:
     """The closed-vocabulary check — the reader-side half of the
-    materiality gate."""
-    return str(kind or "") in _MATERIAL
+    materiality gate: a row is material iff its kind MAPS to a wake
+    class. The semantics live in the mapping (never a static
+    frozenset of "material by definition" kinds); the gate's state
+    half is the consumer's cursor — an already-drained row is not
+    material to that consumer."""
+    return wake_class(kind) is not None
 
 
 def _path(ws) -> Path:
@@ -89,8 +124,9 @@ def state_path(ws, name: str) -> Path:
 
 def append(ws, kind: str, claim: str | None = None, **fields) -> bool:
     """Append one event row. THE WRITER-SIDE MATERIALITY GATE: a kind
-    outside the closed vocabulary is refused (one warn + False — a
-    heartbeat or tick can never wake the session). Append-only via a
+    that maps to no wake class is refused (one warn + False — a
+    heartbeat, a tick, or a removed legacy kind can never wake the
+    session). Append-only via a
     single O_APPEND write; ts stamped. NEVER raises: any failure
     degrades to (False + one RATE-LIMITED warn) so a wake signal can
     never break the producer's path — the warn rides the house
@@ -100,10 +136,11 @@ def append(ws, kind: str, claim: str | None = None, **fields) -> bool:
     per producer invocation. Returns True when the row reached the
     stream."""
     kind_token = str(kind or "").strip()
-    if kind_token not in _MATERIAL:
+    if wake_class(kind_token) is None:
         warn("scheduler_events.append",
-             f"non-material kind {kind!r} refused — the wake stream "
-             f"carries only {', '.join(KINDS)}")
+             f"unmapped kind {kind!r} refused — a wake row must map to "
+             f"a BUS A wake class "
+             f"({', '.join(f'{k}->{c}' for k, c in KIND_WAKE_CLASS.items())})")
         return False
     try:
         row: dict = {"ts": _utc_now(), "schema": SCHEMA,
@@ -163,8 +200,8 @@ def read(ws) -> list[dict]:
 
 def material_rows(ws) -> list[dict]:
     """The MATERIAL rows in append order — ``read`` plus the reader-side
-    closed-vocabulary gate (rows whose kind is unknown are dropped, not
-    woken on)."""
+    closed-vocabulary gate (rows whose kind maps to no wake class are
+    dropped, not woken on)."""
     return [row for row in read(ws) if is_material(row.get("kind"))]
 
 

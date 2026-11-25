@@ -109,22 +109,12 @@ POISON_SKIP_AFTER = 3
 #: the per-type action table — kind -> the existing face that acts on
 #: that fact (resolved lazily inside each action; one fail-open cage
 #: per dispatched type, so one broken face is one warn and the drain
-#: never breaks). The mapping targets:
-#:   worker-exit       -> the worker reconcile face (ground-truth rebuild)
-#:   verdict-landed    -> the verdict-status watch face (diff + emit)
+#: never breaks). The table FOLLOWS the wake-class mapping
+#: (scheduler_events.KIND_WAKE_CLASS, #1086 S19): every key is a kind
+#: with a producer and a mapped BUS A wake class. The mapping targets:
 #:   gate-reject       -> the dispatch-reject feedback face (decision feed)
 #:   deadline-fired    -> the timer-state read face (per fired rollout)
 #:   settle-completed  -> the RL digest emit face (the per-decision line)
-def _act_worker_exit(ws, rows) -> dict:
-    from reconcile_workers import reconcile_workers
-    return {"active": reconcile_workers(ws)}
-
-
-def _act_verdict_landed(ws, rows) -> dict:
-    from verify_status_watch import reconcile
-    return reconcile(ws)
-
-
 def _act_gate_reject(ws, rows) -> dict:
     from rlvr.dispatch_reject import feedback_face
     return feedback_face(ws)
@@ -146,8 +136,6 @@ def _act_settle_completed(ws, rows) -> dict:
 
 
 DRAIN_ACTIONS = {
-    "worker-exit": _act_worker_exit,
-    "verdict-landed": _act_verdict_landed,
     "gate-reject": _act_gate_reject,
     "deadline-fired": _act_deadline_fired,
     "settle-completed": _act_settle_completed,
