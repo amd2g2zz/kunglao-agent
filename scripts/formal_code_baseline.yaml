@@ -157,6 +157,7 @@ files:
   scripts/instrument_menu.py: 15
   scripts/intake_battery.py: 6
   scripts/intake_promise.py: 14
+  scripts/intelligent_scheduling.py: 1
   scripts/jadx_exec.py: 21
   scripts/kunglao-decide.py: 11
   scripts/kunglao-init.py: 300
@@ -179,7 +180,7 @@ files:
   scripts/local_gate.py: 1
   scripts/log_setup.py: 4
   scripts/loop_holds.py: 1
-  scripts/loop_scheduler.py: 16
+  scripts/loop_scheduler.py: 17
   scripts/loop_state.py: 5
   scripts/loop_watchdog.py: 5
   scripts/mcp_probe.py: 43
@@ -288,6 +289,7 @@ files:
   scripts/route_capability.py: 21
   scripts/runtime_facts.py: 3
   scripts/scalar_settlement.py: 2
+  scripts/scheduler_events.py: 3
   scripts/script_harvest.py: 5
   scripts/settle_round_credit.py: 5
   scripts/shell_defaults.py: 4

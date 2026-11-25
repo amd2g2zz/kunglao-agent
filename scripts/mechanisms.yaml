@@ -193,8 +193,9 @@ mechanisms:
     owner: scripts/loop_scheduler.py
     description: >
       The wake's session-side consumer: drains each unread material
-      event exactly once through the existing faces (worker reconcile /
-      verdict watch / reject feedback / timer state / RL digest) and
+      event exactly once through the existing faces (reject feedback /
+      timer state / RL digest — every kind in the closed vocabulary has
+      a producer and a mapped BUS A wake class, #1086 S19) and
       consumes the staged wake artifact (read into the receipt, then
       cleared). Invoked as the wake contract's prompt names — the first
       mechanical action of the woken session turn — or by hand.

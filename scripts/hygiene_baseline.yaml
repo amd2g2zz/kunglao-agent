@@ -247,6 +247,8 @@ files:
     r1: 4
   scripts/intake_promise.py:
     r1: 4
+  scripts/intelligent_scheduling.py:
+    r1: 1
   scripts/jadx_exec.py:
     r1: 14
   scripts/kunglao-decide.py:
@@ -290,7 +292,7 @@ files:
   scripts/loop_holds.py:
     r1: 1
   scripts/loop_scheduler.py:
-    r1: 7
+    r1: 8
   scripts/loop_state.py:
     r1: 3
   scripts/loop_watchdog.py:
@@ -492,6 +494,8 @@ files:
     r1: 2
   scripts/scalar_settlement.py:
     r1: 1
+  scripts/scheduler_events.py:
+    r1: 2
   scripts/script_harvest.py:
     r1: 4
   scripts/settle_round_credit.py:
@@ -1250,6 +1254,8 @@ files:
     r1: 1
   tests/test_intake_promise_813.py:
     r1: 7
+  tests/test_intelligent_scheduling_685.py:
+    r1: 1
   tests/test_intent_aware_completion.py:
     r1: 2
   tests/test_invocation_hygiene_lint_818.py:
@@ -1703,6 +1709,8 @@ files:
   tests/test_scan_proven_507.py:
     r1: 1
   tests/test_scan_waiting_902.py:
+    r1: 2
+  tests/test_scheduler_events_1001.py:
     r1: 2
   tests/test_scheduler_schema_679.py:
     r1: 1
