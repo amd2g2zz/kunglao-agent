@@ -508,6 +508,78 @@ class TestDeclaredConsumerTruth:
             "wire a caller, retire the module, or add an allowlist reason")
 
 
+# ---- (f) devkit portability ------------------------------------------------
+
+def _hygiene_check(root: Path) -> list[str]:
+    ds.REPO_ROOT = root
+    try:
+        return ds._check_devkit_portability()
+    finally:
+        ds.REPO_ROOT = REPO_ROOT
+
+
+class TestDevkitPortability:
+    """devkit/ declares cross-platform Python, so a POSIX machine path or a
+    POSIX-only call inside a devkit script silently kills that claim. The
+    guard is regression protection — zero hits are measured on the live face —
+    so a new hardcode fails the commit instead of being discovered on another
+    OS. Windows drive shapes are deliberately NOT restated here:
+    tests/test_hardcode_purge.py (whole tracked tree) and
+    tests/test_no_absolute_paths.py (tests/**.py) own them already."""
+
+    def test_flags_posix_machine_path_in_code(self, tmp_path: Path) -> None:
+        _make_face(tmp_path, "devkit/tools/x.py", 'ROOT = "/Users/dev/repo"\n')
+        fails = _hygiene_check(tmp_path)
+        assert fails and "devkit/tools/x.py:1" in fails[0], fails
+        _make_face(tmp_path, "devkit/home_y.py", 'KEY = "/home/dev/.key"\n')
+        assert any("home" in f for f in _hygiene_check(tmp_path))
+
+    def test_flags_posix_only_calls(self, tmp_path: Path) -> None:
+        _make_face(tmp_path, "devkit/z.py",
+                   "import fcntl\nimport os\n\n\ndef lock(fh):\n"
+                   "    fcntl.flock(fh, 1)\n    os.fork()\n")
+        fails = _hygiene_check(tmp_path)
+        assert len(fails) >= 3, fails
+
+    def test_flags_tmp_literal(self, tmp_path: Path) -> None:
+        _make_face(tmp_path, "devkit/w.py", 'LOCK = "/tmp/kl-pytest.lock"\n')
+        assert any("/tmp/" in f for f in _hygiene_check(tmp_path))
+
+    def test_prose_may_name_a_path_or_a_posix_call(self, tmp_path: Path) -> None:
+        """Docstrings and comments are documentation (the escape-explanation
+        shape), never a portability defect — and the shebang is a comment."""
+        _make_face(tmp_path, "devkit/v.py",
+                   'r"""Windows turns "/Users/x" into fcntl soup."""\n'
+                   "\n\ndef f():\n"
+                   '    """flock is unavailable here — see devkit/docs."""\n'
+                   "    return 1\n")
+        assert _hygiene_check(tmp_path) == []
+
+    def test_axis_faces_are_scoped_as_documented(self, tmp_path: Path) -> None:
+        """Machine paths bind every devkit script face (bash templates too);
+        the POSIX-only axis binds Python only — the hook template is declared
+        bash, and the product tree uses conditional fcntl locks on purpose."""
+        _make_face(tmp_path, "devkit/githooks/case",
+                   "#!/usr/bin/env bash\n"
+                   "# flock/fcntl are POSIX-only, never used here\n"
+                   'TMP="/var/tmp/x"\n'
+                   'HOME_DIR="/Users/dev/repo"\n')
+        fails = _hygiene_check(tmp_path)
+        bash = [f for f in fails if "devkit/githooks/case" in f]
+        assert len(bash) == 1, bash          # only the code line, never the comment
+        assert "/Users/" in bash[0] and bash[0].startswith(
+            "devkit/githooks/case:4:"), bash
+        _make_face(tmp_path, "scripts/out.py", 'X = "/Users/dev/repo"\n')
+        _make_face(tmp_path, "references/note.md", "/tmp/x and fcntl\n")
+        assert all(not f.startswith(("scripts/", "references/"))
+                   for f in _hygiene_check(tmp_path))
+
+    def test_real_repo_devkit_face_is_clean(self) -> None:
+        assert ds._check_devkit_portability() == [], (
+            "devkit/ carries a POSIX machine path or a POSIX-only call — "
+            "devkit/ is declared cross-platform")
+
+
 # ---- Gate 7 registration lockstep (registry-derived, never hardcoded) --
 
 class TestGate7Registration:
