@@ -56,12 +56,36 @@ DETECTOR_EVAL_WORD = "detector_eval"
 DETECTOR_FIRED_WORD = "detector_fired"
 LEDGER_TAIL_BYTES = 65_536  # the #883 read budget (rank_face pattern)
 
+# The session's worker rows do not live in the main transcript: Claude
+# Code writes each subagent's rows to <session>/subagents/agent-*.jsonl
+# beside <session>.jsonl, and the main file carries no isSidechain-truthy
+# row at all. A fold over the main file alone therefore answers 0 for the
+# analysis side of any session that dispatched workers, which degenerated
+# the ratio to machine_input/1 and made the alarm unreadable. The memo
+# beside it exists because this hook samples on every Edit/Write/Agent
+# call: re-reading every closed worker transcript per sample (the largest
+# real workspace carries 1.5 GB across 307 files, measured) would price
+# the gauge above what it measures.
+SUBAGENT_DIRNAME = "subagents"
+SUBAGENT_GLOB = "agent-*.jsonl"
+WORKER_MEMO_REL = Path("runs") / ".cockpit-worker-memo.json"
+WORKER_MEMO_SCHEMA = "cockpit-worker-memo/1"
 
-def _fold_usage(transcript_path: str | Path) -> tuple[int, int]:
-    """(machine_input, analysis_output) over a transcript JSONL. Machine
-    side: isSidechain-falsy rows' input tokens incl. cache reads; analysis
-    side: isSidechain-truthy rows' output tokens. Rows without usage are
-    skipped."""
+
+def sidechain_transcripts(transcript_path: str | Path) -> list[Path]:
+    """The session's worker transcripts, beside the main file in the real
+    layout; [] when the session ran no worker or the layout is absent."""
+    p = Path(transcript_path)
+    side = p.parent / p.stem / SUBAGENT_DIRNAME
+    if not side.is_dir():
+        return []
+    return sorted(side.glob(SUBAGENT_GLOB))
+
+
+def _fold_rows(transcript_path: str | Path) -> tuple[int, int]:
+    """(machine_input, analysis_output) over ONE transcript JSONL:
+    isSidechain-falsy rows' input tokens incl. cache reads, isSidechain-
+    truthy rows' output tokens. Rows without a usage face are skipped."""
     machine = 0
     analysis = 0
     with Path(transcript_path).open("r", encoding="utf-8",
@@ -72,9 +96,16 @@ def _fold_usage(transcript_path: str | Path) -> tuple[int, int]:
                 continue
             try:
                 row = json.loads(line)
-                usage = (row.get("message") or {}).get("usage") or {}
             except ValueError:
                 continue
+            if not isinstance(row, dict):
+                continue
+            msg = row.get("message")
+            # A row whose message is not an object (or carries no usage) is
+            # not a usage row: skipped, never an exception — this fold now
+            # runs over every worker file of a session, and one odd row must
+            # not cost the whole sample.
+            usage = msg.get("usage") if isinstance(msg, dict) else None
             if not isinstance(usage, dict):
                 continue
             inp = int(usage.get("input_tokens") or 0) + \
@@ -87,10 +118,101 @@ def _fold_usage(transcript_path: str | Path) -> tuple[int, int]:
     return machine, analysis
 
 
-def compute_ratio(transcript_path: str | Path) -> float:
-    """machine_input / analysis_output over a Claude Code transcript JSONL
-    (the rc1 arithmetic — see _fold_usage). Denominator floored at 1."""
-    machine, analysis = _fold_usage(transcript_path)
+def _load_worker_memo(memo_path: Path | None) -> dict[str, dict]:
+    """The (name -> size, mtime_ns, tokens) face; {} on absent/corrupt —
+    a lost memo costs a recompute, never a wrong number."""
+    if memo_path is None:
+        return {}
+    try:
+        doc = json.loads(Path(memo_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    files = doc.get("files") if isinstance(doc, dict) else None
+    if not isinstance(files, dict):
+        return {}
+    return {str(k): v for k, v in files.items() if isinstance(v, dict)}
+
+
+def _memo_fingerprint(entry: object) -> tuple[int, int] | None:
+    """The memo's (size, mtime_ns) pair, or None when the entry is not a
+    usable pair — an unusable entry is a MISS (recompute), never a
+    failure and never a borrowed number."""
+    if not isinstance(entry, dict):
+        return None
+    try:
+        return int(entry["size"]), int(entry["mtime_ns"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _worker_output_tokens(path: Path, memo: dict[str, dict],
+                         fingerprint: tuple[int, int]) -> int:
+    """Analysis-side tokens (isSidechain-truthy rows' output) of one worker
+    transcript. A file whose size and mtime_ns match the memo is folded by
+    the memo; anything else folds from disk and rewrites its entry."""
+    if _memo_fingerprint(memo.get(path.name)) == fingerprint:
+        try:
+            return max(0, int(memo[path.name].get("tokens") or 0))
+        except (TypeError, ValueError):
+            return 0
+    _machine, analysis = _fold_rows(path)
+    memo[path.name] = {"size": fingerprint[0], "mtime_ns": fingerprint[1],
+                       "tokens": analysis}
+    return analysis
+
+
+def _fold_session(transcript_path: str | Path,
+                  *, worker_memo: str | Path | None = None) -> dict:
+    """The whole-session fold: the main transcript plus the worker
+    transcripts beside it. The machine side stays orchestrator input only
+    — widening it would move the ratio's numerator; the analysis side is
+    every isSidechain-truthy row's output, wherever that row is written.
+    An unreadable worker transcript loses its own contribution (one
+    rate-limited warn) and never drops the sample; the counts keep the
+    blind spot visible in the face."""
+    machine, analysis = _fold_rows(transcript_path)
+    memo = _load_worker_memo(Path(worker_memo) if worker_memo else None)
+    seen: set[str] = set()
+    unread = 0
+    for path in sidechain_transcripts(transcript_path):
+        seen.add(path.name)
+        try:
+            stat = path.stat()
+            analysis += _worker_output_tokens(
+                path, memo, (stat.st_size, stat.st_mtime_ns))
+        except OSError as exc:
+            unread += 1
+            warn("cockpit_worker_fold",
+                 f"{path.name}: {type(exc).__name__}: {exc}")
+    if worker_memo:
+        for name in [n for n in memo if n not in seen]:
+            memo.pop(name)  # rotated-away transcripts are not re-kept
+        try:
+            Path(worker_memo).write_text(
+                json.dumps({"schema": WORKER_MEMO_SCHEMA, "files": memo},
+                           ensure_ascii=False), encoding="utf-8")
+        except OSError as exc:
+            warn("cockpit_worker_memo_write",
+                 f"{type(exc).__name__}: {exc}")
+    return {"machine_input": machine, "analysis_output": analysis,
+            "worker_transcripts": len(seen), "worker_unread": unread}
+
+
+def _fold_usage(transcript_path: str | Path,
+                *, worker_memo: str | Path | None = None) -> tuple[int, int]:
+    """(machine_input, analysis_output) — the _fold_session pair, kept as
+    the tuple face compute_ratio and the replay runners consume."""
+    face = _fold_session(transcript_path, worker_memo=worker_memo)
+    return face["machine_input"], face["analysis_output"]
+
+
+def compute_ratio(transcript_path: str | Path,
+                  *, worker_memo: str | Path | None = None) -> float:
+    """machine_input / analysis_output over a Claude Code session (the rc1
+    arithmetic — see _fold_usage, now over the whole session). Denominator
+    floored at 1."""
+    machine, analysis = _fold_usage(transcript_path,
+                                    worker_memo=worker_memo)
     return machine / max(analysis, 1)
 
 
@@ -166,13 +288,18 @@ def cockpit_ratio(ws: Path, transcript_path: str | Path) -> dict | None:
     read/parse trouble (nothing written, nothing alarmed).
     """
     try:
-        machine, analysis = _fold_usage(transcript_path)
+        fold = _fold_session(transcript_path,
+                             worker_memo=Path(ws) / WORKER_MEMO_REL)
+        machine = fold["machine_input"]
+        analysis = fold["analysis_output"]
         ratio = machine / max(analysis, 1)
         face = {
             "ts": datetime.now(timezone.utc).isoformat(
                 timespec="seconds").replace("+00:00", "Z"),
             "machine_input_tokens": machine,
             "analysis_output_tokens": analysis,
+            "worker_transcripts": fold["worker_transcripts"],
+            "worker_unread": fold["worker_unread"],
             "ratio": ratio,
             "alarm": ratio > COCKPIT_RATIO_ALARM,
         }

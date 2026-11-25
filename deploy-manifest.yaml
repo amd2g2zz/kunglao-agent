@@ -23,7 +23,7 @@ files:
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
-    sha256: 8c06c491bd69ed623fa5f91ebf94bfb15032c4027cf358958d989abd3315d243
+    sha256: 97c2725025e2cbb3ece745dae4389dcae38bd32191c0d2e4efd9d533d3fc2030
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
@@ -280,6 +280,10 @@ files:
     dest: .claude/scripts/capability_probe.py
     kind: scaffold
     sha256: 6439e5b2fcd97c13a72ad33687d633ccf47da17495c1fd5aaf76ac5d390e30fb
+  - src: scripts/capability_report.py
+    dest: .claude/scripts/capability_report.py
+    kind: scaffold
+    sha256: 9a67498d6c5b390f673791eee2a64777971a1c151bfa637f705fb40ae71dbfde
   - src: scripts/carrier_consistency.py
     dest: .claude/scripts/carrier_consistency.py
     kind: scaffold
@@ -499,7 +503,7 @@ files:
   - src: scripts/eval_loop_runner.py
     dest: .claude/scripts/eval_loop_runner.py
     kind: scaffold
-    sha256: 12669d9730458382d4b2f0ac2dcaef6e17239984efca3edd76d3831a4340d2e3
+    sha256: 0ff3ddfdb1f896f1e234535fa71c788860594f99bf5ea3543cb052284731ca99
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
@@ -2331,7 +2335,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 3b5112a5580eec31bea879cc9e132c628d29dbbe25143b9cb8eb8426f9445bdd
+    sha256: d3ec824608dfc06ccbf3984c06270bd6dca98554baae3875bce7f899f1a97eb4
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
