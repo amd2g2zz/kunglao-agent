@@ -579,6 +579,8 @@ files:
     r1: 5
   tests/_tiers.py:
     r1: 1
+  tests/test_adoption_propensity_1005.py:
+    r1: 1
   tests/chain_test_harness.py:
     r1: 5
   tests/conftest.py:
