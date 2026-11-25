@@ -1,24 +1,31 @@
-# devkit/gc/code_gc.py — the code rot sweep leg (#735 v1). Report-only:
-# scan writes nothing, deletes nothing, edits nothing — there is no apply
-# flag to remove. Identity/status/linkage fields only (no scores, no
+# devkit/gc/code_gc.py — the code rot sweep leg (#735 v1, #1091 witness fix).
+# Report-only: scan writes nothing, deletes nothing, edits nothing — there is
+# no apply flag to remove. Identity/status/linkage fields only (no scores, no
 # embeddings — the spec-of-record prohibition list).
 #
 # Detection classes (two-observer keep-alive: any single witness keeps a
 # subject alive):
 #   B dead_local     CONFIRMED  ruff F401/F841 over the code trees; every
 #                               finding is a candidate.
-#   C orphan_module  SUSPECT    a scripts/tools/hooks module whose stem and
-#                               path forms hit NO declared surface file
-#                               (tripwire).
-#   A dead_symbol    SUSPECT    a top-level def/class whose file has no
-#                               surface hit (dispatch-surface liveness:
-#                               agents/skills dispatch keeps every symbol
-#                               of a surfaced file alive), whose bare name
-#                               occurs nowhere outside its own def line
-#                               across code+tests+surfaces, and whose
-#                               GitNexus incoming-call probe is no witness
-#                               (absent/stale index fails open — evidence
-#                               only, never a DEAD input on its own).
+#   C unwired_module SUSPECT    a scripts/tools/hooks module that NO dispatch
+#                               witness names and that NO production module
+#                               imports. #1091: the witness SET was wrong —
+#                               deploy-manifest.yaml (deployment), tests/**
+#                               (coverage) and the inventory/catalog rows
+#                               (registration) say an artifact is KNOWN, never
+#                               that it is REACHED, so they are reported with
+#                               the finding and never clear liveness.
+#   A dead_symbol    SUSPECT    a top-level def/class of a LIVE module that no
+#                               dispatch witness names, that no other module
+#                               references as an identifier, that its own
+#                               module never uses as an identifier (a log-tag
+#                               string is not a call site), and whose GitNexus
+#                               incoming-call probe is no witness (absent/stale
+#                               index fails open — evidence only, never a DEAD
+#                               input on its own). #1091: keep-alive is
+#                               SYMBOL-level now — a witnessed file no longer
+#                               keeps every symbol inside it alive (84% of the
+#                               old verdicts rested on one manifest row).
 #   D                           out of scope in v1 (named follow-up).
 from __future__ import annotations
 
@@ -37,22 +44,48 @@ import _common as C  # noqa: E402
 LEG = "code_gc"
 CODE_SUBDIRS = ("scripts", "tools", "hooks", "devkit/gc")
 INVENTORY_SUBDIRS = ("scripts", "tools", "hooks")
+#: modules whose text may witness a CALL (source of the caller index)
+CALLER_SUBDIRS = ("scripts", "tools", "hooks", "devkit")
+#: the harness's own source is never a liveness witness (self-reference)
+_SELF_PREFIX = "devkit/gc/"
 RUFF_SELECT = ("F401", "F841")
 RUFF_TIMEOUT = 300
 GITNEXUS_TIMEOUT = 60
-TEXT_SUFFIXES = (".py", ".md", ".yaml", ".yml")
+#: the per-symbol GitNexus observer is one subprocess per probe: cap it and
+#: say so (S24 replaces this with a single index census + freshness gate)
+GITNEXUS_PROBE_CAP = 25
+IDENT_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
-#: surfaces that keep modules/symbols alive (config code.surfaces overrides)
-DEFAULT_SURFACES = (
+#: dispatch witnesses — a hit here means something at runtime REACHES the
+#: subject (the agent-facing faces, the hook wiring table, the CI/devkit
+#: runners, the execution registry). config code.liveness_surfaces overrides.
+DEFAULT_LIVENESS_SURFACES = (
     "scripts/mechanisms.yaml",
-    "deploy-manifest.yaml",
-    "tools/_INDEX.ext.yaml",
-    "scripts/README.md",
+    "scripts/wire_up_settings.py",
     "agents/*.md",
     "skills/**",
-    "hooks/*.py",
+    "hooks/**",
+    "devkit/**",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+    "tools/_INDEX.yaml",
+)
+
+#: declaration witnesses — deployment / registration / coverage evidence,
+#: ordered so the likeliest row is found first. Never a keep-alive (#1091);
+#: reported as the "declared:" attribution so disposal reads in one line.
+DEFAULT_DECLARATION_SURFACES = (
+    "deploy-manifest.yaml",
+    "release-manifest.yaml",
+    "scripts/README.md",
+    "tools/_INDEX.ext.yaml",
+    "tools/_index-*.md",
+    "tools/_INDEX.md",
+    "pyproject.toml",
+    "references/**",
     "tests/**",
-    "devkit/gc/**",
+    "docs/**",
+    "openspec/**",
 )
 
 RUFF_LINE_RE = re.compile(
@@ -69,13 +102,13 @@ def _read(path: Path) -> str | None:
         return None
 
 
-def _surfaces(cfg: dict) -> tuple[str, ...]:
+def _surface_key(cfg: dict, key: str, default: tuple[str, ...]) -> tuple[str, ...]:
     code = cfg.get("code")
-    declared = code.get("surfaces") if isinstance(code, dict) else None
+    declared = code.get(key) if isinstance(code, dict) else None
     if (isinstance(declared, list) and declared
             and all(isinstance(s, str) and s for s in declared)):
         return tuple(declared)
-    return DEFAULT_SURFACES
+    return default
 
 
 def _expand(root: Path, pattern: str) -> list[str]:
@@ -96,16 +129,18 @@ def _expand(root: Path, pattern: str) -> list[str]:
         return []
 
 
-def _surface_files(root: Path, patterns: tuple[str, ...]) -> list[tuple[str, str]]:
-    seen: dict[str, str] = {}
+def _surface_space(root: Path, patterns: tuple[str, ...],
+                   skip_self: bool = False) -> dict[str, str]:
+    """rel -> raw text for every file a witness pattern reaches."""
+    space: dict[str, str] = {}
     for pattern in patterns:
         for rel in _expand(root, pattern):
-            if rel in seen:
+            if rel in space or (skip_self and rel.startswith(_SELF_PREFIX)):
                 continue
             text = _read(root / rel)
             if text is not None:
-                seen[rel] = text
-    return sorted(seen.items())
+                space[rel] = text
+    return space
 
 
 def _iter_py(root: Path, subdirs: tuple[str, ...]) -> list[str]:
@@ -118,6 +153,77 @@ def _iter_py(root: Path, subdirs: tuple[str, ...]) -> list[str]:
             if p.is_file() and "__pycache__" not in p.parts:
                 out.append(p.relative_to(root).as_posix())
     return out
+
+
+# ---------- subject facts (one AST pass per module) --------------------------
+
+def _module_facts(root: Path, rels: list[str]) -> dict[str, dict]:
+    """rel -> {imports, names, symbols}: what a module CONSUMES and EXPOSES.
+
+    `names` is the identifier set (Name/Attribute/arg/keyword) — a mention
+    inside a string literal (the log-tag shape) is deliberately not a
+    witness, and neither is a prose mention in a comment.
+    """
+    facts: dict[str, dict] = {}
+    for rel in rels:
+        text = _read(root / rel) or ""
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            facts[rel] = {"imports": set(), "names": set(), "symbols": []}
+            continue
+        imports: set[str] = set()
+        names: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                names.add(node.attr)
+            elif isinstance(node, ast.arg):
+                names.add(node.arg)
+            elif isinstance(node, ast.keyword) and node.arg:
+                names.add(node.arg)
+            elif isinstance(node, ast.Import):
+                imports.update((a.name or "").rsplit(".", 1)[-1]
+                               for a in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.add(node.module.rsplit(".", 1)[-1])
+                imports.update(a.name for a in node.names)
+        facts[rel] = {
+            "imports": imports, "names": names,
+            "symbols": [(n.name, n.lineno) for n in tree.body
+                        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                          ast.ClassDef))],
+        }
+    return facts
+
+
+def _module_tokens(rel: str) -> tuple[str, ...]:
+    """Stem + file name + path forms, case-folded and -/_ folded."""
+    posix = rel.replace("\\", "/").lower()
+    name = posix.rsplit("/", 1)[-1]
+    stem = name[:-3] if name.endswith(".py") else name
+    return (stem, name, posix,
+            stem.replace("-", "_"), stem.replace("_", "-"))
+
+
+def _first_hit(rel: str, space: list[tuple[str, str]]) -> str | None:
+    """First witness file (other than the subject itself) naming the module."""
+    tokens = _module_tokens(rel)
+    for srel, low in space:
+        if srel == rel:
+            continue
+        if any(t in low for t in tokens):
+            return srel
+    return None
+
+
+def _importers(rel: str, facts: dict[str, dict], subjects: list[str]) -> list[str]:
+    """Production modules with a real `import`/`from` edge to `rel`."""
+    stem, name = Path(rel).stem, Path(rel).name
+    return [r for r in subjects
+            if r != rel and (stem in facts[r]["imports"] or name in facts[r]["imports"])]
 
 
 # ---------- class B: dead_local (CONFIRMED) ----------
@@ -170,70 +276,82 @@ def class_b(root: Path) -> tuple[list[dict], list[str]]:
     return candidates, notes
 
 
-# ---------- class C: orphan_module tripwire (SUSPECT) ----------
+# ---------- class C: unwired_module (SUSPECT) + liveness map ----------------
 
-def _module_tokens(rel: str) -> tuple[str, ...]:
-    """Stem + file name + path forms, case-folded and -/_ folded."""
-    posix = rel.replace("\\", "/").lower()
-    name = posix.rsplit("/", 1)[-1]
-    stem = name[:-3] if name.endswith(".py") else name
-    return (stem, name, posix,
-            stem.replace("-", "_"), stem.replace("_", "-"))
+def _declared_in(root: Path, rel: str, patterns: tuple[str, ...]) -> str:
+    """First declaration witness (registration/deployment/coverage row).
+
+    Read lazily in pattern order and never returned as a keep-alive: it is
+    disposal context only (#1091).
+    """
+    tokens = _module_tokens(rel)
+    for pattern in patterns:
+        for srel in _expand(root, pattern):
+            if srel == rel:
+                continue
+            text = _read(root / srel)
+            if text is None:
+                continue
+            low = text.lower()
+            if any(t in low for t in tokens):
+                return srel
+    return "nowhere"
 
 
-def _first_surface_hit(tokens: tuple[str, ...],
-                       surfaces: list[tuple[str, str]]) -> str | None:
-    for srel, text in surfaces:
-        low = text.lower()
-        if any(t in low for t in tokens):
-            return srel
-    return None
+Liveness = dict[str, tuple[str, str]]
 
 
-def class_c(inventory: list[str],
-            surfaces: list[tuple[str, str]]) -> tuple[list[dict], dict[str, str | None]]:
-    hits: dict[str, str | None] = {}
-    candidates = []
+def _liveness(inventory: list[str], facts: dict[str, dict],
+              liveness: list[tuple[str, str]]) -> tuple[Liveness, list[str]]:
+    """Fixpoint over the import graph.
+
+    Dispatch witnesses are the roots. An import edge propagates liveness only
+    from an ALREADY-live importer (scripts/relib_audit.py's "wired transitively"
+    rule) — a module whose sole consumer is itself unwired stays unwired, which
+    is what keeps scripts/scheduling_selection.py from being cleared by
+    scripts/intelligent_scheduling.py.
+    """
+    live: Liveness = {}
     for rel in inventory:
-        tokens = _module_tokens(rel)
-        hit = _first_surface_hit(tokens, surfaces)
-        hits[rel] = hit
-        if hit is None:
-            stem = tokens[0]
-            candidates.append({
-                "class": "orphan_module", "tier": "SUSPECT",
-                "path": rel, "line": None, "symbol": stem,
-                "evidence": "no surface hits",
-            })
-    return candidates, hits
+        hit = _first_hit(rel, liveness)
+        if hit is not None:
+            live[rel] = ("dispatch_surface", hit)
+    pending = [rel for rel in inventory if rel not in live]
+    while pending:
+        promoted: Liveness = {}
+        for rel in pending:
+            for imp in _importers(rel, facts, inventory):
+                if imp in live:
+                    promoted[rel] = ("import_edge", imp)
+                    break
+        if not promoted:
+            break
+        live.update(promoted)
+        pending = [rel for rel in pending if rel not in promoted]
+    return live, sorted(pending)
 
 
-# ---------- class A: dead_symbol (SUSPECT, evidence-only third observer) ----------
+def class_c(root: Path, inventory: list[str], facts: dict[str, dict],
+            liveness: list[tuple[str, str]],
+            decl_patterns: tuple[str, ...]) -> tuple[list[dict], Liveness, list[str]]:
+    """Liveness map: rel -> (witness kind, witness evidence)."""
+    live, unwired = _liveness(inventory, facts, liveness)
+    suspects: list[dict] = []
+    notes: list[str] = []
+    for rel in unwired:
+        declared = _declared_in(root, rel, decl_patterns)
+        suspects.append({
+            "class": "orphan_module", "tier": "SUSPECT",
+            "path": rel, "line": None, "symbol": Path(rel).stem,
+            "evidence": f"no dispatch witness, no live importer; declared: {declared}",
+        })
+    if not live:
+        notes.append("warn: no module carries a liveness witness — "
+                     "witness surfaces are likely misconfigured")
+    return suspects, live, notes
 
-def _top_level_symbols(path: Path) -> list[tuple[str, int]]:
-    text = _read(path)
-    if text is None:
-        return []
-    try:
-        tree = ast.parse(text)
-    except SyntaxError:
-        return []
-    return [(n.name, n.lineno) for n in tree.body
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
 
-
-def _witness(name: str, def_rel: str, def_line: int,
-             space: list[tuple[str, str]]) -> str | None:
-    """First file holding the bare name outside the def line itself."""
-    for rel, text in space:
-        if rel == def_rel:
-            for i, ln in enumerate(text.splitlines(), 1):
-                if i != def_line and name in ln:
-                    return rel
-        elif name in text:
-            return rel
-    return None
-
+# ---------- class A: dead_symbol (SUSPECT, evidence-only third observer) ----
 
 def _gitnexus_probe(root: Path, name: str) -> tuple[str, str]:
     """Incoming-call observer: (verdict, index-commit-if-visible).
@@ -261,48 +379,69 @@ def _gitnexus_probe(root: Path, name: str) -> tuple[str, str]:
     return "witness", commit
 
 
-def _gate_space(root: Path,
-                surfaces: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Gate-2 search space: surfaces + code trees + tests (name witnesses)."""
-    space: dict[str, str] = dict(surfaces)
-    for rel in _iter_py(root, CODE_SUBDIRS):
-        space.setdefault(rel, _read(root / rel) or "")
-    for rel in _expand(root, "tests/**"):
-        if rel not in space:
-            text = _read(root / rel)
-            if text is not None:
-                space[rel] = text
-    return sorted(space.items())
+def _reference_index(facts: dict[str, dict]) -> dict[str, set[str]]:
+    """symbol name -> modules holding it as an identifier (call sites)."""
+    index: dict[str, set[str]] = {}
+    for rel, fact in facts.items():
+        for name in fact["names"]:
+            index.setdefault(name, set()).add(rel)
+    return index
 
 
-def class_a(hits: dict[str, str | None], root: Path,
-            surfaces: list[tuple[str, str]]) -> tuple[list[dict], list[str]]:
-    ordered = _gate_space(root, surfaces)
-    candidates, ok_lines = [], []
-    for rel in sorted(hits):
-        syms = _top_level_symbols(root / rel)
-        if not syms:
+def class_a(root: Path, live: Liveness, facts: dict[str, dict],
+            liveness_tokens: set[str]) -> tuple[list[dict], list[str], dict, list[str]]:
+    """Per-symbol keep-alive over the LIVE modules only — an unwired module is
+    already reported once by class C, so its faces are not enumerated."""
+    refs = _reference_index(facts)
+    candidates: list[dict] = []
+    ok_lines: list[str] = []
+    tally = {"dispatch_surface": 0, "external_caller": 0,
+             "internal_use": 0, "gitnexus": 0}
+    notes: list[str] = []
+    probes = 0
+    for rel in sorted(live):
+        kind, witness = live[rel]
+        symbols = facts[rel]["symbols"]
+        if not symbols:
             continue
-        hit = hits[rel]
-        if hit is not None:
-            ok_lines.append(
-                f"ok: {rel} {len(syms)} symbols alive (surface hit: {hit})")
-            continue
-        for name, lineno in syms:
-            if _witness(name, rel, lineno, ordered) is not None:
+        alive = 0
+        for name, lineno in symbols:
+            if name in liveness_tokens:
+                tally["dispatch_surface"] += 1
+                alive += 1
                 continue
-            verdict, commit = _gitnexus_probe(root, name)
+            callers = {r for r in refs.get(name, ()) if r != rel}
+            if callers:
+                tally["external_caller"] += 1
+                alive += 1
+                continue
+            if name in facts[rel]["names"]:
+                tally["internal_use"] += 1
+                alive += 1
+                continue
+            verdict, commit = ("unavailable", "")
+            if probes < GITNEXUS_PROBE_CAP:
+                probes += 1
+                verdict, commit = _gitnexus_probe(root, name)
             if verdict == "witness":
+                tally["gitnexus"] += 1
+                alive += 1
                 continue
-            evidence = f"no refs outside def; gitnexus={verdict}"
+            evidence = "no caller, no dispatch mention"
             if commit:
-                evidence += f"; index {commit[:12]}"
+                evidence += f"; gitnexus index {commit[:12]}"
             candidates.append({
                 "class": "dead_symbol", "tier": "SUSPECT",
                 "path": rel, "line": lineno, "symbol": name,
-                "evidence": evidence,
+                "evidence": f"{evidence}; gitnexus={verdict}",
             })
-    return candidates, ok_lines
+        ok_lines.append(f"ok: {rel} {alive}/{len(symbols)} symbols alive "
+                        f"(witness: {kind} {witness})")
+    if probes >= GITNEXUS_PROBE_CAP:
+        notes.append(f"note: gitnexus incoming-call observer capped at "
+                     f"{GITNEXUS_PROBE_CAP} probes this run — uncaptured "
+                     "candidates stay SUSPECT (S24 census replaces it)")
+    return candidates, ok_lines, tally, notes
 
 
 # ---------- report ----------
@@ -314,26 +453,56 @@ def _head(root: Path) -> str:
 
 def scan(root: Path, as_json: bool) -> int:
     cfg = C.load_config(root)
-    surfaces = _surface_files(root, _surfaces(cfg))
-    notes: list[str] = []
+    liveness_pats = _surface_key(cfg, "liveness_surfaces",
+                                 DEFAULT_LIVENESS_SURFACES)
+    decl_pats = _surface_key(cfg, "declaration_surfaces",
+                             DEFAULT_DECLARATION_SURFACES)
+    liveness_files = _surface_space(root, liveness_pats, skip_self=True)
+    liveness = [(rel, text.lower()) for rel, text in sorted(liveness_files.items())]
+    liveness_tokens: set[str] = set()
+    for text in liveness_files.values():
+        liveness_tokens.update(IDENT_TOKEN_RE.findall(text))
 
+    inventory = _iter_py(root, INVENTORY_SUBDIRS)
+    callers = [rel for rel in _iter_py(root, CALLER_SUBDIRS)
+               if not rel.startswith(_SELF_PREFIX)]
+    facts = _module_facts(root, sorted(set(inventory) | set(callers)))
+
+    notes: list[str] = []
     confirmed, notes_b = class_b(root)
     notes.extend(notes_b)
 
-    inventory = _iter_py(root, INVENTORY_SUBDIRS)
-    suspects_c, hits = class_c(inventory, surfaces)
-    suspects_a, ok_lines = class_a(hits, root, surfaces)
+    suspects_c, live, notes_c = class_c(root, inventory, facts, liveness, decl_pats)
+    notes.extend(notes_c)
+    suspects_a, ok_lines, face_tally, notes_a = class_a(
+        root, live, facts, liveness_tokens)
+    notes.extend(notes_a)
 
     candidates = confirmed + suspects_c + suspects_a
     counts = {"confirmed": len(confirmed),
               "suspect": len(suspects_c) + len(suspects_a),
               "total": len(candidates)}
+    faces_total = sum(len(facts[rel]["symbols"]) for rel in inventory)
+    keepalive = {
+        "modules": {
+            "total": len(inventory), "live": len(live),
+            "unwired": len(suspects_c),
+            "by_witness": _module_tally(live),
+        },
+        "faces": {
+            "total": faces_total,
+            "alive": sum(face_tally.values()),
+            "suspect": len(suspects_a),
+            "by_witness": face_tally,
+        },
+        "never_clears": list(decl_pats),
+    }
 
     if as_json:
         print(json.dumps({
             "leg": LEG, "generated": C.today(), "head": _head(root),
             "scopes": list(CODE_SUBDIRS), "candidates": candidates,
-            "counts": counts,
+            "counts": counts, "keepalive": keepalive,
         }, indent=2))
         for note in notes:
             print(note, file=sys.stderr)
@@ -343,16 +512,28 @@ def scan(root: Path, as_json: bool) -> int:
         rule = str(c["evidence"]).rsplit(" ", 1)[-1]
         print(f"CONFIRMED: {c['path']}:{c['line']} {c['symbol']} ({rule})")
     for c in suspects_c:
-        print(f"SUSPECT: {c['path']} orphan module (no surface hits)")
+        print(f"SUSPECT: {c['path']} unwired module ({c['evidence']})")
     for c in suspects_a:
         print(f"SUSPECT: {c['path']}:{c['line']} {c['symbol']} (dead_symbol)")
     for line in ok_lines:
         print(line)
     for note in notes:
         print(note, file=sys.stderr)
+    print(f"keepalive: modules {keepalive['modules']['live']}/"
+          f"{keepalive['modules']['total']} live "
+          f"{keepalive['modules']['by_witness']}, faces "
+          f"{keepalive['faces']['alive']}/{faces_total} alive "
+          f"{keepalive['faces']['by_witness']}")
     print(f"summary: {counts['confirmed']} confirmed, {counts['suspect']} "
           f"suspect (report-only — no changes made)")
     return 0
+
+
+def _module_tally(live: dict[str, tuple[str, str]]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for kind, _ in live.values():
+        out[kind] = out.get(kind, 0) + 1
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:

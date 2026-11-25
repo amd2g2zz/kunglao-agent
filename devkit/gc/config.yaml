@@ -11,19 +11,36 @@ worktree:
   merged_days: 7
   abandoned_days: 14
 
-# code leg — surfaces that keep a module/symbol alive (dispatch-surface
-# liveness). Case-folded substring match over the declared files/globs.
+# code leg — witness sets (#1091). The old single list conflated two things:
+# it let a deployment row, an inventory row and a test reference each prove
+# that code is REACHED. They do not. liveness_surfaces is the dispatch face
+# (the agent/runtime reads these to know what to run) plus the CI/devkit
+# runners; declaration_surfaces is registration/deployment/coverage evidence
+# — reported as "declared:" context on a finding, never a keep-alive. The
+# split mirrors scripts/relib_audit.py's seed/diagnostic faces.
 code:
-  surfaces:
+  liveness_surfaces:
     - scripts/mechanisms.yaml
-    - deploy-manifest.yaml
-    - tools/_INDEX.ext.yaml
-    - scripts/README.md
+    - scripts/wire_up_settings.py
     - agents/*.md
     - skills/**
-    - hooks/*.py
+    - hooks/**
+    - devkit/**
+    - .github/workflows/*.yml
+    - .github/workflows/*.yaml
+    - tools/_INDEX.yaml
+  declaration_surfaces:
+    - deploy-manifest.yaml
+    - release-manifest.yaml
+    - scripts/README.md
+    - tools/_INDEX.ext.yaml
+    - tools/_index-*.md
+    - tools/_INDEX.md
+    - pyproject.toml
+    - references/**
     - tests/**
-    - devkit/gc/**
+    - docs/**
+    - openspec/**
 
 budget:
   max_new_spec: 1
