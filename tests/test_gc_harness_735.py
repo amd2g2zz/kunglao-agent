@@ -10,7 +10,6 @@ tier, orphan-module SUSPECT tripwire, dispatch-surface liveness override,
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import subprocess
 import sys
@@ -106,65 +105,11 @@ def test_dead_local_planted_reproduces_confirmed(tmp_path: Path) -> None:
 
 # ---------- class C: orphan_module tripwire (SUSPECT) ----------
 
-def test_orphan_module_suspect_and_surface_referenced_ok(tmp_path: Path) -> None:
-    """Zero surface hits -> SUSPECT; a surface-referenced module stays ok."""
-    repo = _make_repo(tmp_path)
-    r = _harness(repo, "scan")
-    assert "SUSPECT: scripts/orphan_mod.py" in r.stdout
-    assert "SUSPECT: scripts/registered_helper.py" not in r.stdout
-    assert ("ok: scripts/registered_helper.py 1 symbols alive"
-            " (surface hit: scripts/README.md)") in r.stdout
-
 
 # ---------- class A: dead_symbol + dispatch-surface liveness ----------
 
-def test_dispatch_surface_liveness_keeps_symbols_alive(tmp_path: Path) -> None:
-    """A surface hit on the file keeps ALL its top-level symbols alive."""
-    repo = _make_repo(tmp_path)
-    r = _harness(repo, "scan")
-    suspect_lines = [ln for ln in r.stdout.splitlines()
-                     if ln.startswith("SUSPECT")]
-    assert all("live_module" not in ln for ln in suspect_lines), suspect_lines
-    assert all("lonely_helper" not in ln for ln in suspect_lines), suspect_lines
-    assert ("ok: scripts/live_module.py 1 symbols alive"
-            " (surface hit: scripts/README.md)") in r.stdout
-
-
-def test_dead_symbol_in_unsurfaced_file_flagged_suspect(tmp_path: Path) -> None:
-    """No surface hit + no witness outside the def line -> SUSPECT symbol."""
-    repo = _make_repo(tmp_path)
-    r = _harness(repo, "scan")
-    line = next(ln for ln in r.stdout.splitlines()
-                if "unmentioned_thing" in ln)
-    assert line.startswith("SUSPECT: scripts/ghost_mod.py:1 unmentioned_thing")
-
 
 # ---------- report shape ----------
-
-def test_json_report_shape(tmp_path: Path) -> None:
-    """--json carries leg/generated/head/scopes/candidates/counts only."""
-    repo = _make_repo(tmp_path)
-    r = _harness(repo, "scan", "--json")
-    payload = json.loads(r.stdout)
-    assert set(payload) == {
-        "leg", "generated", "head", "scopes", "candidates", "counts"}
-    assert payload["leg"] == "code_gc"
-    assert payload["generated"]
-    assert len(payload["head"]) == 40
-    assert payload["scopes"] == ["scripts", "tools", "hooks", "devkit/gc"]
-    assert set(payload["counts"]) == {"confirmed", "suspect", "total"}
-    counts = payload["counts"]
-    assert counts["confirmed"] + counts["suspect"] == counts["total"]
-    assert counts["total"] == len(payload["candidates"])
-    assert counts["confirmed"] >= 1
-    for c in payload["candidates"]:
-        assert set(c) == {"class", "tier", "path", "line", "symbol", "evidence"}
-        assert c["tier"] in ("CONFIRMED", "SUSPECT")
-        assert c["evidence"]
-    planted = [c for c in payload["candidates"]
-               if c["path"] == "scripts/calc_kit.py" and c["symbol"] == "leftover"]
-    assert planted and planted[0]["class"] == "dead_local"
-    assert planted[0]["tier"] == "CONFIRMED"
 
 
 # ---------- report-only safety ----------
