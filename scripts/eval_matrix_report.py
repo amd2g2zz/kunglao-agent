@@ -25,12 +25,18 @@ Per cell (one (arm, unit) run):
                   not rule-fired);
   mean_r          mean r_incr over the arm's decisions.
 
-Multi-sample cells (the B2 same-cost face): a multi-sample arm's run
-dirs live one level deeper (…/<arm>/<unit>/s0..s{N-1}, one child run per
-sample). The cell aggregates them — final_status is pass@k (any PASS
-passes), pass_at_k is the 0/1 face of that, budget_usd is the samples'
-SUMMED spend (equal cost by the same-cost contract), and the decision
-primitives pool across samples. samples names the child-run count.
+Multi-sample cells (a sampled arm — the B2 cc face OR the M3 loop
+multi-round face): a sampled arm's run dirs live one level deeper
+(…/<arm>/<unit>/s0..s{N-1}, one child run per sample/round). The cell
+aggregates them — final_status is pass@k (any PASS passes), pass_at_k
+is the 0/1 face of that, budget_usd is the samples' SUMMED spend and
+wall_s the MAX round wall (equal cost by the same-cost contract — the
+口径 is declared on the cell (cell.aggregation) and the report
+(aggregation_note), never silent), and the decision primitives pool
+across samples. samples names the child-run count; cell.rounds KEEPS
+EVERY round's own verdict/cost/wall — the per-round truth the pass@k
+summarizes, so the aggregate can always be checked against the rounds
+it claims to summarize.
 
 The 80/20 gate — honest primitives, not a verdict: the umbrella target
 ("80% learned decisions + 20% rules, measured by regret-weighted
@@ -220,10 +226,13 @@ def _sample_dirs(unit_dir: Path) -> list[Path]:
 
 def _aggregate_samples(unit_dir: Path, samples: list[Path],
                        spine_rows: list[dict]) -> dict:
-    """The B2 cell: pass@k over the sample runs at summed (equal) cost.
-    Each sample is read on its own; the aggregation invents nothing —
-    a sample with no results doc rides its spine row's state, or
-    counts as missing."""
+    """The sampled cell (B2 cc samples OR M3 loop rounds): pass@k over
+    the runs at summed (equal) cost. Each run is read on its own; the
+    aggregation invents nothing — a run with no results doc rides its
+    spine row's state, or counts as missing. cell.rounds KEEPS every
+    round's own verdict/cost/wall, and cell.aggregation states the
+    口径 (pass@k any-PASS; cost SUMMED; wall MAX) — declared, never
+    silent."""
     spine_by_sample = {}
     for row in spine_rows:
         try:
@@ -234,10 +243,12 @@ def _aggregate_samples(unit_dir: Path, samples: list[Path],
     verdicts: list[str] = []
     costs: list[float] = []
     wall = None
+    rounds: list[dict] = []
     transitions = 0
     facts = 0
     rows_all: list[dict] = []
     for i, sample_dir in enumerate(samples):
+        round_rec: dict = {"round": i}
         doc = newest_results_doc(sample_dir)
         if doc and doc.get("rows"):
             child_row = doc["rows"][0]
@@ -247,18 +258,23 @@ def _aggregate_samples(unit_dir: Path, samples: list[Path],
             if verdict:
                 verdicts.append(str(verdict))
             statuses.append(str(verdict))
+            round_rec["verdict"] = verdict
             cost = (session.get("session_cost") or {}).get(
                 "total_cost_usd")
             if cost is not None:
                 costs.append(float(cost))
+                round_rec["budget_usd"] = float(cost)
             s_wall = session.get("wall_s")
             if s_wall is not None:
                 wall = max(wall or 0.0, float(s_wall))
+                round_rec["wall_s"] = float(s_wall)
             ws = loop.get("workspace")
         else:
             spine = spine_by_sample.get(i) or {}
             statuses.append(str(spine.get("status") or "missing"))
+            round_rec["status"] = str(spine.get("status") or "missing")
             ws = spine.get("workspace")
+        rounds.append(round_rec)
         transitions += _transitions_count(ws)
         facts += _facts_count(ws)
         rows_all.extend(_rewarded_rows(ws))
@@ -277,6 +293,11 @@ def _aggregate_samples(unit_dir: Path, samples: list[Path],
                          else (0.0 if verdicts else None))
     cell["budget_usd"] = round(sum(costs), 6) if costs else None
     cell["wall_s"] = wall
+    cell["rounds"] = rounds
+    cell["aggregation"] = {
+        "verdict": "pass@k (any PASS passes)",
+        "budget_usd": "sum of the round costs",
+        "wall_s": "max of the round walls"}
     cell["transitions"] = transitions
     cell["facts"] = facts
     if rows_all:
@@ -765,6 +786,11 @@ def build_report(out: Path, progress: dict | None = None) -> dict:
                        "propensity-bearing fraction of rewarded "
                        "decisions. The gate definition itself is the "
                        "owner's call."),
+              "aggregation_note": (
+                  "multi-round cells (sampled arms): final_status is "
+                  "pass@k (any PASS passes); budget_usd SUMS the round "
+                  "costs; wall_s is the MAX round wall — per-round "
+                  "verdicts/costs/walls ride cell.rounds"),
               "matrix": matrix,
               "arms": dict(sorted(_aggregate_arms(matrix).items())),
               "decompositions": _decompositions(matrix),
@@ -796,6 +822,14 @@ def print_report(report: dict) -> None:
               f"{str(cell.get('learned_decisions')):>7} "
               f"{str(cell.get('mean_r'))[:8]:>8} "
               f"{str(cell.get('regret_vs_best_arm'))[:8]:>8}")
+        if cell.get("rounds") is not None:
+            # the per-round truth beneath the pass@k aggregate: every
+            # round's own verdict/cost/wall as rendered on the run
+            faces = ", ".join(
+                str(r.get("verdict") or r.get("status") or "?")
+                for r in cell["rounds"])
+            print(f"  rounds=[{faces}] (pass@{cell.get('samples', '?')}: "
+                  "any PASS; cost summed, wall max)")
     print("-" * len(header))
     for arm, acc in report["arms"].items():
         print(f"{arm:22} units={acc['units']} pass={acc['pass']} "

@@ -503,11 +503,11 @@ files:
   - src: scripts/eval_matrix_report.py
     dest: .claude/scripts/eval_matrix_report.py
     kind: scaffold
-    sha256: 998e1edd7554ef58b1be30b731ac62048ad036f541f9bdb3cb040f21d2b112ae
+    sha256: d02e60f10f227cb04a90806f51244c02ffe43213cafc6905675a1bc6491daffe
   - src: scripts/eval_matrix_runner.py
     dest: .claude/scripts/eval_matrix_runner.py
     kind: scaffold
-    sha256: 36595fd30d3a8c764312248a6446a11cfa901c5604900af08c1dc3e5b191e7b8
+    sha256: de2e3784b759db24aa460c38a918f37660f1481ccac728f244797b46ba17bb8a
   - src: scripts/eval_misdirection.py
     dest: .claude/scripts/eval_misdirection.py
     kind: scaffold
@@ -1127,7 +1127,7 @@ files:
   - src: scripts/runtime_switches.py
     dest: .claude/scripts/runtime_switches.py
     kind: scaffold
-    sha256: 3aa7828cf288bb198f2f783be68b31cb0d46b302e5288fdb025ea47e9d4b9256
+    sha256: 104cfde7b7cf3879acf75728565ac138405e98a5dfd2f85414466860215a1b33
   - src: scripts/scalar_settlement.py
     dest: .claude/scripts/scalar_settlement.py
     kind: scaffold
@@ -1595,7 +1595,7 @@ files:
   - src: scripts/rlvr/q_cells.py
     dest: .claude/scripts/rlvr/q_cells.py
     kind: scaffold
-    sha256: 55a49d0da83b9d5217c3a609e9fa0cbee02f586cbb3b010c606bc9b9f4b0085a
+    sha256: 23517553ef39dd9db91bba0b29b23333f5a4e568446dad47b94fb25d81b4a321
   - src: scripts/rlvr/recipe_arms.py
     dest: .claude/scripts/rlvr/recipe_arms.py
     kind: scaffold

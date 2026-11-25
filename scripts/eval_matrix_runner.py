@@ -33,6 +33,24 @@ The seven arms (docs/design/ws5-five-arms.yaml, the arm registry):
     kunglao-warm       the full loop reading a warm posterior-store copy
     kunglao-warm-no-l1 kunglao-warm with recall ablated (KUNGLAO_RECALL=0)
 
+The optional sampling protocol is NOT cc-exclusive: a loop arm may
+declare sampling too — N INDEPENDENT ROUNDS of the same unit at
+N x budget_each (the M3 paired multi-rollout: the paired comparison
+statistic is the (unit, round) run, so K1/K2 read learning ON vs OFF
+at the same unit and round). Same-cost contract either way. Each
+round is an independent workspace with its own store — a sampled
+loop cell forces per-run store isolation even under the registry's
+per-arm scope (one round's rows must never leak into the next). The
+per-(unit, round) randomness anchor is FROZEN: _round_seed derives
+one deterministic seed per (unit, round) — the same (unit, round)
+rides the same seed across arms (the arm is never in the hash; the
+unit is) — and the anchor is CONSUMED: it travels to the child
+session as KUNGLAO_EVAL_ROUND_SEED and q_cells.q_cells_seed_state
+mixes it into the seed hash (env-gated; absent = byte-identical to
+the pre-anchor face, so production runs are unchanged), which
+decorrelates the N rounds of one unit and pairs the arms' streams
+at equal fold state.
+
 Arms differ ONLY in declared faces (runner face, store kind, env). The
 launcher is HERMETIC: every supply/learning switch an arm can declare
 (KUNGLAO_RECALL / KUNGLAO_EXPANSION / KUNGLAO_PREDICT_BEFORE_TRY /
@@ -61,9 +79,10 @@ Faces:
                     ws5-matrix-progress/1) rewritten as runs finish;
                     --max-parallel bounds concurrent children.
   --dry-run         lists what WOULD launch (per-run child argv, corpus
-                    resolution, env face, store materialization) and
-                    writes the progress JSON with every run "planned".
-                    No session starts, no run dir is created.
+                    resolution, env face, store materialization — one
+                    stdout line per run, rounds included) and writes the
+                    progress JSON with every run "planned". No session
+                    starts, no run dir is created.
   --report          readout over COMPLETED runs (the
                     scripts/eval_matrix_report.py face): per arm x unit
                     matrix of final_status, budget consumed,
@@ -94,6 +113,7 @@ stdlib + yaml only (the repo's runtime deps).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -129,6 +149,10 @@ DEFAULT_OUT_REL = "runs/ws5-matrix"
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
 SEED_STORE_ENV = "KUNGLAO_EVAL_SEED_STORE"
 EXPORT_STORE_ENV = "KUNGLAO_EVAL_STORE_EXPORT"
+#: the FROZEN (unit, round) randomness anchor's child-session face —
+#: carried by the matrix and CONSUMED by q_cells.q_cells_seed_state
+#: (mixed into the seed hash when positive; absent = byte-identical)
+ROUND_SEED_ENV = "KUNGLAO_EVAL_ROUND_SEED"
 #: the knowledge family file (issue-1004 R2c) — the only live store rel
 #: since the issue-1004 R3 schema cutover
 FAMILY_STORE_FILE = "knowledge-store.jsonl"
@@ -136,10 +160,12 @@ FAMILY_STORE_FILE = "knowledge-store.jsonl"
 EVAL_ROOT_ENV = "KUNGLAO_EVAL_ROOT"
 # hermeticity: stripped from the inherited env before arm env merges —
 # every supply/learning face an arm can declare is stripped here so an
-# ambient shell value can never masquerade as a declared arm value
+# ambient shell value can never masquerade as a declared arm value.
+# KUNGLAO_EVAL_ROUND_SEED joins them: the (unit, round) pairing anchor
+# is the plan's derivation, never an ambient value
 STRIPPED_ENV = ("KUNGLAO_RECALL", "KUNGLAO_EXPANSION",
                 "KUNGLAO_PREDICT_BEFORE_TRY", "KUNGLAO_SCHEDULER",
-                "KUNGLAO_PLAYBOOK",
+                "KUNGLAO_PLAYBOOK", "KUNGLAO_EVAL_ROUND_SEED",
                 SEED_STORE_ENV, EXPORT_STORE_ENV)
 
 VALID_FACES = ("loop", "cc-default", "cc-warm-context")
@@ -149,10 +175,11 @@ VALID_CORPORA = ("repo", "operator")
 # cell; per-arm = one accumulating store per arm across its unit sequence
 # (within-sequence learning; arms stay mutually isolated)
 VALID_STORE_MODES = ("per-run", "per-arm")
-# the B2 face: a cc arm's optional sampling protocol — N independent
-# samples of the same face at N x budget_each, which must equal the
-# matrix budget (same-cost is the whole point: pass@k at equal cost,
-# never at a discount)
+# the multi-round protocol on either face: a cc arm's optional
+# sampling (N independent samples of the same face at N x budget_each
+# — the B2 same-cost rebuttal) and a loop arm's N independent rounds
+# (the M3 paired multi-rollout). N x budget_each must equal the matrix
+# budget: pass@k at equal cost, never at a discount
 VALID_SAMPLING_MODES = ("multi-sample",)
 
 RC_OK, RC_REFUSED = 0, 2
@@ -202,19 +229,19 @@ def _validate_arm(i: int, arm) -> tuple[str, str]:
             isinstance(k, str) and isinstance(v, str)
             for k, v in env.items()):
         raise ConfigError(f"{where} env must be a str->str mapping")
-    sampling = _validate_sampling(i, arm)
-    if sampling and face == "loop":
-        raise ConfigError(
-            f"{where}: cc faces own the sampling protocol (a loop arm "
-            "is single-draw by design — the multi-sample rebuttal is a "
-            "bare-CC experiment)")
+    # the sampling protocol validates on ANY face (cc samples / loop
+    # rounds); the normalized block is re-read at plan time
+    _validate_sampling(i, arm)
     return aid, face
 
 
 def _validate_sampling(i: int, arm) -> dict:
     """One arm's optional sampling protocol -> the normalized block ({}
-    when the arm declares none). Multi-sample is the B2 face: N
-    independent child runs of the SAME face at N x budget_each."""
+    when the arm declares none). Multi-sample is the same-cost face on
+    BOTH runners: a cc arm expands to N independent child runs of the
+    SAME face at N x budget_each (the B2 rebuttal), a loop arm to N
+    independent ROUNDS of the same unit at N x budget_each (the M3
+    paired multi-rollout — the same-cost contract either way)."""
     where = f"arms[{i}]"
     sampling = arm.get("sampling")
     if sampling is None:
@@ -377,14 +404,41 @@ def resolve_unit(unit: dict, operator_root: Path | None) -> tuple[bool, str]:
 
 # ---- run planning ---------------------------------------------------------
 
+#: the (unit, round) pairing anchor's derivation salt — a versioned
+#: namespace so a future salt change is a deliberate act, never a
+#: silent seed migration
+ROUND_SEED_SALT = "kunglao-matrix-round-v1"
+
+
+def _round_seed(unit: str, round_index: int) -> int:
+    """The FROZEN (unit, round) randomness anchor: a deterministic
+    seed for the unit's round-index-th round. A pure function of
+    (unit, round) — the arm is deliberately NOT in the hash, so every
+    arm's run of the same unit at the same round rides the SAME seed
+    (the K1/K2 paired comparison draws the rounds at equal decision
+    points from the same rng stream: the outcome delta is the arm's,
+    never the seed's). Carried on the plan, the progress spine, the
+    dry-run lines, and the child session env (KUNGLAO_EVAL_ROUND_SEED);
+    the sampler CONSUMES it there — q_cells.q_cells_seed_state mixes
+    the anchor into the seed hash (env-gated: absent = byte-identical
+    to the pre-anchor face, so production runs never move)."""
+    digest = hashlib.sha256((
+        ROUND_SEED_SALT + ":" + str(unit) + ":" + str(round_index)
+    ).encode("utf-8")).hexdigest()
+    return int(digest[:16], 16)
+
+
 @dataclass(frozen=True)
 class RunPlan:
     """One (arm, unit) cell of the matrix — everything needed to launch
     and to account for the run. A multi-sample arm expands to
     sample_count plans per unit (sample_index 0..N-1), each capped at
-    budget_each, each its own run dir s0..s{N-1}. store_mode is the
-    cell's store scope: per-run = the cell's own <run_dir>/store,
-    per-arm = the arm dir's shared <run_dir parent>/store."""
+    budget_each, each its own run dir s0..s{N-1}. seed is the FROZEN
+    (unit, round) randomness anchor (sample_index IS the round axis).
+    store_mode is the cell's store scope: per-run = the cell's own
+    <run_dir>/store, per-arm = the arm dir's shared <run_dir parent>/
+    store. A sampled store-bearing cell is ALWAYS per-run: the rounds
+    are independent workspaces by design."""
     arm_id: str
     runner_face: str
     unit: str
@@ -397,6 +451,7 @@ class RunPlan:
     sample_index: int = 0
     sample_count: int = 1
     budget_each: float | None = None
+    seed: int = 0
 
 
 def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
@@ -425,14 +480,22 @@ def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
         budget_each = (float(sampling["budget_each"])
                        if sampling else None)
         # the accumulating scope binds store-bearing arms only: a cc
-        # arm never reads the store, so its cells stay independent
-        mode = store_mode if arm["store"] in ("cold", "warm") \
-            else "per-run"
+        # arm never reads the store, so its cells stay independent.
+        # A SAMPLED store-bearing cell forces per-run, whatever the
+        # registry says: the rounds are the independent workspaces the
+        # paired comparison reads — a shared per-arm store would leak
+        # earlier rounds' rows into later rounds and break the very
+        # comparability the multi-round face exists for
+        mode = ("per-run" if samples > 1
+                else store_mode if arm["store"] in ("cold", "warm")
+                else "per-run")
         for unit in units:
             base = Path(out) / arm["id"] / unit["id"]
-            # the B2 expansion: one registry arm becomes N child runs
-            # per unit, each its own sample dir, each capped at
-            # budget_each so the arm's total equals the matrix budget
+            # the multi-round expansion: one registry arm becomes N
+            # independent rounds per unit, each its own round dir
+            # s0..s{N-1}, each capped at budget_each so the arm's total
+            # equals the matrix budget, each riding the FROZEN
+            # (unit, round) seed (round index == sample index)
             for k in range(samples):
                 plans.append(RunPlan(
                     arm_id=arm["id"],
@@ -447,7 +510,8 @@ def plan_runs(doc: dict, out: Path, *, arms_filter: list[str] | None,
                     store_mode=mode,
                     sample_index=k,
                     sample_count=samples,
-                    budget_each=budget_each))
+                    budget_each=budget_each,
+                    seed=_round_seed(unit["id"], k)))
     return plans
 
 
@@ -491,6 +555,12 @@ def child_env(plan: RunPlan, base: dict | None = None, *,
         env.pop(EVAL_ROOT_ENV, None)
     for key, value in plan.env_extra:
         env[key] = value
+    # the FROZEN (unit, round) seed anchor — set AFTER the arm's env
+    # merge so no declared value can override the pairing contract;
+    # already stripped from the inherited env above (hermeticity). The
+    # child session inherits it and q_cells.q_cells_seed_state mixes
+    # it into the seed hash (absent = byte-identical production face)
+    env[ROUND_SEED_ENV] = str(plan.seed)
     return env
 
 
@@ -594,6 +664,7 @@ def materialize_store(plan: RunPlan, warm_source: Path | None) -> Path:
 def _run_row(plan: RunPlan, status: str, **extra) -> dict:
     row = {"arm": plan.arm_id, "unit": plan.unit, "tier": plan.tier,
            "corpus": plan.corpus, "status": status,
+           "seed": plan.seed,
            "run_dir": str(plan.run_dir)}
     if plan.store_mode != "per-run":
         row["store_mode"] = plan.store_mode
@@ -902,6 +973,19 @@ def main(argv: list[str] | None = None) -> int:
     runs = progress["runs"]
     refused = sum(1 for r in runs if r["status"] in ("refused",
                                                      "unresolvable"))
+    if args.dry_run:
+        # the dry-run face: one line per run (a multi-round arm's N
+        # rounds EACH get their own line — the M3 validation surface),
+        # named by its run-dir suffix and its frozen seed
+        for r in runs:
+            rel = str(Path(r["run_dir"]).relative_to(out))
+            line = f"  {rel} {r['status']}"
+            if "sample" in r:
+                line += (f" (round {r['sample'] + 1}/{r['sample_count']}, "
+                         f"seed={r['seed']})")
+            if r.get("detail"):
+                line += f" | {r['detail']}"
+            print(line)
     print(f"PROGRESS {out / 'progress.json'} "
           f"({len(runs)} runs: "
           f"{sum(1 for r in runs if r['status'] == 'planned')} planned, "

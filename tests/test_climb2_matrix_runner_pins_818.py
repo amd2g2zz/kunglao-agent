@@ -75,9 +75,6 @@ class TestArmValidation:
             _arm("x", face="loop", store="none"),         # loop needs store
             _arm("x", face="loop", store="none",
                  env={"A": 1}),                           # env not str->str
-            _arm("x", face="loop", store="warm",
-                 sampling={"mode": "multi-sample", "samples": 2,
-                           "budget_each": 1.0}),          # loop + sampling
             "not-a-mapping",
         ]
         for bad in faults:
