@@ -18,7 +18,14 @@ devkit/
 ├── pass_rate_metric.py       ← CI metric 提取
 ├── install_git_hooks.py      ← 把 githooks/ 部署到 .git/hooks/
 ├── chain_acceptance.py       ← #1079 链状态读侧校验器(closeout accepted 必带 merge_sha;触发点=下一链启动与每段「接」,非常驻)
-├── githooks/                 ← hook 模板(原样,带 __KUNGLAO_DEVKIT_ROOT__ 占位符)
+├── gc/                       ← 产物生命周期回收器(dev-only;四个 leg + _common.py + config.yaml,报告级默认)
+│   ├── config.yaml           ← 见证集与阈值(liveness_surfaces=派遣面,declaration_surfaces=登记面)
+│   ├── code_gc.py            ← 代码腐化扫描(模块级活性 + 符号级保活,ruff/GitNexus 作第三观察者)
+│   ├── spec_gc.py            ← openspec 变更生命周期
+│   ├── test_gc.py            ← 测试生命周期(隔离区 + 过期回收)
+│   ├── worktree_gc.py        ← 工作树生命周期
+│   └── _common.py            ← 共享配置/注册表/日期助手
+├── githooks/                 ← hook 模板(devkit 根路径由 __KUNGLAO_DEVKIT_ROOT__ 占位符或安装期 `# devkit-installed:` 标记解析,模板里不许硬编码路径)
 │   └── pre-commit
 ├── docs/                     ← devkit 自己的文档
 │   ├── README.md
@@ -37,7 +44,7 @@ devkit/
 | 质量门 runner (`quality_gates.py`) | 产品 CLI (`kunglao.py`) |
 | CI metric 提取 (`pass_rate_metric.py`) | 产品 toolchain (`toolchain.py`) |
 | Git hook 部署 (`install_git_hooks.py`) | 业务逻辑 (`init_state.py`) |
-| Mutation testing 助手 (Phase 2) | 任何被产品 import 的模块 |
+| 产物回收器 (`gc/` — spec/test/worktree/code 四腿,报告级默认) | 任何被产品 import 的模块 |
 | Fault injection fixtures (Phase 2) | |
 
 ## 为什么独立目录
@@ -112,6 +119,10 @@ uv run python devkit/quality_gates.py 1 2
 # 静默
 uv run python devkit/quality_gates.py --quiet
 
+# gc  legs(报告级,只出候选,不改仓库)
+uv run python devkit/gc/code_gc.py scan
+uv run python devkit/gc/spec_gc.py scan
+
 # devkit 自己的测试
 uv run python -m pytest tests/test_devkit_*.py
 ```
@@ -120,9 +131,18 @@ uv run python -m pytest tests/test_devkit_*.py
 
 - devkit/ 永远**不会被** `release-manifest.yaml` `assets:` 收编(它是 dev-only)
 - devkit/ 永远**不会被** `scripts/README.md` 列在产品脚本清单里
-- devkit/ 里的脚本**必须** 跨平台 Python;新增代码评审时这是 P0
-- devkit/githooks/ 里的 hook 模板**必须** 含 `__KUNGLAO_DEVKIT_ROOT__` 占位符
-  (不允许 hardcode 路径 — installer 才会 stamp)
+- devkit/ 里的脚本**必须** 跨平台 Python;新增代码评审时这是 P0。
+  Gate 7 sub-check (f) 机器化其中没人守的两轴:`devkit/**` 脚本面里的
+  POSIX 机器路径字面量(`/Users/`、`/home/`),以及 Python 里的 POSIX-only 写法
+  (`/tmp/` 字面量、`fcntl`/`flock`/`os.fork`)。docstring、注释与 `#!` 是散文,豁免
+  (解释转义写法不是缺陷)。
+- 盘符形绝对路径**不归 (f) 管**,已有更宽的门守着:`tests/test_hardcode_purge.py`
+  全跟踪树扫 Windows 用户路径,`tests/test_no_absolute_paths.py` 扫 `tests/**.py`
+  的盘符形。这里不重造一个更弱的副本。
+- devkit/githooks/ 里的 hook 模板**必须** 通过 `__KUNGLAO_DEVKIT_ROOT__` 占位符或
+  installer 追加的 `# devkit-installed:` 标记解析自己的 devkit 根(模板里不允许
+  hardcode 路径)。这条由 installer 契约与 `tests/test_devkit_install_git_hooks.py`
+  钉住,(f) 不复述——散文里提一下标记串就能过的检查守不住任何东西。
 
 ## 调试与日志分析工具优先级
 
