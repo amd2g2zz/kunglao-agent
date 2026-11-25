@@ -731,7 +731,7 @@ files:
   - src: scripts/intelligent_scheduling.py
     dest: .claude/scripts/intelligent_scheduling.py
     kind: scaffold
-    sha256: 781a3a38242b9941566b62a16f99452536da9e684b751bb6fe0e764268d99c4a
+    sha256: 2b0a128bbfa8abed15cb821d17107db69403c2b887532da00b400fbe47fda25f
   - src: scripts/invocation_hygiene_lint.py
     dest: .claude/scripts/invocation_hygiene_lint.py
     kind: scaffold
@@ -851,7 +851,7 @@ files:
   - src: scripts/loop_scheduler.py
     dest: .claude/scripts/loop_scheduler.py
     kind: scaffold
-    sha256: 03f14ac4d35267eb8392ec4ceaba029bb37a04e20960c078127e23774e4b729d
+    sha256: a802e2c874179e969ec6dbceea432db5ce3e20cef6f132ad2e5cc6c28ed11d72
   - src: scripts/loop_state.py
     dest: .claude/scripts/loop_state.py
     kind: scaffold
@@ -1143,7 +1143,7 @@ files:
   - src: scripts/scheduler_events.py
     dest: .claude/scripts/scheduler_events.py
     kind: scaffold
-    sha256: 5a5bdbd50df4ce0fcf82f8754234c614399f38ab543d6fee2b99b3900a39cc63
+    sha256: db51b3e43928a3e6f21f8b1bf8b436af450e004fbbb7a1fe473e26833dc5ebc5
   - src: scripts/scheduler_watch.py
     dest: .claude/scripts/scheduler_watch.py
     kind: scaffold
@@ -1727,7 +1727,7 @@ files:
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
-    sha256: 0ebf0b76a4dbc08b096a0390a0a9e5b9b34f4ce868e571a415c2e90013e9398f
+    sha256: f1fd37c059ae899275d9ea3d5b103b614a55b2c2a5191488c88a0d3be283bd1e
   - src: scripts/method_families.yaml
     dest: .claude/scripts/method_families.yaml
     kind: scaffold
