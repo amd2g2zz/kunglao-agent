@@ -87,3 +87,24 @@
 - Known environment-blocked (fails on the CLEAN tree too, offline z3 wheel
   cache miss): `test_upgrade_016_sweep.py::test_hook_wiring_runs_in_framework_env`
   — CI owns it.
+
+## 7. S21 — the wake decision wiring
+
+- [x] Premise re-verified on this tree: `intelligent_scheduling` had no
+      runtime caller (grep hits: README / registry comments / its own
+      module) — the seat #685 recorded, nothing applied.
+- [x] RED first: `tests/test_wake_decision_wiring_1086.py` — 12 failed
+      / 1 passed (the quiet pin, correctly green) before the wiring;
+      RED output in the S21 s1 handoff.
+- [x] `scripts/heartbeat_wake_gate.py`: the WAKE branch consults
+      `intelligent_scheduling.decide` via `_real_wake_decision` (lazy
+      import; `decide`/`decision_rng` seams; `--decision-seed` CLI face
+      for deterministic replay), records the decision block on the
+      receipt, and a drawn `none` injects nothing (recorded, rc 3).
+- [x] `scripts/intelligent_scheduling.py`: `probability_source` added to
+      the record + signal row (selection_law_exact / unknown — the
+      dispatch vocabulary; deterministic faces never impersonate a law).
+- [x] GREEN: 13 passed; the four draw-sensitive S18 pins pinned with
+      fixed rng / `--decision-seed 0`.
+- [x] `quiet_day_replay.py` re-run after the change: three pins PASS
+      (output in the S21 s1 handoff).
