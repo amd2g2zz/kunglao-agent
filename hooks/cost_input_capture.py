@@ -26,6 +26,12 @@ try:
 # issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
 # the canonical kunglao_log.warn.
     from kunglao_log import warn
+# The session read domain now lives in _common (see the note by
+# WORKER_MEMO_REL). On the except branch it stays unbound and any fold
+# NameErrors into cockpit_ratio's own except — the same degradation an
+# unreachable kunglao_log already causes; never a blocked tool stream.
+    from _common import (SUBAGENT_DIRNAME,  # noqa: F401 (re-export face)
+                         SUBAGENT_GLOB, sidechain_transcripts)
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
         print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
@@ -66,20 +72,12 @@ LEDGER_TAIL_BYTES = 65_536  # the #883 read budget (rank_face pattern)
 # call: re-reading every closed worker transcript per sample (the largest
 # real workspace carries 1.5 GB across 307 files, measured) would price
 # the gauge above what it measures.
-SUBAGENT_DIRNAME = "subagents"
-SUBAGENT_GLOB = "agent-*.jsonl"
+# The read-domain enumeration (SUBAGENT_DIRNAME / SUBAGENT_GLOB /
+# sidechain_transcripts) moved verbatim to scripts/_common.py — the ONE
+# shared source every reader of "which files make up one session" imports
+# (the bench meter included); see the import in the fail-open prologue.
 WORKER_MEMO_REL = Path("runs") / ".cockpit-worker-memo.json"
 WORKER_MEMO_SCHEMA = "cockpit-worker-memo/1"
-
-
-def sidechain_transcripts(transcript_path: str | Path) -> list[Path]:
-    """The session's worker transcripts, beside the main file in the real
-    layout; [] when the session ran no worker or the layout is absent."""
-    p = Path(transcript_path)
-    side = p.parent / p.stem / SUBAGENT_DIRNAME
-    if not side.is_dir():
-        return []
-    return sorted(side.glob(SUBAGENT_GLOB))
 
 
 def _fold_rows(transcript_path: str | Path) -> tuple[int, int]:

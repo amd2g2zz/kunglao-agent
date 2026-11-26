@@ -280,11 +280,11 @@ def transcript_usage(session_cost: dict | None,
 def _grand_total(inp: int | None, out: int | None, cr: int | None,
                  cc: int | None) -> int:
     """The experiment's declared cost unit — ``bench_tokens.py:10`` "all four
-    summed", computed at ``bench_tokens.py:94-95``. Reused here as the SAME
-    arithmetic over each population separately, because
-    ``bench_tokens.collect(transcript)`` reads ONE file and therefore returns
-    only the orchestrator part: a session's denominator is the orchestrator and
-    worker totals ADDED (owner ruling on this slice, item (a))."""
+    summed" — over each population separately, so the split faces stay
+    readable (the owner ruling on this slice: a session's denominator is
+    the orchestrator and worker totals ADDED). The bench meter itself now
+    folds the whole session; with no workers the two faces are pinned
+    equal by test_grand_total_matches_the_bench_meter_without_workers."""
     return sum(int(v or 0) for v in (inp, out, cr, cc))
 
 
