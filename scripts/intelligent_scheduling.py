@@ -28,12 +28,17 @@ the wake decision an ACTION like any dispatch:
 
   recording    runs/.scheduling-decision.json carries the full decision;
                runs/signals.jsonl gains one kind=scheduling row per
-               decision carrying {action, propensity, source, k, selected,
-               null_propensity, budgets, entropy_bits, free_slots}.
-               ``source`` follows the dispatch-action trichotomy: sampled
-               (the sampler chose it) / declared (deterministic, the
-               behavior policy itself) / none (the intervention IS
-               inaction).
+               decision carrying {action, propensity, source,
+               probability_source, k, selected, null_propensity,
+               budgets, entropy_bits, free_slots}. ``source`` follows
+               the dispatch-action trichotomy: sampled (the sampler
+               chose it) / declared (deterministic, the behavior policy
+               itself) / none (the intervention IS inaction).
+               ``probability_source`` follows the dispatch face's
+               provenance vocabulary instead: selection_law_exact when
+               the propensity is read back off the law that made the
+               draw, unknown when no draw backs it (declared, or the
+               k=0 forced null) — never a marginal.
 
   baseline     EVERY decision also logs the null action's own propensity
                at the same decision point (the record's ``null`` block,
@@ -81,6 +86,16 @@ SOURCE_SAMPLED = "sampled"
 SOURCE_DECLARED = "declared"
 SOURCE_NONE = "none"
 PROPENSITY_SOURCES = (SOURCE_SAMPLED, SOURCE_DECLARED, SOURCE_NONE)
+
+#: The probability's provenance, in the DISPATCH face's own vocabulary
+#: (rlvr.policy_compare.ACCEPTED_PROBABILITY_SOURCES): the logged
+#: propensity is either read back off the law that made the draw
+#: (selection_law_exact) or it is backed by no draw at all (unknown — a
+#: declared or forced face is 1.0 by fiat, and off-policy weighting must
+#: refuse it, the same rule that excludes declared dispatch rows). A
+#: trajectory marginal never impersonates a law here.
+PROBABILITY_SOURCE_EXACT = "selection_law_exact"
+PROBABILITY_SOURCE_UNKNOWN = "unknown"
 
 NULL_ACTION = "none"
 DECISION_REL = Path("runs") / ".scheduling-decision.json"
@@ -239,7 +254,10 @@ def decide(ws, *, rng=None, declared_action: str | None = None,
     sampler (deterministic, propensity 1.0); the forced-null case (k = 0,
     no slot room) is the null action at propensity 1.0 — the only legal
     move under the constraint. Every decision logs the null action's own
-    propensity beside the choice (the do-nothing baseline).
+    propensity beside the choice (the do-nothing baseline). The record's
+    ``probability_source`` names the propensity's provenance in the
+    dispatch face's vocabulary: selection_law_exact for a draw, unknown
+    for the deterministic faces (no draw receipt backs their 1.0).
 
     The persisted record (runs/.scheduling-decision.json) and the signal
     row (kind=scheduling) carry the same decision; both writes fail open —
@@ -270,6 +288,16 @@ def decide(ws, *, rng=None, declared_action: str | None = None,
         ordered = gumbel_topk(candidates, k, rng)
         terms = pl_terms(ordered, candidates)
 
+    # the provenance of the logged propensity, in the dispatch face's
+    # vocabulary: only a draw that ran through the selection law reads
+    # selection_law_exact (pl_terms over the same draw — an exact law on
+    # its own information set); a declared or k=0-forced face carries no
+    # draw receipt, so its 1.0 is by fiat and reads unknown
+    if declared_action is not None or k == 0:
+        probability_source = PROBABILITY_SOURCE_UNKNOWN
+    else:
+        probability_source = PROBABILITY_SOURCE_EXACT
+
     def _entry_source(name: str) -> str:
         """Per-action provenance: the null action's intervention IS
         inaction (source none); any other name is declared (deterministic)
@@ -291,6 +319,7 @@ def decide(ws, *, rng=None, declared_action: str | None = None,
         "action": primary,
         "propensity": batch_p,
         "source": _entry_source(primary),
+        "probability_source": probability_source,
         "k": k,
         "k_inputs": {"entropy_bits": h_bits, "free_slots": free,
                      "demand": f_entropy(h_bits)},
@@ -332,6 +361,7 @@ def _log(ws, record: dict) -> None:
         action=record["action"],
         propensity=record["propensity"],
         source=record["source"],
+        probability_source=record["probability_source"],
         k=record["k"],
         selected=[s["action"] for s in record["selected"]],
         null_propensity=record["null"]["propensity"],
