@@ -671,7 +671,7 @@ files:
   tests/test_bench_safety.py:
     r1: 1
   tests/test_bench_tokens.py:
-    r1: 1
+    r1: 3
   tests/test_bindiff.py:
     r1: 2
   tests/test_blind_gate.py:

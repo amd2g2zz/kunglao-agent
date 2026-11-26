@@ -377,7 +377,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `bench_intake.py` | fail-closed manifest gate (sha256/recency/truth-source/outside-repo) + --check-safety 3-check pre-run refusal | tests, bench_runner, COMPLIANCE |
 | `bench_answer_key.py` | per-stratum key schemas, canonical IOC normalization, mechanical matchers, leak-free task-spec PQs | lib(1: bench_grade), tests |
-| `bench_tokens.py` | transcript → token/wall/human-turn receipt (the bench's only metering piece) | lib, tests |
+| `bench_tokens.py` | session (main + subagents/) → token/wall/human-turn receipt (the bench's only metering piece) | lib, tests |
 | `bench_runner.py` | lane runner — deterministic seed plans, locked budget table, terminal done/timeout/crashed receipts | CLI, tests |
 | `bench_grade.py` | zero-LLM L1 scoring + z_self + arm-blind sealed map + 12-case oracle selfcheck | CLI, tests |
 | `bench_redteam.py` | L2 divergent-only arm-blind red-team pipeline (briefs + merge-back) | CLI, tests |

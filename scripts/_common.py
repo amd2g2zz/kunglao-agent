@@ -185,3 +185,33 @@ def _cleanup_tmp(tmp: Path) -> None:
         print(f"[kunglao-agent] atomic-write tmp cleanup failed for "
               f"{tmp.name}: {type(exc).__name__}: {exc}",
               file=sys.stderr)
+
+
+# ---------------------------------------------------- the session read domain
+#: The worker-transcript layout Claude Code writes beside a session's main
+#: transcript: <session-id>/subagents/agent-*.jsonl. THE single source of
+#: "which files make up one session" (moved verbatim from
+#: hooks/cost_input_capture.py — three readers had each decided it
+#: for themselves, and that fork is exactly how each came to measure a
+#: different session).
+SUBAGENT_DIRNAME = "subagents"
+SUBAGENT_GLOB = "agent-*.jsonl"
+
+
+def sidechain_transcripts(transcript_path: str | Path) -> list[Path]:
+    """The session's worker transcripts, beside the main file in the real
+    layout; [] when the session ran no worker or the layout is absent."""
+    p = Path(transcript_path)
+    side = p.parent / p.stem / SUBAGENT_DIRNAME
+    if not side.is_dir():
+        return []
+    return sorted(side.glob(SUBAGENT_GLOB))
+
+
+def session_transcript_files(transcript_path: str | Path) -> list[Path]:
+    """THE canonical session read domain and fold ORDER: the main
+    transcript first, then its worker transcripts sorted by name. The
+    order is what makes an in-order token sum deterministic;
+    a session that ran no worker is the main file alone, so every
+    single-file receipt of the old meter is unchanged."""
+    return [Path(transcript_path)] + sidechain_transcripts(transcript_path)
