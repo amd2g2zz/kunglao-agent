@@ -140,7 +140,7 @@ files:
   scripts/heartbeat_loop_prompt.py: 17
   scripts/heartbeat_tick.py: 70
   scripts/heartbeat_touch.py: 10
-  scripts/heartbeat_wake_gate.py: 10
+  scripts/heartbeat_wake_gate.py: 13
   scripts/hook_activation.py: 137
   scripts/hook_exit_codes.py: 10
   scripts/hooks_selfcheck.py: 62

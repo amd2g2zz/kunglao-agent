@@ -214,7 +214,7 @@ files:
   scripts/heartbeat_touch.py:
     r1: 9
   scripts/heartbeat_wake_gate.py:
-    r1: 7
+    r1: 9
   scripts/hook_activation.py:
     r1: 82
   scripts/hook_exit_codes.py:
@@ -1979,6 +1979,8 @@ files:
     r1: 2
   tests/test_wait_dispose_244.py:
     r1: 1
+  tests/test_wake_decision_wiring_1086.py:
+    r1: 3
   tests/test_wake_gate_wiring_1086.py:
     r1: 3
   tests/test_warn_delegation_863f.py:
