@@ -23,7 +23,7 @@ files:
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
-    sha256: 97c2725025e2cbb3ece745dae4389dcae38bd32191c0d2e4efd9d533d3fc2030
+    sha256: a67bf807f269f5e9fa294d29304ed9f66df071cc652d91fe10cfc8b696878256
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
@@ -163,7 +163,7 @@ files:
   - src: scripts/_common.py
     dest: .claude/scripts/_common.py
     kind: scaffold
-    sha256: e3053de8e3a737993484a83eb03a6509e1b098edc4b8bf68880c8ac51d8a3d84
+    sha256: fd20daf9b1ac2f10587f62040cc324bbc8caba07e343133eab5ee45dbc853a92
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
@@ -255,7 +255,7 @@ files:
   - src: scripts/bench_tokens.py
     dest: .claude/scripts/bench_tokens.py
     kind: scaffold
-    sha256: 844a10fee89f70915154addfaa8b8bf5513ed895c302fe0bea82a058e102b80c
+    sha256: 184ac892e3703ea800e541715f020d38e3c0db2dddeae69b88f804d58e315151
   - src: scripts/blind_gate.py
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
@@ -283,7 +283,7 @@ files:
   - src: scripts/capability_report.py
     dest: .claude/scripts/capability_report.py
     kind: scaffold
-    sha256: 9a67498d6c5b390f673791eee2a64777971a1c151bfa637f705fb40ae71dbfde
+    sha256: 43ed26bd0d878d20b65bf71cfd9208a690ac2b6acfa5ee406df4e6a46fea31c9
   - src: scripts/carrier_consistency.py
     dest: .claude/scripts/carrier_consistency.py
     kind: scaffold
@@ -1723,7 +1723,7 @@ files:
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: 498f64579f633e96a4db0c87489b4b1dea37b07599fa1f13c5c8e796a44b5019
+    sha256: d9c4469f73b3d644cd36cde54ab5845b1560a200fd05e25bc147b584041c644f
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold
