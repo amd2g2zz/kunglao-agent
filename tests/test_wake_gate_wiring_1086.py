@@ -156,10 +156,14 @@ class TestVerdictActions:
         assert not staged.exists(), "a quiet verdict staged a prompt"
 
     def test_wake_injects_the_loop_prompt_exactly_once(self, tmp_path):
+        import random
         import heartbeat_wake_gate as wgw
         import heartbeat_loop_prompt as hlp
         deliver = _Recorder()
-        out = wgw.wake_pass(tmp_path, runner=WAKE_GATE, deliver=deliver)
+        # seed 0 draws close_loop under the flat priors — a fixed rng so
+        # the exactly-once pin never flakes on a `none` draw (S21)
+        out = wgw.wake_pass(tmp_path, runner=WAKE_GATE, deliver=deliver,
+                            decision_rng=random.Random(0))
         assert out["outcome"] == "wake"
         assert out["injected"] is True
         assert out["rc"] == 3, "the wrapper propagates the gate's wake rc"
@@ -200,10 +204,12 @@ class TestVerdictActions:
         assert "WAKE-GATE" in capsys.readouterr().err
 
     def test_gate_spawn_failure_is_loud_never_quiet(self, tmp_path, capsys):
+        import random
         import heartbeat_wake_gate as wgw
         def _boom(prompt, ws, *, claude_bin="claude"):
             raise OSError("claude: command not found")
-        out = wgw.wake_pass(tmp_path, runner=WAKE_GATE, deliver=_boom)
+        out = wgw.wake_pass(tmp_path, runner=WAKE_GATE, deliver=_boom,
+                            decision_rng=random.Random(0))
         assert out["outcome"] == "fault"
         assert out["rc"] == 1
         assert "WAKE-GATE" in capsys.readouterr().err
@@ -221,6 +227,7 @@ class TestVerdictActions:
     def test_alive_session_is_not_duplicate_spawned(self, tmp_path):
         """A live session owns the wake: the wrapper stages the prompt but
         never starts a SECOND orchestrator on the same workspace."""
+        import random
         import heartbeat_wake_gate as wgw
         ws = tmp_path / "ws"
         (ws / "runs").mkdir(parents=True)
@@ -229,7 +236,8 @@ class TestVerdictActions:
             "last_tick_ts": _iso(now - timedelta(minutes=1)),
             "activity_ts": _iso(now - timedelta(minutes=1))}), encoding="utf-8")
         deliver = _Recorder()
-        out = wgw.wake_pass(ws, runner=WAKE_GATE, deliver=deliver)
+        out = wgw.wake_pass(ws, runner=WAKE_GATE, deliver=deliver,
+                            decision_rng=random.Random(0))
         assert out["outcome"] == "wake"
         assert deliver.calls == [], "a live session was duplicate-spawned"
         assert (ws / "runs" / ".wake-gate-prompt.txt").exists(), (
@@ -378,7 +386,7 @@ class TestProductionPath:
         stale = _iso(_now() - timedelta(hours=2))
         (ws / "runs" / ".heartbeat.json").write_text(
             json.dumps({"last_tick_ts": stale}), encoding="utf-8")
-        r = _run_cli(ws, "--wake-gate", "--dry-run")
+        r = _run_cli(ws, "--wake-gate", "--dry-run", "--decision-seed", "0")
         assert r.returncode == 3, (
             f"a wake must propagate rc 3: {r.stdout[-300:]} {r.stderr[-300:]}")
         staged = ws / "runs" / ".wake-gate-prompt.txt"

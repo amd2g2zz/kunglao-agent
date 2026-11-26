@@ -37,24 +37,37 @@ chain SHALL be zero model turns.
 ### Requirement: A wake verdict injects the loop prompt exactly once
 
 On a gate verdict of wake (rc 3 with the `WAKE:` marker), the wrapper SHALL
-deliver the loop prompt exactly once per pass: the payload SHALL be the
+first draw the wake action through the decision seat
+(`intelligent_scheduling.decide`; the wake-decision-wiring delta owns that
+contract), then — unless the draw is the null action `none` — deliver the
+loop prompt exactly once per pass: the payload SHALL be the
 emitter's own body (`heartbeat_loop_prompt.build_prompt`), staged at
 `runs/.wake-gate-prompt.txt`; a session SHALL be started only when no live
 session owns the wake (the #39 dead-session predicate), reusing the external
 kicker's delivery command; when a session is alive the staged prompt IS the
-delivery and no second orchestrator is started. The pass SHALL exit 3.
+delivery and no second orchestrator is started. The pass SHALL exit 3 in
+both cases (a drawn `none` keeps the gate's verdict rc with nothing
+injected — the recorded zero-cost veto).
 
 #### Scenario: Wake with no live session
 
-- **WHEN** the gate returns rc 3 and no session is alive
+- **WHEN** the gate returns rc 3, no session is alive, and the drawn
+  action is not `none`
 - **THEN** the prompt is staged and delivered out-of-session exactly once,
   and the wrapper exits 3
 
 #### Scenario: Wake with a live session
 
-- **WHEN** the gate returns rc 3 and a session is alive
+- **WHEN** the gate returns rc 3, a session is alive, and the drawn
+  action is not `none`
 - **THEN** the prompt is staged, no second session is started, and the
   receipt records the staged delivery
+
+#### Scenario: Wake suppressed by a drawn none
+
+- **WHEN** the gate returns rc 3 and the drawn action is `none`
+- **THEN** nothing is staged or delivered, the receipt records the none
+  decision with `injected: false`, and the wrapper exits 3
 
 ### Requirement: A wrapper fault is loud and never a quiet
 
@@ -102,3 +115,4 @@ WAKE-branch discipline SHALL remain unchanged.
 - **THEN** the idle-fault rule appears scoped to a woken tick, the QUIET
   carve-out is stated in the same section, and the idle-fault wording itself
   is preserved verbatim
+

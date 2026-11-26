@@ -651,7 +651,7 @@ files:
   - src: scripts/heartbeat_wake_gate.py
     dest: .claude/scripts/heartbeat_wake_gate.py
     kind: scaffold
-    sha256: 20a3181c8cf6c4955b0df6d2c82cfef834e13cca9549e6682a6e93c6f5532145
+    sha256: aaba18d79705f4cca4978653632acf81f9a2972016e9654a46a829ccfb6671d6
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
@@ -731,7 +731,7 @@ files:
   - src: scripts/intelligent_scheduling.py
     dest: .claude/scripts/intelligent_scheduling.py
     kind: scaffold
-    sha256: 2b0a128bbfa8abed15cb821d17107db69403c2b887532da00b400fbe47fda25f
+    sha256: 889665ec76e37a78aacd8355339ff0993d22520061019995ddf7c1f195b387b1
   - src: scripts/invocation_hygiene_lint.py
     dest: .claude/scripts/invocation_hygiene_lint.py
     kind: scaffold
@@ -1719,11 +1719,11 @@ files:
   - src: scripts/formal_code_baseline.yaml
     dest: .claude/scripts/formal_code_baseline.yaml
     kind: scaffold
-    sha256: c74a332bff21609ab3f5778632746794e2601dea926c4f1267670af28ee4da8f
+    sha256: 97ba88f5bf221a377722e8d744e3365af2cadd95a9cac849bda02e36bd057675
   - src: scripts/hygiene_baseline.yaml
     dest: .claude/scripts/hygiene_baseline.yaml
     kind: scaffold
-    sha256: d9c4469f73b3d644cd36cde54ab5845b1560a200fd05e25bc147b584041c644f
+    sha256: 95065b537c7e6c2c135b1740ab0f04bfbf717bd600f50ba58617067dcde94c9a
   - src: scripts/mechanisms.yaml
     dest: .claude/scripts/mechanisms.yaml
     kind: scaffold

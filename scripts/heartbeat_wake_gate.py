@@ -16,7 +16,12 @@ This module is the thing the OS scheduler runs:
     cron -> heartbeat_wake_gate.py <ws> --wake-gate        [zero LLM]
               |- heartbeat_tick.py <ws> --origin cron --wake-gate --zero-llm
               |- rc 0 QUIET -> inject nothing, end   (quiet = zero model turns)
-              |- rc 3 WAKE  -> inject the loop prompt EXACTLY ONCE
+              |- rc 3 WAKE  -> draw the wake action (intelligent_scheduling:
+              |                ONE recorded scheduling decision with its
+              |                exact propensity), then inject the loop
+              |                prompt EXACTLY ONCE — unless the draw is
+              |                `none`, the legal zero-cost no-wake
+              |                (recorded, nothing injected)
               |- rc 2 STOP  -> the #634 idle circuit breaker: MANDATORY stop,
               |                never inject, propagate rc 2
               `- fault      -> LOUD: stderr banner + rc 1, and fail toward
@@ -24,6 +29,16 @@ This module is the thing the OS scheduler runs:
                               look). A fault is NEVER reported as QUIET —
                               silence here means the system never wakes,
                               which is worse than waking once too often.
+
+Two layers with different jobs, never blended (#1086 S21): the GATE
+answers "is there work to look at" (rc 0/3/2), the decision seat answers
+"is a wake owed for it". The seat runs ONLY on a true WAKE verdict — a
+QUIET verdict never draws again (pure overhead after the gate already
+judged no wake), a STOP is the breaker's mandate (not a scheduling
+action), and a gate FAULT injects unconditionally: a seat that could
+veto a fault-wake would recreate the never-wakes failure this wrapper
+exists to refuse. A broken seat fails toward waking the same way (loud,
+inject anyway).
 
 Delivery reuses the faces that already own it: the prompt body comes from the
 emitter (heartbeat_loop_prompt.build_prompt — never a re-embedded copy, #598)
@@ -42,10 +57,14 @@ only (the kicker's D5 precedent — nothing here installs a cron):
 Usage:
     python scripts/heartbeat_wake_gate.py <ws> --wake-gate [--interval-min 5]
         [--claude-bin claude] [--dry-run] [--gate-timeout 240]
+        [--decision-seed N]
 
 Exit codes (the wrapper propagates the gate's verdict rc):
     0  QUIET — nothing injected (zero LLM, zero prompt bytes)
-    3  WAKE  — the loop prompt was injected exactly once
+    3  WAKE  — the gate voted wake; the loop prompt was injected exactly
+               once, or the scheduling action drew `none` and nothing was
+               injected (the recorded zero-cost veto — see the receipt's
+               decision block)
     2  STOP  — the tick's idle circuit breaker tripped (#634, mandatory)
     1  FAULT — gate crash / unexpected rc / verdict marker mismatch /
                delivery failure; loud on stderr, never a silent QUIET
@@ -58,6 +77,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -317,6 +337,21 @@ def inject(ws, *, reasons=(), prompt: str | None = None, deliver=None,
     return record
 
 
+# ---------------------------------------------------------------------------
+# the wake decision seat (#1086 S21 — the seat's first runtime caller)
+# ---------------------------------------------------------------------------
+
+def _real_wake_decision(ws, *, rng=None, now=None):
+    """One draw from the scheduling five via intelligent_scheduling.decide
+    — the recorded action layer #685 built and nothing ever applied. The
+    SEAT owns its own recording (runs/.scheduling-decision.json + one
+    kind=scheduling signal row carrying the exact propensity and its
+    probability_source); this face is only the call. Import stays lazy so
+    the QUIET path never pays it."""
+    import intelligent_scheduling
+    return intelligent_scheduling.decide(ws, rng=rng, now=now)
+
+
 def _write_receipt(ws, receipt: dict) -> None:
     try:
         p = Path(ws) / RECEIPT_REL
@@ -334,9 +369,13 @@ def wake_pass(ws, *, runner=None, deliver=None,
               claude_bin: str = "claude", dry_run: bool = False,
               interval_min: int = DEFAULT_INTERVAL_MIN,
               timeout_s: int = DEFAULT_GATE_TIMEOUT_S,
-              now: datetime | None = None) -> dict:
+              now: datetime | None = None,
+              decide=None, decision_rng=None) -> dict:
     """One wrapper pass: run the gate, then honor the verdict. Returns the
-    receipt dict with "outcome", "rc", "injected" and the delivery record."""
+    receipt dict with "outcome", "rc", "injected", the delivery record,
+    and — on a wake verdict — the "decision" block summarizing the seat's
+    draw. ``decide`` is the seat seam (tests); ``decision_rng`` pins the
+    draw for deterministic replay."""
     ws = Path(ws)
     gate = run_gate(ws, runner=runner, python_exe=python_exe,
                     timeout_s=timeout_s)
@@ -348,14 +387,46 @@ def wake_pass(ws, *, runner=None, deliver=None,
                "reasons": verdict["reasons"], "gate_rc": gate.get("rc"),
                "injected": False, "dry_run": dry_run}
     if outcome == "quiet":
-        # the honest idle: zero output, zero bytes staged, no receipt
+        # the honest idle: zero output, zero bytes staged, no receipt —
+        # and no decision draw either (the gate already judged no wake;
+        # sampling the seat again here is pure overhead)
         return {**receipt, "rc": rc}
     if outcome == "stop":
         _loud(ws, "the tick's idle circuit breaker tripped (gate rc 2) — "
                   "MANDATORY stop, nothing injected (#634)")
         _write_receipt(ws, receipt)
         return {**receipt, "rc": rc}
-    # wake, or fault failing toward waking: the session gets the prompt
+    if outcome == "wake":
+        # the two layers, in order: the gate said there is work to look
+        # at; the seat says whether a wake is OWED for it. STOP and gate
+        # FAULT never reach here — a mandated stop is not a scheduling
+        # action, and a fault-wake must not be vetoable (never-wakes).
+        seat = decide if decide is not None else _real_wake_decision
+        try:
+            decision = seat(ws, rng=decision_rng, now=now)
+        except Exception as exc:  # noqa: BLE001 — loud, fail toward waking
+            _loud(ws, f"the wake decision seat failed "
+                      f"({type(exc).__name__}: {exc}) — injecting anyway")
+            receipt["decision"] = {"fault": f"{type(exc).__name__}: {exc}"}
+        else:
+            receipt["decision"] = {
+                "action": decision.get("action"),
+                "propensity": decision.get("propensity"),
+                "source": decision.get("source"),
+                "k": decision.get("k"),
+                "probability_source": decision.get("probability_source"),
+            }
+            if decision.get("action") == "none":
+                # intelligent_scheduling.NULL_ACTION — the legal zero-cost
+                # result: the gate said wake, the action layer said no
+                # wake is owed. Not a fault: the decision is recorded,
+                # nothing is injected, the gate's verdict rc stands.
+                print(f"wake-gate: WAKE — the scheduling action drew none "
+                      f"(p={decision.get('propensity')}); nothing injected")
+                _write_receipt(ws, receipt)
+                return {**receipt, "rc": rc}
+    # wake with an acting draw, a broken seat, or fault failing toward
+    # waking: the session gets the prompt
     try:
         delivery = inject(ws, reasons=verdict["reasons"], deliver=deliver,
                           claude_bin=claude_bin, dry_run=dry_run, now=now,
@@ -374,8 +445,9 @@ def wake_pass(ws, *, runner=None, deliver=None,
         _loud(ws, "gate fault — failing toward waking so a broken gate "
                   f"cannot sleep the system forever: {'; '.join(verdict['reasons'])}")
     else:
-        print(f"wake-gate: WAKE — injected the loop prompt "
-              f"(delivered={delivery.get('delivered')}, "
+        action = (receipt.get("decision") or {}).get("action")
+        print(f"wake-gate: WAKE — scheduling action {action}, injected the "
+              f"loop prompt (delivered={delivery.get('delivered')}, "
               f"prompt={delivery.get('prompt_file')})")
     _write_receipt(ws, receipt)
     return {**receipt, "rc": rc}
@@ -409,6 +481,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gate-timeout", type=int,
                         default=DEFAULT_GATE_TIMEOUT_S,
                         help="gate subprocess timeout in seconds")
+    parser.add_argument("--decision-seed", type=int, default=None,
+                        help="pin the wake decision's rng for deterministic "
+                             "replay (tests and inspection — the emitted "
+                             "registration lines never carry it; production "
+                             "draws OS entropy)")
     parser.add_argument("--print-registration", action="store_true",
                         help="emit the crontab/schtasks registration lines "
                              "(strings only) and exit")
@@ -436,7 +513,9 @@ def main(argv: list[str] | None = None) -> int:
     receipt = wake_pass(
         parsed.workspace, python_exe=None, claude_bin=parsed.claude_bin,
         dry_run=parsed.dry_run, interval_min=parsed.interval_min,
-        timeout_s=parsed.gate_timeout)
+        timeout_s=parsed.gate_timeout,
+        decision_rng=(random.Random(parsed.decision_seed)
+                      if parsed.decision_seed is not None else None))
     return receipt["rc"]
 
 
