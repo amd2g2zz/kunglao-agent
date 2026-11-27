@@ -153,7 +153,12 @@ REARM_ADVICE = (
     "writes nothing):\n"
     "  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --wire-up\n"
     "  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n"
-    "  CronCreate */5 * * * * (heartbeat_loop_prompt.py output) — accept it "
+    "  register the wake GATE: uv run --project <skill> "
+    "<skill>/scripts/heartbeat_wake_gate.py <ws> --print-registration,\n"
+    "  install that OS-cron line (--wake-gate: QUIET injects nothing, WAKE "
+    "injects the /loop prompt — #1086),\n"
+    "  and keep the durable /loop watchdog: CronCreate */5 * * * * "
+    "(heartbeat_loop_prompt.py output) — accept it "
     "with heartbeat_loop_prompt.py --verify"
 )
 

@@ -362,10 +362,19 @@ def test_rollback_survives_missing_git_binary(up, tmp_path, capsys):
 # 3. version-consistency gate
 # --------------------------------------------------------------------------
 
-def _run_cli(script: Path, *args: str) -> subprocess.CompletedProcess:
+def _run_cli(script: Path, *args: str,
+             home: str | None = None) -> subprocess.CompletedProcess:
+    """Optionally isolate HOME: the init flow provisions the learning key
+    under HOME — no test may ever create or arm the host's real key."""
+    env = None
+    if home is not None:
+        import os
+        env = dict(os.environ)
+        env["HOME"] = home
+        env["USERPROFILE"] = home
     return subprocess.run(
         [sys.executable, str(script), *args], cwd=str(REPO),
-        capture_output=True, text=True, encoding="utf-8",
+        env=env, capture_output=True, text=True, encoding="utf-8",
         errors="replace", timeout=180)
 
 
@@ -426,14 +435,16 @@ def test_exit_version_mismatch_registered_distinct():
 
 def test_init_resume_refuses_mismatched_stamp(tmp_path):
     ws = synth_ws(tmp_path, stamp=OLDER, tag="initws")
-    proc = _run_cli(SCRIPTS / "kunglao-init.py", str(ws))
+    proc = _run_cli(SCRIPTS / "kunglao-init.py", str(ws),
+                    home=str(tmp_path / "init-home"))
     assert proc.returncode == 9, f"{proc.stdout}{proc.stderr}"
     assert "upgrade" in (proc.stdout + proc.stderr).lower()
 
 
 def test_init_resume_proceeds_on_exact_match(tmp_path):
     ws = synth_ws(tmp_path, stamp=CUR, tag="initcur")
-    proc = _run_cli(SCRIPTS / "kunglao-init.py", str(ws))
+    proc = _run_cli(SCRIPTS / "kunglao-init.py", str(ws),
+                    home=str(tmp_path / "init-home"))
     assert proc.returncode != 9, f"{proc.stdout}{proc.stderr}"
 
 

@@ -44,7 +44,7 @@ from rlvr import strategy_store as store  # noqa: E402
 def _artifact(fid: str, creator: str, *, cited: bool = True) -> dict:
     return {"id": fid, "creator": creator, "status": "PROVEN",
             "verify_status": "passes",
-            "cited_by_deliverable": cited, "answers_question": False,
+            "cited_by_deliverable": cited, "verified_deliverable_use": cited, "answers_question": False,
             "oracle_backed_refutation": False}
 
 
@@ -172,9 +172,6 @@ def test_infra_outcome_not_booked_as_strategy(tmp_path, monkeypatch):
     assert ss.classify_outcome("TIMEOUT") == "censored"
     assert ss.classify_outcome("DISPATCHED") == "strategy"
     assert ss.classify_outcome("FAIL") == "strategy"
-    root = tmp_path / "posterior-store"
-    root.mkdir()
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
     ws_a = tmp_path / "ws-a"
     ws_a.mkdir()
     assert store.append_store_row(
@@ -183,10 +180,17 @@ def test_infra_outcome_not_booked_as_strategy(tmp_path, monkeypatch):
     assert store.append_store_row(
         ws_a, method_family="frida", status="DISPATCHED", credit=1.0,
         outcome_class="strategy")["appended"]
-    row = json.loads(
-        (root / store.STORE_REL).read_text(encoding="utf-8"
-                                           ).splitlines()[0])
+    store_file = ws_a / "runs" / "posterior" / "knowledge-store.jsonl"
+    row = json.loads(store_file.read_text(
+        encoding="utf-8").splitlines()[0])
     assert row["outcome_class"] == "infra"
-    pools = store.warm_pools(tmp_path / "ws-b", ["frida"])
+    # stage ws-a's rows into ws-b's own store under ws-a's id (the
+    # cross-project-off donor shape) so the warm face is measurable
+    ws_b = tmp_path / "ws-b"
+    ws_b.mkdir()
+    store_file.parent.joinpath("knowledge-store.jsonl")
+    (ws_b / "runs" / "posterior").mkdir(parents=True)
+    store_file.rename(ws_b / "runs" / "posterior" / "knowledge-store.jsonl")
+    pools = store.warm_pools(ws_b, ["frida"])
     # only the strategy row books mass; the infra refusal is invisible
     assert pools["frida"].rows == 1

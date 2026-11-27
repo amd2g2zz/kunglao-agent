@@ -1,27 +1,9 @@
 # -*- coding: utf-8 -*-
-"""tests/test_ws2_declared_rides_545.py — WS2 (#545) deliverable 3: the
-declared-family bypass fix. A declared family no longer skips the sampler
-silently: the sampler still runs (the score face — candidates ride the
-receipt), the DECLARED family wins the envelope, and the receipt records
-propensity 1.0 (the declared proposal is π≈1 — correctly re-weighted for
-OPE; policy_compare's `skipped_no_propensity` gap closes).
+"""Declared dispatch receipts and keyed settlement.
 
-The censored-review data (PR #549) showed the practical cost of the
-bypass: 0/50 real transition rows carry a propensity field — every
-dispatch was declared-path, so the DR-OPE record never existed in
-practice.
-
-Pins:
-
-  1. declared dispatch: envelope carries candidates INCLUDING the
-     declared family + propensity 1.0; the transition row banks that
-     propensity (the OPE record completes end-to-end).
-  2. sampler failure on the declared path degrades to the minimal honest
-     receipt (propensity 1.0, the declared family as the sole candidate)
-     — never envelope-less, never a skipped OPE row.
-  3. undeclared dispatch (control): the MC propensity face unchanged.
-  4. the settle face records the store row with the dispatch's arm_key
-     and the banked propensity (the cross-task record is keyed).
+#1033 supersedes the old pi=1 and declaration-injected-candidate assumptions.
+A declared action remains identified, behavior probability stays unknown,
+and an outage never fabricates candidate support. Direct MC is deferred to #1034.
 """
 from __future__ import annotations
 
@@ -86,15 +68,17 @@ def _envelopes(ws) -> list[dict]:
 def test_declared_family_records_propensity_1_and_rides_candidates(
         tmp_path, monkeypatch):
     ws = _ws(tmp_path)
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "store"))
+    from rlvr import priors
+    (ws / "task_spec.yaml").write_text("family: static-replay\n")
+    priors.seed_intake_prior(ws, families=[FAMILY])
     ctx = _ctx(ws, FAMILY)
     request, _handle = checkpoints._launch_dispatch(ctx, "C-004", set())
     assert request.method_family == FAMILY, "the declared family wins"
     env = _envelopes(ws)[-1]
     receipt = env["envelope"]
-    assert receipt["propensity"] == 1.0, \
-        "the declared proposal is deterministic: pi = 1.0 for OPE"
+    assert receipt["propensity"] is None
+    assert receipt["probability_source"] == "unknown"
+    assert receipt["actual_method_family"] == FAMILY
     cands = receipt.get("candidates") or {}
     assert FAMILY in cands, \
         "the declared family enters the candidates with its P_LLM weight"
@@ -110,10 +94,9 @@ def test_declared_family_records_propensity_1_and_rides_candidates(
         set(), {"acts": []})
     trans = [r for r in ir.read_transitions(ws)
              if r.get("dispatch_id") == "C-004"]
-    assert trans and trans[-1].get("propensity") == 1.0, \
-        "the transition row banks the declared propensity (DR-OPE record)"
-    rows = strategy_store.load_rows(ws=None)
-    assert rows and rows[-1]["propensity"] == 1.0
+    assert trans and trans[-1].get("propensity") is None
+    rows = strategy_store.load_rows(ws)
+    assert rows and rows[-1]["propensity"] is None
     assert rows[-1]["arm_key"] == f"{FAMILY}|facts_snapshot|none|1", \
         "the store row is keyed by the dispatch's 4-dim arm_key"
     assert rows[-1]["provenance"]["dispatch_id"] == "C-004"
@@ -121,8 +104,6 @@ def test_declared_family_records_propensity_1_and_rides_candidates(
 
 def test_sampler_failure_still_records_propensity_1(tmp_path, monkeypatch):
     ws = _ws(tmp_path)
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "store"))
     ctx = _ctx(ws, FAMILY)
     monkeypatch.setattr(checkpoints, "_sample_envelope_family",
                         lambda *a, **k: ("", None))
@@ -130,23 +111,26 @@ def test_sampler_failure_still_records_propensity_1(tmp_path, monkeypatch):
     assert request.method_family == FAMILY
     env = _envelopes(ws)[-1]
     receipt = env["envelope"]
-    assert receipt["propensity"] == 1.0, \
-        "even with the sampler down, the OPE record rides (pi = 1.0)"
-    assert FAMILY in (receipt.get("candidates") or {}), \
-        "the minimal honest receipt names the declared candidate"
+    assert receipt["propensity"] is None
+    assert receipt["probability_source"] == "unknown"
+    assert receipt["actual_method_family"] == FAMILY
+    assert receipt.get("sampled_family") is None
+    assert receipt["candidates"] == {}
 
 
-def test_undeclared_path_still_uses_the_mc_propensity(tmp_path, monkeypatch):
+def test_undeclared_path_stamps_the_exact_selection_law(tmp_path, monkeypatch):
     ws = _ws(tmp_path)
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "store"))
+    from rlvr import priors
+    (ws / "task_spec.yaml").write_text("family: static-replay\n")
+    priors.seed_intake_prior(ws, families=[FAMILY])
     ctx = _ctx(ws, "")  # no declaration -> the sampler decides
     request, _handle = checkpoints._launch_dispatch(ctx, "C-004", set())
     assert request.method_family, "the sampler picked a family"
     receipt = _envelopes(ws)[-1]["envelope"]
     assert receipt.get("propensity") is not None
+    assert receipt.get("probability_source") == "selection_law_exact"
     assert not receipt.get("declared"), \
-        "the sampled path keeps its MC propensity, never the forced 1.0"
+        "the sampled path keeps its exact selection-law propensity, never the forced 1.0"
     assert q_cells.JSONLQStore(ws).observations(), \
         "the dispatch row is recorded either way"
 
@@ -156,8 +140,6 @@ def test_settle_unmatched_dispatch_writes_no_store_row(
     """No pending q-cell dispatch row -> no family attribution -> the
     honest gap: no store row, never a fabricated bucket."""
     ws = _ws(tmp_path)
-    store = tmp_path / "store"
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(store))
     ctx = _ctx(ws, "")
     monkeypatch.setattr(checkpoints, "_sample_envelope_family",
                         lambda *a, **k: ("", None))
@@ -167,5 +149,52 @@ def test_settle_unmatched_dispatch_writes_no_store_row(
         llm_faces.ActRecord(claim="C-404", mode="auto", outcome="TIMEOUT",
                             detail={}),
         set(), {"acts": []})
-    assert strategy_store.load_rows(ws=None) == [], \
+    assert strategy_store.load_rows(ws) == [], \
         "unmatched settlements never fabricate store rows"
+
+
+def test_executor_records_adopted_choice_with_a_dispatch_identity(tmp_path, monkeypatch):
+    ws = _ws(tmp_path)
+    ctx = _ctx(ws, "")
+    receipt = {"family": FAMILY, "prior_source": "history",
+               "candidates": {FAMILY: {"weight": 1.0}},
+               "candidate_sources": {FAMILY: ["history"]}}
+    monkeypatch.setattr(checkpoints, "_sample_envelope_family",
+                        lambda ws: (FAMILY, receipt))
+    request, _ = checkpoints._launch_dispatch(ctx, "C-004", set())
+    row = q_cells.dispatch_rows(ws)[-1]
+    assert row["method_source"] == "sampled-adoption"
+    assert row["dispatch_id"] == request.dispatch_id
+    assert ir.current_dispatch_id(ws, "C-004") == request.dispatch_id
+    assert row["propensity"] == 1.0
+    assert row["probability_source"] == "selection_law_exact"
+    assert _envelopes(ws)[-1]["envelope"]["dispatch_id"] == request.dispatch_id
+    checkpoints._land_dispatch(
+        ctx, "C-004", llm_faces.ActRecord(
+            claim="C-004", mode="auto", outcome="DISPATCHED", detail={}),
+        set(), {"acts": []}, attempt_id=request.launch_id,
+        dispatch_id=request.dispatch_id)
+    assert q_cells.banked_mass(ws, request.dispatch_id)[2] == 1
+
+
+def test_executor_rejects_a_revoked_method_before_recording(tmp_path):
+    ws = _ws(tmp_path)
+    (ws / "task_spec.yaml").write_text(
+        "constraints:\n  dynamic_re: forbidden\n", encoding="utf-8")
+    ctx = _ctx(ws, "dynamic-trace")
+    request, _ = checkpoints._launch_dispatch(ctx, "C-004", set())
+    assert request is None
+    assert q_cells.dispatch_rows(ws) == []
+
+
+def test_executor_replaying_a_result_does_not_bank_twice(tmp_path):
+    ws = _ws(tmp_path)
+    request, _ = checkpoints._launch_dispatch(_ctx(ws, FAMILY), "C-004", set())
+    act = llm_faces.ActRecord(
+        claim="C-004", mode="auto", outcome="DISPATCHED", detail={})
+    ctx = _ctx(ws, FAMILY)
+    for _ in range(2):
+        checkpoints._land_dispatch(
+            ctx, act.claim, act, set(), {"acts": []},
+            attempt_id=request.launch_id, dispatch_id=request.dispatch_id)
+    assert q_cells.banked_mass(ws, request.dispatch_id)[2] == 1

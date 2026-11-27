@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -81,6 +82,40 @@ def terminal_claims(ws: Path) -> list[str]:
 
     return [str(c["id"]) for c in _register_claims(ws)
             if str(c.get("status") or "").upper() in TERMINAL]
+
+
+def _terminal_claim_rows(ws: Path) -> list[dict]:
+    """The terminal claim register rows (the settlement set, rows)."""
+    from status_defs import TERMINAL
+
+    return [c for c in _register_claims(ws)
+            if str(c.get("status") or "").upper() in TERMINAL]
+
+
+def _settle_routes(ws: Path, claims: list[dict],
+                   outcomes: dict[str, str]) -> dict[str, tuple]:
+    """cid -> the settlement route (the censoring/pending face) for every
+    terminal claim: the register status, the recorded outcome word and
+    the claim's rule-out evidence, classified by the one pure face
+    (rlvr.scalar.settlement_route). Routed claims settle without moving
+    any Beta/mass; the case-posterior legs skip them (a censored or
+    pending outcome is never an observation)."""
+    from rlvr import scalar as _sc
+
+    arts_by_claim: dict[str, list[dict]] = {}
+    for a in _sc.fact_artifacts(ws):
+        cid = str(a.get("claim_id") or "")
+        if cid:
+            arts_by_claim.setdefault(cid, []).append(a)
+    out: dict[str, tuple] = {}
+    for c in claims:
+        cid = str(c.get("id") or "")
+        route = _sc.settlement_route(
+            str(c.get("status") or ""), outcomes.get(cid, ""),
+            arts_by_claim.get(cid, []))
+        if route is not None:
+            out[cid] = route
+    return out
 
 
 # the credit ladder's own decisive vocabulary: a claim settling under
@@ -258,7 +293,9 @@ def _effective_pair_outcomes(
 def _revoke_derived_rows(ws: Path, claim: str, revoked: list[str]) -> None:
     """The flipped claim's derived discriminants die with the settlement
     they were derived from; the next real settlement re-derives from the
-    corrected truth. Fail-open: a store failure never undoes the flip."""
+    corrected truth. Fail-open: a store failure never undoes the flip
+    (and never raises into it) — the retry channel is the discovery
+    sweep below, which re-attempts while the stale rows still match."""
     try:
         from rlvr import crystallize as _cz  # noqa: PLC0415 — lazy
         removed = _cz.revoke_claim(ws, claim)
@@ -270,77 +307,182 @@ def _revoke_derived_rows(ws: Path, claim: str, revoked: list[str]) -> None:
              f"{claim}: {type(exc).__name__}: {exc}")
 
 
-def reconcile_case_settlements(ws: Path) -> dict:
+def _pending_revoke_claims(ws: Path, claims: list[str]) -> tuple[list[str], list[str]]:
+    """Find owned and ambiguous matches in the same sources used by revoke."""
+    from rlvr import consolidated_ledger as cl, crystallize, strategy_store
+
+    want = set(claims)
+    mine = strategy_store.workspace_id_of(ws)
+    owned, ambiguous = set(), set()
+    if not want:
+        return [], []
+    for path in crystallize.knowledge_paths(ws):
+        for row in cl.iter_jsonl(crystallize.knowledge_lines(path)):
+            if not isinstance(row, dict):
+                continue
+            claim = crystallize.derived_claim(row)
+            if claim not in want:
+                continue
+            identity = row.get("workspace_id")
+            if identity == mine:
+                owned.add(claim)
+            elif (identity == ws.name or not isinstance(identity, str)
+                  or not re.fullmatch(r"[0-9a-f]{12}", identity)):
+                # Legacy basename identities can collide across workspaces.
+                ambiguous.add(claim)
+    return sorted(owned), sorted(ambiguous)
+
+
+def _decisive_status_map(claims: list[dict],
+                         skip: set[str] | None) -> dict[str, bool]:
+    """cid -> the claim's decisive outcome (pass/fail), the censored and
+    pending claims excluded (never an observation)."""
+    out: dict[str, bool] = {}
+    for claim in claims:
+        cid = str(claim.get("id") or "").strip()
+        if cid in (skip or set()):
+            continue
+        status = str(claim.get("status") or "").upper()
+        if status in CASE_PASS_STATUSES:
+            out[cid] = True
+        elif status in CASE_FAIL_STATUSES:
+            out[cid] = False
+    return out
+
+
+def _amend_pair_entries(ws: Path, entries: list[tuple[str, str, bool, bool]],
+                        revoked: list[str]) -> tuple[int, int, list[str]]:
+    """One transaction per entry: append the ``case-amendment/1`` row
+    FIRST, apply the floored ±1 flip to the in-memory posterior only
+    after ``ok``, and save the ledger once when something landed (a
+    failed save raises — loud, never swallowed). A refused row mutates
+    nothing and persists nothing. Returns ``(landed, refused,
+    landed_claims)``."""
+    import posteriors_case as po
+    from rlvr import consolidated_ledger as cl
+    from harness_common import utc_now_z
+
+    with po.PosteriorLedger.for_update(ws) as led:
+        current = _effective_pair_outcomes(ws)
+        ts = utc_now_z()
+        landed = 0
+        refused = 0
+        landed_claims: list[str] = []
+        for cid, claim, eff_outcome, target in entries:
+            original, amended = current[(cid, claim)]
+            if (original if amended is None else amended) != eff_outcome:
+                continue
+            cp = led.cases.get(cid) or po.CasePosterior(cid)
+            d_a = 1 if target else -1
+            d_b = -1 if target else 1
+            new_a = max(po._ALPHA0, cp.alpha + d_a)
+            new_b = max(po._BETA0, cp.beta + d_b)
+            applied_a, applied_b = new_a - cp.alpha, new_b - cp.beta
+            ok = cl.append(ws, "experience", {
+                "schema": CASE_AMEND_SCHEMA, "ts": ts, "case_id": cid,
+                "claim_id": claim, "from_passed": bool(eff_outcome),
+                "to_passed": bool(target), "d_alpha": applied_a,
+                "d_beta": applied_b, "source": "reconcile"})
+            if not ok:
+                refused += 1
+                continue  # commit-first: no mutation, no save
+            if applied_a != d_a or applied_b != d_b:
+                warn("case_amendment_floor",
+                     f"{cid}: posterior desync — floored at the "
+                     f"Beta(1,1) support")
+            cp.alpha, cp.beta = new_a, new_b
+            led.cases[cid] = cp
+            landed += 1
+            landed_claims.append(str(claim))
+            _revoke_derived_rows(ws, str(claim), revoked)
+        if landed:
+            led.save(ws)
+        return landed, refused, landed_claims
+
+
+def reconcile_case_settlements(ws: Path,
+                               skip: set[str] | None = None) -> dict:
     """The pair-amendment face: when a claim's CURRENT decisive register
     status disagrees with the outcome already observed for its
-    (case, claim) pair, apply the ±1 flip to the case posterior
-    (belief-first, floored at the Beta(1,1) support — a desynced ledger
-    can never push the posterior outside it) and append ONE
-    ``case-amendment/1`` audit row. Idempotence lives in the fold: once
-    the row lands the effective outcome equals the target and every
-    re-run is a read-scan no-op. Honest gaps write nothing: a
-    non-decisive terminal, a removed claim, a retired case, an
-    unobserved pair. Telemetry never raises into the pass."""
+    (case, claim) pair, append ONE ``case-amendment/1`` audit row FIRST
+    and only after the append returns ``ok`` apply the ±1 flip to the
+    case posterior (floored at the Beta(1,1) support — a desynced ledger
+    can never push the posterior outside it) and save. The amendment is
+    one transaction: a refused row mutates NOTHING and persists NOTHING
+    (the old belief-first order could flip the belief while the fold —
+    which reads the rows — never saw one, so every following pass
+    flipped AGAIN); a landed row followed by a failed save raises into
+    the telemetry error field, loud and unswallowed. Idempotence lives
+    in the fold: once the row lands the effective outcome equals the
+    target and every re-run is a read-scan no-op — a retried correction
+    can never apply twice. Honest gaps write nothing: a non-decisive
+    terminal, a removed claim, a retired case, an unobserved pair, and
+    the ``skip`` set (censored/pending outcomes — never an observation).
+    The pass also carries the revoke-retry sweep: claims whose
+    amendments have ALREADY landed re-attempt revocation while derived
+    rows still match them in the knowledge family (see
+    ``_pending_revoke_claims``); a failure surfaces on the sibling
+    ``case_revocations_error`` field. A derived row that matches the
+    amended claim but carries no confirmed workspace binding is kept,
+    never retried, and its claim is listed under
+    ``case_revocations_unavailable``. Telemetry never raises into the
+    pass."""
     out: dict = {"case_amendments": 0, "case_amendments_error": None}
     try:
-        import posteriors_case as po
-        from rlvr import consolidated_ledger as cl
-        from harness_common import utc_now_z
-
-        status_map: dict[str, bool] = {}
-        for claim in _register_claims(ws):
-            cid = str(claim.get("id") or "").strip()
-            status = str(claim.get("status") or "").upper()
-            if status in CASE_PASS_STATUSES:
-                status_map[cid] = True
-            elif status in CASE_FAIL_STATUSES:
-                status_map[cid] = False
+        status_map = _decisive_status_map(_register_claims(ws), skip)
         known_cases = {c for ids in
                        _cases_by_pq(ws, armed_only=False).values()
                        for c in ids}
+        eff = _effective_pair_outcomes(ws)
         entries = []
-        for (cid, claim), (orig, amended) in _effective_pair_outcomes(
-                ws).items():
+        for (cid, claim), (orig, amended) in eff.items():
             effective = orig if amended is None else amended
             target = status_map.get(claim)
             if target is None or target == effective or cid not in (
                     known_cases):
                 continue
             entries.append((cid, claim, effective, target))
-        if not entries:
+        # every claim whose amendment has landed — the revoke-retry
+        # population, independent of this pass's entries (a converged
+        # fold must still sweep, or a failed revoke never retries).
+        # The pass's OWN landed amendments ride the sweep too: their
+        # in-loop revoke may already have failed, and that failure must
+        # be loud in the SAME pass, not one pass later.
+        amended_claims = sorted(
+            {claim for (_cid, claim), (_orig, amended) in eff.items()
+             if amended is not None})
+        if not entries and not amended_claims:
             return out
-        led = po.PosteriorLedger.load(ws)
-        ts = utc_now_z()
-        landed = 0
         revoked_claims: list[str] = []
-        for cid, claim, eff, target in entries:
-            cp = led.cases.get(cid) or po.CasePosterior(cid)
-            d_a = 1 if target else -1
-            d_b = -1 if target else 1
-            new_a = max(po._ALPHA0, cp.alpha + d_a)
-            new_b = max(po._BETA0, cp.beta + d_b)
-            if new_a != cp.alpha + d_a or new_b != cp.beta + d_b:
-                warn("case_amendment_floor",
-                     f"{cid}: posterior desync — floored at the "
-                     f"Beta(1,1) support")
-            applied_a, applied_b = new_a - cp.alpha, new_b - cp.beta
-            cp.alpha, cp.beta = new_a, new_b
-            led.cases[cid] = cp
-            ok = cl.append(ws, "experience", {
-                "schema": CASE_AMEND_SCHEMA, "ts": ts, "case_id": cid,
-                "claim_id": claim, "from_passed": bool(eff),
-                "to_passed": bool(target), "d_alpha": applied_a,
-                "d_beta": applied_b, "source": "reconcile"})
-            landed += 1 if ok else 0
-            if ok:
-                _revoke_derived_rows(ws, str(claim), revoked_claims)
-        led.save(ws)
-        out["case_amendments"] = landed
+        freshly_landed: list[str] = []
+        if entries:
+            landed, refused, freshly_landed = _amend_pair_entries(
+                ws, entries, revoked_claims)
+            out["case_amendments"] = landed
+            if refused:
+                out["case_amendments_error"] = (
+                    f"{refused} amendment row(s) refused — the belief is "
+                    f"untouched, the flip re-fires next pass")
+        # the revoke-retry sweep: re-attempt while derived rows still
+        # match, then re-discover — whatever still matches is what the
+        # telemetry sees (the accurate failure test, rewrite included)
+        try:
+            retry, ambiguous = _pending_revoke_claims(
+                ws, sorted(set(amended_claims) | set(freshly_landed)))
+            if retry:
+                for claim in retry:
+                    _revoke_derived_rows(ws, claim, revoked_claims)
+                still, _ = _pending_revoke_claims(ws, retry)
+                if still:
+                    out["case_revocations_error"] = (
+                        f"{len(still)} amended claim(s) still carry derived "
+                        f"knowledge rows after a revoke re-attempt: "
+                        f"{', '.join(still)}")
+            if ambiguous:
+                out["case_revocations_unavailable"] = ambiguous
+        except OSError as exc:
+            out["case_revocations_error"] = f"knowledge revocation unavailable: {exc}"
         out["revoked_claims"] = revoked_claims
-        if landed != len(entries):
-            out["case_amendments_error"] = (
-                f"{len(entries) - landed} amendment row(s) refused — "
-                f"the flip re-fires next pass (belief-first asymmetry)")
     except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
         out["case_amendments_error"] = f"{type(exc).__name__}: {exc}"
     return out
@@ -408,19 +550,23 @@ def _apply_case_observations(ws: Path, entries: list[tuple[str, str, bool]],
         from rlvr import consolidated_ledger as cl
         from harness_common import utc_now_z  # the one timestamp source
 
-        led = po.PosteriorLedger.load(ws)
-        for cid, _claim, passed in entries:
-            cp = led.cases.get(cid) or po.CasePosterior(cid)
-            cp.update(passed)
-            led.cases[cid] = cp
-        led.save(ws)
-        ts = utc_now_z()
-        landed = sum(
-            1 for cid, claim, passed in entries
-            if cl.append(ws, "experience", {
-                "schema": CASE_OBS_SCHEMA, "ts": ts, "case_id": cid,
-                "claim_id": claim, "passed": bool(passed),
-                "source": source}))
+        with po.PosteriorLedger.for_update(ws) as led:
+            observed = _observed_pairs(ws)
+            entries = [e for e in entries if (e[0], e[1]) not in observed]
+            if not entries:
+                return out
+            for cid, _claim, passed in entries:
+                cp = led.cases.get(cid) or po.CasePosterior(cid)
+                cp.update(passed)
+                led.cases[cid] = cp
+            led.save(ws)
+            ts = utc_now_z()
+            landed = sum(
+                1 for cid, claim, passed in entries
+                if cl.append(ws, "experience", {
+                    "schema": CASE_OBS_SCHEMA, "ts": ts, "case_id": cid,
+                    "claim_id": claim, "passed": bool(passed),
+                    "source": source}))
         passed_n = sum(1 for _, _, ok in entries if ok)
         out["case_observations"] = landed
         out["cases_passed"] = passed_n
@@ -474,9 +620,12 @@ def record_case_settlements(ws: Path, banked: list[str]) -> dict:
         return out
 
 
-def amend_case_settlements(ws: Path) -> dict:
+def amend_case_settlements(ws: Path,
+                           skip: set[str] | None = None) -> dict:
     """The late-arm amendment: sweep EVERY decisive-terminal claim against
-    the ARMED cases and observe each un-observed pair.
+    the ARMED cases and observe each un-observed pair. ``skip`` (the
+    censored/pending claims) never observes: such an outcome is not an
+    observation.
 
     ``record_case_settlements`` keys on ``banked`` — the dispatches whose
     first settlement rode the current pass. That guard bought idempotency
@@ -495,8 +644,10 @@ def amend_case_settlements(ws: Path) -> dict:
         index = _cases_by_pq(ws, armed_only=True)
         if not index:
             return _empty_obs()
+        claims = [c for c in _register_claims(ws)
+                  if str(c.get("id") or "") not in (skip or set())]
         entries = _observation_entries(
-            _register_claims(ws), index, _observed_pairs(ws))
+            claims, index, _observed_pairs(ws))
         return _apply_case_observations(ws, entries, source="late-arm")
     except Exception as exc:  # noqa: BLE001 - telemetry, never a pass break
         warn("case_settlements", f"{type(exc).__name__}: {exc}")
@@ -517,8 +668,10 @@ def _bridge_pool_admission(ws: Path, banked: list[str]) -> dict:
     ``observe_step_credit`` observation with credit = the claim's
     terminal credit (the settled ladder value read back off the
     settlement ledger). Every processed claim appends one
-    ``posterior-store/1`` credit row to ``<ws>/runs/posterior-store.jsonl``
-    (``strategy_store.append_workspace_credit_row``): the degeneracy
+    ``posterior-store/1`` credit row to the knowledge family file
+    (issue-1004 R2c; the series' only face since the issue-1004 R3
+    schema cutover) via
+    ``strategy_store.append_workspace_credit_row``: the degeneracy
     breaker's series (rlvr.signal_guard.recent_credits) and the
     rl-posterior-moved fingerprint count exactly these rows. Counts and
     credits are never normalized away (the signal contract's
@@ -638,14 +791,17 @@ def _settle_episode_tiers(ws: Path) -> dict:
 
 
 def _settle_case_legs(ws: Path, banked: list[str],
-                      amended: list[str]) -> dict:
+                      amended: list[str],
+                      skip: set[str] | None = None) -> dict:
     """The posterior-moving legs of one settlement pass: the Gate C
     degeneracy breaker first (a dead signal freezes everything), then
     fresh -> late-amend -> pair-reconcile, the credit-into-pool bridge
     (frozen signals bridge nothing) and the missing-rollout audit.
-    Fail-open throughout: a guard failure never blocks settlement
-    bookkeeping; the signal_degenerate stderr line is the loud face.
-    Returns the out-dict fields to merge."""
+    ``skip`` is the censored/pending claim set — an outcome that moves no
+    mass is never a case observation either. Fail-open throughout: a
+    guard failure never blocks settlement bookkeeping; the
+    signal_degenerate stderr line is the loud face. Returns the out-dict
+    fields to merge."""
     out: dict = {}
     _frozen = False
     try:
@@ -668,11 +824,11 @@ def _settle_case_legs(ws: Path, banked: list[str],
               "before re-arming.", file=sys.stderr, flush=True)
     else:
         fresh = record_case_settlements(ws, banked)
-        late = amend_case_settlements(ws)
+        late = amend_case_settlements(ws, skip)
         # the pair-amendment leg rides LAST: it reconciles pairs
         # against the register's current truth, after both
         # observation legs had their byte-identical say
-        amended = reconcile_case_settlements(ws)
+        amended = reconcile_case_settlements(ws, skip)
         # the credit-into-pool bridge rides the SAME non-frozen
         # branch (a frozen signal bridges nothing — the
         # degeneracy breaker's freeze covers this leg too)
@@ -704,33 +860,61 @@ def _settle_case_legs(ws: Path, banked: list[str],
                 if leg.get("case_observations_error")]
         if amended.get("case_amendments_error"):
             errs.insert(0, amended["case_amendments_error"])
+        if amended.get("case_revocations_unavailable"):
+            out["case_revocations_unavailable"] = amended["case_revocations_unavailable"]
+        if amended.get("case_revocations_error"):
+            errs.append(amended["case_revocations_error"])
         if errs:
             out["case_observations_error"] = " | ".join(errs)
     return out
 
 
-def run(ws: Path, *, dry_run: bool = False) -> dict:
-    """Assemble + settle one pass. Telemetry posture: any failure inside
-    degrades to an error field, never a crash (the tick must not die).
-    dry_run assembles and grades only — no ledger rows, no Q-cell bank.
+#: why an uncredited claim cannot be credited: a dispatch was attempted
+#: (persisted traces exist) and none ever committed, so no ledger row can
+#: key the credit to a dispatch
+UNATTRIBUTABLE_REASON = "dispatch-never-committed"
 
-    Both legs ride the pass: the round-credit settlement (+ its Q-cell
-    bank and case-posterior observations) for the terminal-claim set, and
-    the episode-tier amendment. The tier leg keys on settled task
-    rollouts, not on the round-credit set, so it runs even when no
-    terminal claim is currently dispatchable-visible."""
-    claims = terminal_claims(ws)
-    # #800 R2: the credit pass stays CLAIM-grained (the #433 ladder's
-    # artifact attribution joins the facts' creator=C-NN field; the
-    # bridge's family map is claim-keyed), but a terminal claim with
-    # NO dispatch-ledger row is a pre-#800 workspace — unsupported
-    # (no-backcompat ruling 2026-09-01): loud gap, excluded from the
-    # pass. The REAL dispatch id enters at the q-cell bank seam
-    # (scalar._bank_q_cell_credit resolves it from the ledger).
-    dispatches = []
-    off_ledger = 0
-    for cid in claims:
-        _led = None
+
+def _record_unattributable(ws: Path, uncredited: dict[str, list[str]]) -> None:
+    """One durable ``credit_unattributable`` event per (claim, reason), however
+    many settlement passes see the condition: ``kunglao_log.emit_once`` keeps
+    the emitted keys in a workspace state file, which — unlike a scan of the
+    day logs — survives log retention and costs no log read per pass."""
+    from kunglao_log import emit_once
+
+    for cid, sources in uncredited.items():
+        emit_once(ws, "orchestrator", "credit_unattributable",
+                  f"{cid}|{UNATTRIBUTABLE_REASON}", claim=cid,
+                  detail=json.dumps(
+                      {"claim": cid, "reason": UNATTRIBUTABLE_REASON,
+                       "sources": sources}, sort_keys=True))
+
+
+def _classify_terminal_claims(
+        ws: Path, claims: list[dict], outcomes: dict[str, str],
+) -> tuple[list[dict], list[str], dict[str, list[str]]]:
+    """Split the terminal claims into ``(dispatches, not_dispatched,
+    uncredited)``.
+
+    The credit pass stays CLAIM-grained (the ladder's artifact attribution
+    joins the facts' creator=C-NN field; the bridge's family map is
+    claim-keyed). A terminal claim joins it only through a committed
+    dispatch-ledger row; the REAL dispatch id enters at the q-cell bank
+    seam (scalar._bank_q_cell_credit resolves it from the ledger). A claim
+    without one is classified from the persisted traces
+    (claims_store.dispatch_attempts), never guessed: no attempt ever
+    touched it -> ``not_dispatched``; an attempt without a commit ->
+    ``uncredited``, mapped to the trace kinds that show the attempt. A
+    claim whose ledger read failed is left out of all three (one warn) and
+    retried by the next pass. Each dispatch row carries the claim's
+    ``status`` and recorded outcome word (the settlement's censoring
+    classifier keys on them at the bank seam)."""
+    dispatches: list[dict] = []
+    not_dispatched: list[str] = []
+    uncredited: dict[str, list[str]] = {}
+    attempts = None
+    for claim in claims:
+        cid = str(claim.get("id") or "")
         try:
             import claims_store as _cstore8
             _led = _cstore8.latest_committed_dispatch(ws, cid)
@@ -738,15 +922,51 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             warn("settle_round_credit.dispatch_id",
                  f"ledger read failed for {cid} "
                  f"({type(_did_exc).__name__}: {_did_exc})")
-        if _led is None:
-            off_ledger += 1
-            warn("settle_round_credit.off_ledger",
-                 f"terminal claim {cid} has no dispatch-ledger row "
-                 f"(pre-#800 workspace — unsupported per the "
-                 f"no-backcompat ruling); banking skipped")
             continue
-        dispatches.append({"dispatch_id": cid,
-                           "round": len(dispatches) + 1})
+        if _led is not None:
+            dispatches.append({"dispatch_id": cid,
+                               "round": len(dispatches) + 1,
+                               "status": str(claim.get("status") or ""),
+                               "outcome": outcomes.get(cid, "")})
+            continue
+        if attempts is None:
+            attempts = _cstore8.dispatch_attempts(ws)
+        if cid in attempts:
+            uncredited[cid] = attempts[cid]
+        else:
+            not_dispatched.append(cid)
+    return dispatches, not_dispatched, uncredited
+
+
+def run(ws: Path, *, dry_run: bool = False) -> dict:
+    """Assemble + settle one pass. Telemetry posture: any failure inside
+    degrades to an error field, never a crash (the tick must not die).
+    dry_run assembles and grades only — no ledger rows, no Q-cell bank,
+    no events.
+
+    Both legs ride the pass: the round-credit settlement (+ its Q-cell
+    bank and case-posterior observations) for the terminal-claim set, and
+    the episode-tier amendment. The tier leg keys on settled task
+    rollouts, not on the round-credit set, so it runs even when no
+    terminal claim is currently dispatchable-visible.
+
+    A terminal claim without a committed dispatch is reported, never
+    silently skipped: ``not_dispatched`` lists the claims no dispatch
+    attempt ever touched (nothing is owed); ``uncredited`` lists those
+    with an attempt but no commit, whose credit can never be banked (one
+    ``credit_unattributable`` event each, once). A claim whose amended
+    knowledge could not be attributed to this workspace is listed under
+    ``case_revocations_unavailable``: those rows stay."""
+    import claims_store as _cstore8
+
+    claims = _terminal_claim_rows(ws)
+    outcomes = {str(c.get("id") or ""): _cstore8.dispatch_failure_reason(
+        ws, str(c.get("id") or "")) for c in claims}
+    routes = _settle_routes(ws, claims, outcomes)
+    dispatches, not_dispatched, uncredited = _classify_terminal_claims(
+        ws, claims, outcomes)
+    if uncredited and not dry_run:
+        _record_unattributable(ws, uncredited)
     # issue-678 T5: the armed-case count rides EVERY pass (dry included)
     # — zero armed cases is the silent gap that kept
     # runs/posteriors.yaml from ever existing, now loud
@@ -774,13 +994,24 @@ def run(ws: Path, *, dry_run: bool = False) -> dict:
             # the posterior-moving legs (contract rl-signal-contract/1 §3).
             # Fail-open: a guard failure never blocks settlement
             # bookkeeping; the signal_degenerate blocker is the loud face.
-            out.update(_settle_case_legs(ws, banked, amended))
+            out.update(_settle_case_legs(ws, banked, amended,
+                                         skip=set(routes)))
     else:
         out = {"settled": 0, "rounds": 0,
-               "reason": "no terminal claims - nothing to settle"}
+               "reason": ("no terminal claim has a committed dispatch - "
+                          "nothing to settle"
+                          if not_dispatched or uncredited else
+                          "no terminal claims - nothing to settle")}
+    from rlvr import scalar as _sc
+    out["censored"] = sorted(cid for cid, route in routes.items()
+                             if route[0] == _sc.ROUTE_CENSORED)
+    out["pending_no_mass"] = sorted(cid for cid, route in routes.items()
+                                    if route[0] == _sc.ROUTE_PENDING)
     out["cases_armed"] = len(armed)
-    if off_ledger:
-        out["off_ledger"] = off_ledger
+    if not_dispatched:
+        out["not_dispatched"] = not_dispatched
+    if uncredited:
+        out["uncredited"] = list(uncredited)
     if dry_run:
         out["would_amend_tiers"] = _pending_tier_rows(ws)
     else:

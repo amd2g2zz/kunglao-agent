@@ -90,7 +90,7 @@ kunglao-agent subcommands:
   CLI face (console scripts — `uv sync` in the repo root installs them;
   the router answers `kunglao --help`):
     kunglao <sub>    decide | tick | verify | record | health | resume |
-                     check-stale | upgrade | analysis
+                     check-stale | upgrade | analysis | seal
     standalone       kunglao-init / kunglao-verify / kunglao-upgrade
                      heartbeat-tick / convergence-check
 

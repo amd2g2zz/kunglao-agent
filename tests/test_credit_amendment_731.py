@@ -45,12 +45,26 @@ if str(SCRIPTS) not in sys.path:
 
 import settle_round_credit as src  # noqa: E402
 from rlvr import consolidated_ledger as cl  # noqa: E402
-from rlvr import meta_arms  # noqa: E402
 from rlvr import q_cells as qc  # noqa: E402
 from rlvr import strategy_store as ss  # noqa: E402
 
 FAM = "static-symbolic"
 AK = f"{FAM}|facts_snapshot|none|0"  # #804 regen: keyed shape
+
+
+def _fail_bank_appends(monkeypatch) -> None:
+    """Fail ONLY the experience-family appends — the q-cell bank rows.
+    The settlement family rides the same consolidated boundary since the
+    family move, and its writes must land for the repair to reconcile;
+    a blunt global patch would erase the very rows pass 2 needs."""
+    real_append = cl.append
+
+    def _bank_rows_fail(ws, family, row, **kwargs):
+        if family == "experience":
+            return False
+        return real_append(ws, family, row, **kwargs)
+
+    monkeypatch.setattr(cl, "append", _bank_rows_fail)
 
 
 # ---------- fixtures --------------------------------------------------------
@@ -396,7 +410,7 @@ def test_settle_pass_repair_never_reenters_banked(tmp_path, monkeypatch):
     directory trick cannot be used — it lives in the same family)."""
     ws = _ws(tmp_path, claims=[{"id": "C-9", "status": "REFUTED"}])
     _dispatch(ws, "C-9")
-    monkeypatch.setattr(cl, "append", lambda *a, **k: False)
+    _fail_bank_appends(monkeypatch)
     src.run(ws)                           # ledger settles; bank fails open
     monkeypatch.undo()
     out2 = src.run(ws)
@@ -412,7 +426,7 @@ def test_repair_never_refires_the_store_and_l1_writers(tmp_path, monkeypatch):
     strategy-store and L1 writers must never fire from a reconcile."""
     ws = _ws(tmp_path, claims=[{"id": "C-9", "status": "REFUTED"}])
     _dispatch(ws, "C-9")
-    monkeypatch.setattr(cl, "append", lambda *a, **k: False)
+    _fail_bank_appends(monkeypatch)
     src.run(ws)
     monkeypatch.undo()
 
@@ -438,16 +452,6 @@ def test_replay_without_correction_is_a_byte_noop(tmp_path):
 
 
 # ---------- 6. defensive reader fixes (audit findings) ----------------------
-
-def test_mc_propensity_survives_a_clawback_stream():
-    """Accumulated negative credits once drove Beta(s+1, t−s+1) ≤ 0 →
-    betavariate raised → the fail-open caller silently dropped the OPE
-    propensity. The parameters are floored at the +1.0 prior."""
-    rows = [{"credit": -0.8, "method_family": "a"},
-            {"credit": -0.8, "method_family": "a"}]
-    p = meta_arms.mc_propensity(rows, "a", ["a", "b"])
-    assert 0.0 <= p <= 1.0
-
 
 def test_cell_count_excludes_amendments(tmp_path):
     """A correction is not a new observation: the n_min evidence gate

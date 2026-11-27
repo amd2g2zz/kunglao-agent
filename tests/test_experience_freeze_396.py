@@ -188,7 +188,7 @@ def _seed_settled_workspace(ws: Path) -> None:
 
 
 def _ledger_bytes(ws: Path) -> bytes:
-    p = ws / "runs" / "rollout-ledger.jsonl"
+    p = ws / "runs" / "settlement.jsonl"
     if not p.is_file():
         return b""
     return p.read_bytes()

@@ -305,6 +305,53 @@ def warn_once_stateful(op: str, reason: str, *, state_key: str,
     return True
 
 
+def warn_workspace():
+    """Read-only getter: the workspace the diagnostics faces resolve
+    (the explicit registration first, then the cwd walk-up). None means
+    no workspace is known — the faces stay stderr-only. Callers that
+    need the SAME workspace the ledger faces write into (the seal
+    status face's sealed-row count) read this instead of re-deriving
+    their own resolution — one resolution, one drift-free answer."""
+    return _warn_workspace()
+
+
+def reset_once_state(op: str, ws=None) -> None:
+    """Clear one op's persisted once-marker entry: the config state the
+    marker last warned about is no longer the live state (the channel
+    armed), so a RETURN to a warned state re-arms the notice instead of
+    riding a stale silence. Workspace resolution: the explicit ``ws``
+    argument first, then the pinned registration, then the same cwd
+    walk-up the ledger face already trusts for its rows — an UNPINNED
+    process must still clear a stale key a previously-pinned process
+    persisted (the mixed-pin sequence is exactly the silent-disarm hole
+    this face closes). No resolvable workspace, no marker file, or the
+    op absent from it: a no-op. Fail-open: an unwritable marker
+    degrades to the per-process face; never raises."""
+    if ws is not None:
+        marker = Path(ws) / _ONCE_STATE_REL
+    elif _WARN_WS_OVERRIDE:
+        marker = Path(_WARN_WS_OVERRIDE[0]) / _ONCE_STATE_REL
+    else:
+        discovered = _discover_warn_workspace()
+        if discovered is None:
+            return
+        marker = discovered / _ONCE_STATE_REL
+    state = dict(_load_once_state(marker))
+    if str(op) not in state:
+        return
+    state.pop(str(op))
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(
+            json.dumps(state, sort_keys=True, ensure_ascii=False) + "\n",
+            encoding="utf-8")
+    except OSError as exc:
+        warn("warn_once_stateful",
+             f"marker reset failed: {type(exc).__name__}: {exc}")
+    else:
+        _ONCE_MEMO.update(key=None, state={})  # next read re-stats
+
+
 def _log_level(level: str, op: str, reason: str, *,
                tag: str | None = None) -> None:
     """The shared severity tracer: per-(level, op) dedupe, the stderr
@@ -855,6 +902,67 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         warn("emit", f"cannot write {p}: {exc}")
         return False
     _maybe_prune(ws)
+    return True
+
+
+# ------------------- emit-once ------------------------------------------
+# A condition that stays true across many ticks must leave ONE row, not one
+# per tick. The emitted keys persist in a small workspace file instead of
+# being recovered by scanning the day logs: the day files are pruned
+# (LOG_DAY_RETENTION), so a scan would re-emit after a prune and would cost
+# a full log read on every call. Single-writer by contract, like the other
+# runs/ state files: concurrent first emissions of one key can race to a
+# duplicate row, never to a lost one.
+EMIT_ONCE_REL = Path("runs") / ".emitted-once.json"
+
+
+def _emit_once_seen(path: Path) -> dict[str, list[str]]:
+    """Persisted keys per action. Absent file -> {}. An unreadable or
+    ill-shaped file reads as {} after one warn: the failure direction is
+    a repeated row, never a silently lost one."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as exc:
+        warn("emit_once", f"{path.name} unreadable "
+             f"({type(exc).__name__}) — counted from empty")
+        return {}
+    if not isinstance(raw, dict) or not all(
+            isinstance(v, list) for v in raw.values()):
+        warn("emit_once", f"{path.name} has an invalid shape — "
+             f"counted from empty")
+        return {}
+    return {str(k): [str(x) for x in v] for k, v in raw.items()}
+
+
+def emit_once(ws, actor: str, action: str, key: str, *,
+              claim: str | None = None, artifact: str | None = None,
+              detail: str | None = None) -> bool:
+    """``emit`` unless ``(action, key)`` already produced a row here.
+
+    Returns True only when a new row reached the ledger. The key is
+    recorded after the row landed, so a failed write is retried by the
+    next call; a failed state write leaves the row in place and warns.
+    Never raises."""
+    path = Path(ws) / EMIT_ONCE_REL
+    seen = _emit_once_seen(path)
+    if key in seen.get(action, ()):
+        return False
+    if not emit(ws, actor, action, claim=claim, artifact=artifact,
+                detail=detail):
+        return False
+    updated = {**seen, action: [*seen.get(action, ()), key]}
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(updated, sort_keys=True,
+                                  ensure_ascii=False) + "\n",
+                       encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as exc:
+        warn("emit_once", f"cannot record {action}/{key}: "
+             f"{type(exc).__name__}: {exc}")
     return True
 
 

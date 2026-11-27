@@ -25,7 +25,9 @@
 #                   (subset of event_classes)
 #   cost_class      cheap | medium | expensive — queue order within a tick
 #                   (cheap gates first; expensive mechanisms queue last and
-#                   are sacrificed first when the time cap is hit)
+#                   are sacrificed first when the time cap is hit). The
+#                   zero-LLM gate pass dispatches cheap ONLY; medium and
+#                   expensive keep their WAKE-turn host (#1086 S20).
 #   depth           os | session | workspace | mission
 #   cockpit_signal  THE observable the cockpit/statusline can read — a
 #                   mechanism with no signal is not allowed to go live
@@ -160,24 +162,68 @@ mechanisms:
       session_is_dead (heartbeat missing or both last_tick_ts + activity_ts
       stale). Out-of-session by definition — host=os, never tick-dispatched.
 
+  - name: scheduler_event_watch
+    entry: scripts/scheduler_watch.py
+    channel: os
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "runs/.scheduler-wake.json (the staged wake contract) + stdout"
+    owner: scripts/scheduler_watch.py
+    description: >
+      The event-driven wake path's out-of-session watcher: a byte-tail
+      poll over runs/scheduler/events.jsonl; a material batch stages the
+      wake contract to runs/.scheduler-wake.json (consumed by the
+      scheduler_event_drain face) + prints it to stdout; a quiet stream
+      costs zero LLM tokens. One instance per workspace (lockfile).
+      Out-of-session by definition — host=os, never tick-dispatched.
+      One-time OS cron line (manual registration, the kicker's D5
+      precedent): */1 * * * * <python> scripts/scheduler_watch.py <ws>
+      --once
+
+  - name: scheduler_event_drain
+    entry: scripts/loop_scheduler.py
+    channel: cli
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "the --drain-events receipt JSON + runs/scheduler/drain-state.json cursor"
+    owner: scripts/loop_scheduler.py
+    description: >
+      The wake's session-side consumer: drains each unread material
+      event exactly once through the existing faces (reject feedback /
+      timer state / RL digest — every kind in the closed vocabulary has
+      a producer and a mapped BUS A wake class, #1086 S19) and
+      consumes the staged wake artifact (read into the receipt, then
+      cleared). Invoked as the wake contract's prompt names — the first
+      mechanical action of the woken session turn — or by hand.
+
   - name: wake_gate
-    entry: scripts/heartbeat_tick.py
+    entry: scripts/heartbeat_wake_gate.py
     channel: os
     trigger:
       type: tick
       gate: always
     cost_class: cheap
     depth: os
-    cockpit_signal: "runs/.heartbeat-tick.json wake face + runs/.wake-gate.json (quiet_streak) + rc3/0 from --wake-gate"
-    owner: scripts/heartbeat_tick.py
+    cockpit_signal: "runs/.heartbeat-tick.json wake face + runs/.wake-gate.json (quiet_streak) + runs/.wake-gate-receipt.json (the wrapper's pass receipt) + rc3/0 from --wake-gate"
+    owner: scripts/heartbeat_wake_gate.py
     description: >
-      The pre-LLM wake gate (#801 Face 1): the OS scheduler (cron/schtasks)
-      runs heartbeat_tick.py <ws> --origin cron --wake-gate DIRECTLY — zero
-      LLM. A quiet verdict (watchdog silent, no wake-class bus events, park
-      below expiry) exits 0 and injects NOTHING (idle burn 750k tok/h -> 0);
-      a wake verdict exits 3 and the wrapper injects the loop prompt.
-      Out-of-session like dead_session_kicker — declared here so the
-      cockpit answer stays complete; never tick-dispatched.
+      The pre-LLM wake gate (#801 Face 1) and its wrapper (#1086 S18): the
+      OS scheduler (cron/schtasks) runs heartbeat_wake_gate.py <ws>
+      --wake-gate — zero LLM. The wrapper runs heartbeat_tick.py --origin
+      cron --wake-gate; a quiet verdict (watchdog silent, no wake-class bus
+      events, park below expiry) exits 0 and injects NOTHING (idle burn
+      750k tok/h -> 0); a wake verdict exits 3 and the wrapper injects the
+      loop prompt exactly once (staged at runs/.wake-gate-prompt.txt;
+      out-of-session delivery is the kicker's D4 shape, skipped when a live
+      session owns the wake). Wrapper/gate faults are loud (rc 1, never a
+      silent QUIET). Out-of-session like dead_session_kicker — declared
+      here so the cockpit answer stays complete; never tick-dispatched.
 
   - name: decide_cli
     entry: scripts/kunglao-decide.py
@@ -341,7 +387,10 @@ mechanisms:
       #759 H1 / #711 E1: the waiting period gets a cognitive action instead
       of an idle action_taken. The seat self-arbitrates waiting internally;
       the parked gate skips the seat entirely while the zero-work park
-      conjunction holds (nothing to think about yet).
+      conjunction holds (nothing to think about yet). WAKE-turn only under
+      #1086 S20: medium cost sits above the zero-LLM gate-pass ceiling —
+      a THINK artifact with no model turn to read it is waste, so the
+      in-session tick (the loop prompt's own line) stays the seat's host.
 
   - name: premise_expiry
     entry: scripts/premise_gate.py

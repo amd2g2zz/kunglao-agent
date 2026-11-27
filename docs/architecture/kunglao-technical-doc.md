@@ -106,12 +106,11 @@ sequenceDiagram
   WB->>WB: check_worker_plan 计划闸 粒度闸
   WB->>WB: 零输出断路器
   WB->>MFG: _method_family_gate
-  MFG->>SS: 未声明则 gate_sample ws
-  SS-->>MFG: family propensity prior_source 或冷隙
-  MFG--xO: 有料 REJECT methodfamily 携带采样家族
-  MFG->>SS: 已声明 reconcile_declaration 反账
-  MFG->>SS: append_usage_row 使用行
-  MFG-->>WB: None mf_value
+  MFG->>SS: reconcile_declaration(ws, declared)
+  SS-->>MFG: One decision with actual method and source
+  MFG->>MFG: Validate authorization and vocabulary
+  MFG-->>WB: Accepted decision
+  WB->>WB: Stage decision until PostToolUse confirms input
   WB-->>DG: 放行进入牙齿
   DG->>DG: must-stop top1 capability MCP plan-author
   DG->>RI: recall 判断 默认关
@@ -126,13 +125,13 @@ sequenceDiagram
 | 步结算屏障          | `check_step_settled`        | —              | 前步未结算（超 TTL pending 放行+WARN 一次）       |
 | facts-snapshot | —                           | `snapshot`     | prompt 缺 `facts-snapshot:`            |
 | 优先级审计          | `check_priority`            | `devreason`    | 偏离 #1 无 `agent-reasoning:`            |
-| 方法家族           | `_method_family_gate`       | `methodfamily` | 未声明（有料→拒并携带采样家族 W2）/未注册               |
-| 采样出口遥测         | `_gate_sample`              | —（事件）          | 异常 → `gate_sample_failed` 事件 + stderr |
+| 方法家族           | `_method_family_gate`       | `methodfamily` | 执行权限或注册校验失败               |
+| 采样出口遥测         | `_sample_reconciliation`   | —（事件）          | 异常 → `gate_sample_failed` 事件 + stderr |
 | tier 一致性       | `check_tier_consistency`    | `tiercons`     | envelope tier ≠ action_tier           |
 | 计划闸            | `check_worker_plan`         | `plan`         | 再派发无 worker 亲写计划                      |
 | 粒度闸            | `check_claim_granularity`   | `granularity`  | ≥8 步或 ≥2 族各 ≥2 步                      |
 | 零输出断路器         | `check_zero_output_circuit` | `zerooutput`   | (tool,claim) 指纹重复零产出                  |
-| STALLED 补救     | `check_convergence_health`  | —（放行）          | rc=1 + `remedy: decompose`            |
+| STALLED/SPINNING 补救 | `check_convergence_health`  | —（放行）          | rc=1 或 rc=2 + `remedy: decompose`      |
 | verifier 通行    | lib_kunglao 单谓词             | —（放行）          | PROVEN claim 的 verifier 派发            |
 
 envelope v1：`{"kunglao_dispatch":{"version":1,"claim":"C-NN","tier":N,"tools":[...],"agent":"..."}}`；`method_family` 双面声明解析（`_mf432.declared_value`）；**咽喉点纪律（#432）**：该字面量只允许在 worker_budget_sinks（freeze-test 钉死，dispatch_gate 出现即红）。
@@ -165,13 +164,13 @@ REJECT 时：`undo_dispatch_anchor`（#623 撤锚行）→ `reopen_claim_no_work
 
 ### 4.1 `rlvr/strategy_store.py`（家族池 + 采样出口）
 
-- 落盘：`store_root()` = `KUNGLAO_POSTERIOR_STORE` env 覆盖，否则 `scripts/rlvr/patterns/`；`PosteriorStrategyStore(ws)` 走 ws 级 `runs/posterior-store.jsonl`（`posteriors.STORE_REL`）+ 锁 `runs/.posterior-store.lock`。
+- 落盘：`store_root()` 解析在 workspace 内（默认 `<ws>/runs/posterior`，唯一根解析器；`KUNGLAO_POSTERIOR_STORE` 覆盖仅在指向 workspace 内部时生效，workspace 外的覆盖被大声拒绝——跨项目学习已关，学习 store 一律 workspace-local）；issue-1004 R2c 起全部 knowledge IO 落 family 文件 `store_root()/knowledge-store.jsonl`（consolidated append 的 flock 是唯一写守卫；预移动的 `posterior-store.jsonl` 与 ws 级 `runs/posterior-store.jsonl` 是 compat window 的 legacy 读面）。workspace 身份 = `workspace_id_of()`（resolved 路径的 sha256 前 12 hex，同名不同父的 workspace 不再混同）。
 - `append_store_row(...)` → posterior-store/1 行：workspace_id / arm_key=method_family / feature_key=feature_key_of(ws) / fingerprint / status / credit 0..1 截断 / #705 agent_type+claim+credit_kind / #689 outcome_class（infra 行不进 warm pools）。
 - `method_sample(fp)` receipt 真实形状：  
   `{"schema":"q-cell-sample/1","signature_hash":"aea12f53…","family":"static-decompile","gamma":0.9,"candidates":{"static-decompile":{"p_llm":1.0,"alpha":1.67,"beta":1.33,"theta":0.857,"weight":0.857}},"prior_source":"history"}`  
   三源先验链：`proposal_prior_labeled()`（measured history → intake llm-prior → cross-task store；label ∈ history/llm_prior/none）→ `_store_prior` 兜底；None = 诚实冷隙，永不造家族。
-- `gate_sample(ws)`（#773 W2 决策封装）/ `reconcile_declaration(ws, declared)`（#691 反账遥测）/ `method_lead`（advisory）——三面一个 `method_sample`（法则 3）。
-- 姿态演进：偏离=记录（sample_deviation）不变；**未声明+有料=拒一次携带采样家族**（owner 2026-10-18，推翻 2026-10-14 "never rejects" 对未声明例外的适用——spec 增补待办 M3.4）。
+- `reconcile_declaration(ws, declared)` samples once per dispatch. The executor projects its own draw into the same record with `method_decision`. `method_lead` remains an advisory planning read.
+- When the declaration is absent, an eligible sampled method can be adopted. A different explicit choice is recorded as a deviation, subject to the same authorization checks.
 
 ### 4.2 `rlvr/l1_planner.py`（准入策略）
 
@@ -195,7 +194,7 @@ REJECT 时：`undo_dispatch_anchor`（#623 撤锚行）→ `reopen_claim_no_work
 
 ### 4.6 `hooks/worker_budget_sinks.py`
 
-- `pre_check` 腿序（§3.2）；`_method_family_gate`（#432 咽喉 + #773 W2）；`_gate_sample`/`_sample_reconciliation`/`_emit_sample_deviation`；ALLOW 尾 `_dispatch_lifecycle(method_family=mf_value)`。
+- `pre_check` 腿序（§3.2）；`_method_family_gate`（#432 咽喉 + #773 W2）；`_sample_reconciliation`/`_emit_sample_deviation`；ALLOW 尾 `_dispatch_lifecycle(method_family=mf_value)`。
 - `_reject` 单点 → `gate-telemetry.jsonl`（fail-open，ledger 不可写不改判）。
 
 ### 4.7 `hooks/dispatch_gate.py`
@@ -214,8 +213,8 @@ GATES 1-10 + `liveness_gate`（`--ledger`/`--smoke`）+ `escape_rate` + `verific
 | --------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `runs/belief.jsonl`               | belief/1          | `{schema, ts, claim:"C-009", step_ref:"8e2e…", seen:[{id,status}], declared_unknown:[], open_status:"PROVEN"}`                                                   |
 | `runs/plan-receipts.jsonl`        | plan-receipt/1    | `{schema, ts, claim:"C-001", admitted:["dispatch/C-001"], chosen:"dispatch/C-001"}`                                                                              |
-| `runs/strategy-log.jsonl`         | —                 | `{ts, event:"dispatch", strategy, declared, claim, attempts_at_snapshot [, sampled_family, propensity, source:"gate"]}`                                          |
-| `runs/posterior-store.jsonl`      | posterior-store/1 | `{schema, ts, workspace_id, arm_key, method_family, feature_key, fingerprint, status, credit 0..1, censoring, outcome_class [, agent_type, claim, credit_kind]}` |
+| `runs/strategy-log.jsonl`         | strategy-log/1 (telemetry family since R2b; historical rows unstamped) | `{schema, ts, event:"dispatch", strategy, declared, claim, attempts_at_snapshot [, sampled_family, propensity, source:"gate"]}`                               |
+| `knowledge-store.jsonl`（workspace-local store root `<ws>/runs/posterior/`；`runs/posterior-store.jsonl`/`posterior-store.jsonl` 为 R2c 前 legacy 读面） | posterior-store/1 | `{schema, ts, workspace_id, arm_key, method_family, feature_key, fingerprint, status, credit 0..1, censoring, outcome_class [, agent_type, claim, credit_kind]}` |
 | `runs/method-family-log.jsonl`    | usage 行           | `{cid, method_family, row_agent, tier, tools, propensity, sampled_family, prior_source}`                                                                         |
 | `runs/kunglao-*.jsonl`            | kunglao-event/1   | `{ts, action∈EMIT_ACTIONS ~150 词, actor, arm, channel, claim, detail, exit, tick, epoch, trace_id}`                                                              |
 | `runs/gate-telemetry.jsonl`       | —                 | 每 worker_budget REJECT 一行                                                                                                                                        |
@@ -230,7 +229,7 @@ flowchart TD
     A[intake 锚点 task_spec goal-op] -->|W1 arm_oracle_cases| B[oracle cases 武装]
   end
   subgraph 决策
-    C[state.snapshot 签名 bf 维] --> D[strategy_store.gate_sample DTS 抽样]
+    C[state.snapshot 签名 bf 维] --> D[strategy_store.reconcile_declaration DTS 抽样]
     D --> E{_method_family_gate}
     E -->|未声明+有料| F[REJECT 携带采样家族]
     F --> G[重试声明 family]
@@ -424,7 +423,7 @@ flowchart TD
 | `rlvr/ledger.py` | rlvr/ledger.py — THE unified rollout ledger (U1). | register_kind(), kinds(), row_schema_lint(), read(), fold() | 10/4 |
 | `rlvr/liveness.py` | rlvr/liveness.py — heartbeat continuity core (#754 E2 + #830 faces). | append_tick(), heartbeat_log_path(), append_tick_log(), reset_continuity_baseline(), newest_sidecar_ts() | 1/0 |
 | `rlvr/marl.py` | marl.py — the MARL knowledge-transfer protocol (#705). | neg_store_path(), signature_class(), read_negatives(), record_negative(), negative_pools() | 3/2 |
-| `rlvr/meta_arms.py` | meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms, | meta_of(), hierarchical_prior(), mc_propensity(), env_fingerprint() | 4/5 |
+| `rlvr/meta_arms.py` | meta_arms.py — the #524 P0 learning structure: 12 families -> 3 meta-arms, | meta_of(), hierarchical_prior(), env_fingerprint() | 4/5 |
 | `rlvr/obstacles.py` | obstacles.py — the obstacle/1 attribution registry (issue 461 | validate_obstacle(), record(), read(), retract(), sweep_stale_obstacles() | 4/8 |
 | `rlvr/policy_compare.py` | rlvr/policy_compare.py — the offline policy comparison (issue #539 PR-2). | snips(), compare(), main() | 1/2 |
 | `rlvr/posteriors.py ⚠同名双胞（import 边按名共享）: scripts/posteriors.py` | posteriors.py — the DTS posterior store (Discounted Thompson Sampling, | OutcomeAdaptiveGamma, gamma_constant(), default_schedule(), row_schema_lint(), read() | 12/30 |
@@ -821,10 +820,9 @@ flowchart TD
 | `runs/.hooks-selfcheck.json` | `scripts/statusline_snapshot.py` |
 | `runs/.init-report.json` | `scripts/kunglao_upgrade.py` |
 | `runs/.ladder-t1.json` | `scripts/verification_ladder.py` |
-| `runs/.posterior-store.lock` | `scripts/rlvr/posteriors.py` |
 | `runs/.retry-counter.yaml` | `hooks/worker_budget_core.py` |
-| `runs/.rollout-ledger.lock` | `scripts/rlvr/ledger.py` |
 | `runs/.rotation-induction.json` | `hooks/worker_budget_gates.py` |
+| `runs/.settlement.lock` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/.status-first.json` | `hooks/write_guard.py` |
 | `runs/act-fail-*.md` | `scripts/e2e/checkpoints.py` |
 | `runs/act-timeout-*.md` | `scripts/e2e/checkpoints.py` |
@@ -851,7 +849,7 @@ flowchart TD
 | `runs/harvest-playbook.json` | `scripts/e2e/checkpoints.py`, `scripts/script_harvest.py` |
 | `runs/infeasible-ladder-*.yaml` | `scripts/infeasible_proposal.py` |
 | `runs/infeasible-state.json` | `scripts/infeasible_proposal.py`, `scripts/infeasible_signal.py` |
-| `runs/interventions.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/step_ledger.py` |
+| `runs/interventions.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/l1-value-log.jsonl` | `scripts/rlvr/l1_value.py` |
 | `runs/llm-prior.json` | `scripts/rlvr/priors.py` |
 | `runs/method-family-log.jsonl` | `scripts/method_families.py`, `scripts/rlvr/q_cells.py`, `scripts/rlvr/settlement_scorer.py` |
@@ -863,21 +861,21 @@ flowchart TD
 | `runs/plan-repair-state.json` | `scripts/plan_drift_detector.py` |
 | `runs/plan-stages.yaml` | `scripts/plan_stages.py` |
 | `runs/planning-actions.jsonl` | `scripts/planning_actions.py` |
-| `runs/posterior-store.jsonl` | `scripts/rlvr/posteriors.py` |
+| `runs/posterior-store.jsonl` | legacy（R2c 前写面；live = workspace-local store root `knowledge-store.jsonl`） |
 | `runs/posteriors.yaml` | `scripts/posteriors_case.py` |
-| `runs/predictions.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/prediction_ledger.py` |
+| `runs/predictions.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/q-cell-log.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/q_cells.py`, `scripts/rlvr/settlement_scorer.py` |
 | `runs/roi-intents.jsonl` | `hooks/dispatch_gate.py`, `scripts/roi_settlement.py` |
 | `runs/roi-settlements.jsonl` | `scripts/roi_settlement.py` |
 | `runs/rollout-ledger.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/ledger.py` |
 | `runs/settlement.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/signals.jsonl` | `scripts/action_space.py`, `scripts/signals_stream.py` |
-| `runs/situation-stream.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/state.py` |
+| `runs/situation-stream.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/step-ledger.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/step_ledger.py` |
-| `runs/strategy-log.jsonl` | `hooks/dispatch_gate.py`, `scripts/rlvr/consolidated_ledger.py`, `scripts/rlvr/triples.py` |
+| `runs/strategy-log.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
 | `runs/t2-queue.json` | `scripts/verification_ladder.py` |
 | `runs/tc-journal.jsonl` | `scripts/tc_journal.py` |
-| `runs/telemetry.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
+| `runs/telemetry.jsonl` | `scripts/rlvr/consolidated_ledger.py`, `hooks/dispatch_gate.py`, `scripts/rlvr/prediction_ledger.py`, `scripts/rlvr/state.py`, `scripts/rlvr/step_ledger.py` |
 | `runs/think-state.json` | `scripts/think_seat.py` |
 | `runs/tool-errors.json` | `hooks/worker_budget_core.py` |
 | `runs/transitions.jsonl` | `scripts/rlvr/consolidated_ledger.py` |
@@ -970,11 +968,16 @@ Worker_budget battery runs BEFORE dispatch_gate on the same PreToolUse:Agent eve
 
 ### Flow 3 — RL 更新回路 (RL update loop)
 
-#### As-built chain (ordered)
+#### Current dispatch and credit path
 
-1. Declaration chokepoint: worker_budget_sinks.py:822 `_method_family_gate` → undeclared+sampled REJECT 856-877 (#773 W2) → `validate_method_family` 891 → `_sample_reconciliation` 744 (→ strategy_store.py:603 `reconcile_declaration`) → `append_usage_row` with propensity/sampled_family/prior_source (method_families.py:303-322) → deviation event `_emit_sample_deviation` 764-800 (`sample_deviation`, event_taxonomy.py:303).
-2. Sampler: strategy_store.py:357 `method_sample` (ONE draw behind `method_lead` 341) → 382 `proposal_prior_labeled` (history | llm_prior | none, + store fallback) → q_cells draw; 651 `gate_sample` (#773 W2 decision draw); sampler hiccup → `gate_sample_failed` event (sinks 805-820, event_taxonomy.py:221).
-3. Credit: scalar.py:807/850 → q_cells.py:1165 `observe_settlement` (credit_kind solve/verification decomposition, `beta_updated`).
+The hook and the end-to-end executor use the same decision record. See the [dispatch attribution specification](../../openspec/changes/unify-action-decisions/specs/dispatch-attribution/spec.md).
+
+1. The hook samples once and resolves the actual method from the explicit declaration or the adopted draw. It checks current authorization before writing an accepted dispatch.
+2. The executor builds the same decision fields from its existing draw. The hook supplies an adopted method in the updated tool input. A matching PostToolUse event publishes the staged method, source, and dispatch ID to the Q-cell ledger. A sampler weight and an external caller's behavior probability are separate fields.
+3. Blind settlement joins verified credit to that dispatch ID. An accepted dispatch with no result remains pending. A planned action without a dispatch contributes no observation. Verification, task termination, and credit settlement have separate lifecycles.
+
+The following transfer and planner references and the findings table document the earlier architecture audit. The sampled-method rejection and side usage ledger in audit findings 3.1 and 3.4 describe the implementation before amendment 7. See [the amendment history](acceptance-spec-amendments.md) and the current specification linked above.
+
 4. Transfer: settle-time crystallize (flow 2) → marl.py:91 `signature_class`, 138-169 `record_negative(signature_class, agent_type, method_family)`, 172 `negative_pools`, 218 broadcast; q_cells.py:775 arm_context `agent_type` (5th arm dim); SHRINK_CAP q_cells.py:168.
 5. Belief + planner: belief.py:55 `record_belief` (runs/belief.jsonl) at settle; state.py:497/529 `bf=` declared-unknown dim in the signature; l1_value.py:107 `ACTION_KINDS = (dispatch, park, split, verify, reuse, distill)`; l1_planner.py:296 `candidate()` boundary wall, 341 `_admit` (one-or-more budget-bounded), 377 `plan` (DTS argmax value/cost), 457 `plan_for_claim` (dispatch/park/reuse); consumed live at dispatch by dispatch_gate.py:946-973 `_write_plan_receipt` (plan-receipt/1: admitted list + chosen key).
 6. Plan-author anchor: worker_budget_sinks.py:1150 `stamp_dispatch_anchor` arms the plan gate for the NEXT dispatch (#57 gate 3).
@@ -986,7 +989,7 @@ Worker_budget battery runs BEFORE dispatch_gate on the same PreToolUse:Agent eve
 | 3.1 | [MATCH] flow=3; spec openspec/changes/issue-691-rl-output-path/proposal.md T2 requires per-dispatch reconciliation with additive usage-row fields and a `sample_deviation` recorded event; code worker_budget_sinks.py:744-800, method_families.py:303-322, event_taxonomy.py:303. |
 | 3.2 | [MATCH] flow=3; spec 691 T3 requires `proposal_prior_labeled()` (source ∈ history \| llm_prior \| none) and `method_sample(fp)` with ONE draw behind both faces; code strategy_store.py:341-419. |
 | 3.3 | [MATCH] flow=3; spec 691 T4 requires `record_case_settlements` to move the linked CasePosterior in runs/posteriors.yaml; code settle_round_credit.py:438-476. |
-| 3.4 | [MISMATCH] flow=3; spec 691 says a deviation is "recorded, NEVER rejected (fail-open + warn; vocabulary validation stays the gate's only REJECT face)" and Non-goals: "No enforcement of sampler-chosen dispatches — the reconciliation is telemetry"; code worker_budget_sinks.py:856-877 instead REJECTs the UNDECLARED case when the sampler has material ("#773 W2: the sampler is the EXIT for the UNDECLARED case — silence is not an override … supersedes the 2026-10-14 'never rejects' amendment … (owner directive 2026-10-18)"). Impact: a new REJECT face the spec explicitly rules out; the 691 proposal/tasks were never amended (owner directive lives only in the code comment). |
+| 3.4 | [MISMATCH] flow=3; spec 691 says a deviation is "recorded, NEVER rejected (fail-open + warn; vocabulary validation stays the gate's only REJECT face)" and Non-goals: "No enforcement of sampler-chosen dispatches — the reconciliation is telemetry"; code worker_budget_sinks.py:856-877 instead REJECTs the UNDECLARED case when the sampler has material ("#773 W2: the sampler is the EXIT for the UNDECLARED case — silence is not an override … supersedes the 2026-10-14 'never rejects' amendment … (owner directive 2026-10-18)"). Impact: a new REJECT face the spec explicitly rules out; the 691 proposal/tasks were never amended (owner directive lives only in the code comment). **Superseded post-audit**: the record-only slice removed both sampler REJECT faces — the undeclared case adopts the draw as its declaration, deviations always pass and are recorded, and the remaining `methodfamily` rejects are the vocabulary/constraint contract faces (see `acceptance-spec-amendments.md` amendment 7); the mismatch against 691's non-goal is closed. |
 | 3.5 | [MATCH] flow=3; spec openspec/changes/issue-705-marl-architecture/proposal.md ①②③ requires the 5th `agent_type` arm dim, class-level negatives/broadcast in `scripts/rlvr/marl.py`, and solve/verification credit decomposition; code q_cells.py:775, marl.py:91-247, q_cells.py:1165-1260 (`credit_kind`, `beta_updated`). |
 | 3.6 | [GAP] flow=3; code scalar.py:807/850 call `observe_settlement` without `credit_kind` — no production caller ever marks verification credit; the 705 ③ decomposition is seam-only. |
 | 3.7 | [GAP] flow=3; code l1_value.py:107 (distill in the closed vocabulary, priced DISTILL_COST 1.5 at l1_planner.py:99), belief.py:55 + state.py:529 (`bf=` dim), l1_planner.py:341 `_admit` (one-or-more, budget-bounded) — the "issue 760 component b / A / pi" faces (PRs #761/#762/#763) have NO openspec change in-repo; the only archived 760 (openspec/archive/issue-760-dispatch-tools) covers the different tools-rack face. |
@@ -994,7 +997,7 @@ Worker_budget battery runs BEFORE dispatch_gate on the same PreToolUse:Agent eve
 | 3.9 | [GAP] flow=3; code dispatch_gate.py:946-973 — plan() consumed live at the ALLOW tail (receipt admitted/chosen) is documented only in scripts/README.md + review-gate evidence; no spec dir for #773 W3. |
 | 3.10 | [MATCH] flow=3; spec issue-691 "ONE draw implementation behind both faces … can never disagree"; code strategy_store.py:341-355 `method_lead` delegates to `method_sample`. |
 
-**Verdict flow 3: 部分偏离** — 691/705 mechanics fully realized; the 2026-10-18 undeclared-REJECT supersedes 691's written non-goal without a spec update; the 760-component and 773-receipt spec lives outside openspec.
+**Historical verdict for flow 3** — the audit identified the undeclared rejection and gaps in the #760 and #773 specifications. Amendment 7 superseded the rejection. The current dispatch contract is linked above.
 
 ---
 
@@ -1067,7 +1070,7 @@ scripts/kunglao-init.py: `run()` 3195 → refuse_version_mismatch/path_shape 981
 | Cross-cutting | 3 | 1 | 0 | — |
 
 Heaviest mismatches:
-1. Flow 3 (691): the #773 W2 undeclared-family REJECT (worker_budget_sinks.py:856-877) contradicts 691's explicit non-goal "No enforcement of sampler-chosen dispatches … vocabulary validation stays the gate's only REJECT face" — a new enforcement face justified by an owner directive recorded only in code.
+1. Flow 3 (691): the #773 W2 undeclared-family REJECT (worker_budget_sinks.py:856-877) contradicted 691's explicit non-goal "No enforcement of sampler-chosen dispatches … vocabulary validation stays the gate's only REJECT face" — a new enforcement face justified by an owner directive recorded only in code. **Resolved post-audit**: the record-only slice removed both sampler REJECT faces (undeclared adopts the draw; deviations are recorded, never rejected); 691's non-goal holds again (amendment 7 in `acceptance-spec-amendments.md`).
 2. Flow 4 (753): the dirty-workspace RC 6 refusal — the spec's headline ruling "未提交不升" — was replaced on the migration path by committing the dirty state as the snapshot (kunglao_upgrade.py:1414-1426, 1459-1477).
 3. Flow 1 (496) + cross-cutting: the strategy log now fires on every dispatch (spec: marker-gated, "无标记 = 行为不变"; dispatch_gate.py:975-1057) and the teeth are fail-closed (spec: FAIL_OPEN), while the recall-default-off contract is absent from this tree (recall_inject.py:665 default ON).
 

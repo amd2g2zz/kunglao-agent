@@ -321,9 +321,10 @@ def _outcome_rows_summary(workspace: Path, claim_id: str) -> str:
 
 def _q_cell_obs_rows(workspace: Path) -> list[dict]:
     """#721 q-cell observation rows: the consolidated runs/experience.jsonl
-    (stamp-filtered) — the ONE home. #804 de-compat: the legacy
-    runs/q-cell-log.jsonl archive fallback is retired; a missing rlvr
-    core is an ImportError LOUD, never a silent legacy read."""
+    (stamp-filtered) — the ONE home. #804 de-compat + issue-1004 R3: the
+    pre-consolidation file is gone from every live face (the R4 CLI
+    migrates + deletes it); a missing rlvr core is an ImportError LOUD,
+    never a silent stale read."""
     from rlvr import q_cells  # noqa: PLC0415
     return q_cells.JSONLQStore(workspace).observations()
 
@@ -447,7 +448,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     _u366_lib = lessons_library if lessons_library is not None else None
     try:
         from rlvr import reward as _rs366
-        _u366_before = _rs366.snapshot_lessons(_u366_lib)
+        _u366_before = _rs366.snapshot_lessons(_u366_lib, workspace)
     except Exception as exc:  # noqa: BLE001 — emission adapter degrades only
         warn("unified_reward_snapshot", f"{type(exc).__name__}: {exc}")
         _u366_before = None

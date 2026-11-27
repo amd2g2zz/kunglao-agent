@@ -460,6 +460,61 @@ def cmd_upgrade(args) -> int:
     return mod.main(argv)
 
 
+def cmd_seal(args) -> int:
+    """The learning-channel seal operator face: provision the HMAC key
+    (idempotent, never overwrites) and print the armed status. The key
+    material NEVER reaches output or logs — the status names the path
+    and a short sha256 id only. Exit 0 = the channel is armed; exit 1 =
+    it is not (a declared path is not the fixed key path, a short or
+    broken key file, or a failed mode hardening — the note names the
+    repair). The sealed-row count names the workspace it counted: an
+    explicit --workspace first, else the resolvable one — a wrong-tree
+    count prints its own tree instead of posing as the live number."""
+    import kunglao_log
+    from rlvr import learning_seal as seal
+    st = seal.provision(args.key_path)
+    print(f"learning seal: {'ARMED' if st['armed'] else 'UNARMED'}")
+    print(f"key path: {st['path']}")
+    if st.get("key_id"):
+        print(f"key id: sha256:{st['key_id']} (prefix only — the key "
+              f"material is never printed)")
+    note = st.get("note")
+    if note:
+        print(f"note: {note}")
+    ws = getattr(args, "workspace", None) or kunglao_log.warn_workspace()
+    count = seal.sealed_row_count(ws)
+    if ws is not None:
+        print(f"sealed rows: {count} (workspace: {ws})")
+    else:
+        print(f"sealed rows: {count} (no workspace resolved)")
+    return 0 if st["armed"] else 1
+
+
+def cmd_seal_verdict_write(args) -> int:
+    """The harness-written settlement verdict face: read the verdict doc
+    JSON on stdin, mint the channel seal over it, and land it at the
+    canonical verdict path. The ONLY sanctioned writer of
+    runs/settlement-verdict-<claim>.json — a ruling that bypasses this
+    face is refused at the settlement read face on an armed channel.
+    The receipt names the path and the sealed/unsealed mint state; the
+    doc never echoes back. Exit 0 = landed; exit 1 = refused (non-JSON
+    stdin or a landing-wall miss — the reason prints on stderr)."""
+    from rlvr import settlement_wire as wire
+    try:
+        doc = json.loads(sys.stdin.read() or "")
+    except ValueError as exc:
+        print(f"verdict-write: stdin is not JSON: {exc}", file=sys.stderr)
+        return 1
+    try:
+        out = wire.write_sealed_verdict(args.workspace, args.claim, doc)
+    except ValueError as exc:
+        print(f"verdict-write: refused: {exc}", file=sys.stderr)
+        return 1
+    print(f"verdict written: {out['path']} "
+          f"({'sealed' if out['sealed'] else 'unsealed (channel unarmed)'})")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         prog="kunglao.py",
@@ -541,6 +596,36 @@ def main() -> int:
              "6=heartbeat verify failed")
     p_analysis.add_argument("workspace", nargs="?", default=".")
     p_analysis.set_defaults(func=cmd_analysis)
+
+    p_seal = sub.add_parser(
+        "seal",
+        help="learning-channel seal operator face: provision the key, "
+             "report the armed status (key material never prints)")
+    seal_sub = p_seal.add_subparsers(dest="seal_cmd", required=True)
+    p_prov = seal_sub.add_parser(
+        "provision",
+        help="generate the learning key (idempotent: an existing valid "
+             "key is never overwritten) and report the armed status")
+    p_prov.add_argument(
+        "--key-path", default=None,
+        help="provision a declared path instead of the fixed learning-"
+             "key path (the live channel reads the fixed path — a "
+             "declared-path provisioning reports UNARMED honestly)")
+    p_prov.add_argument(
+        "--workspace", default=None,
+        help="scope the sealed-row count to an explicit workspace "
+             "(default: the resolvable one — its path is printed beside "
+             "the count either way)")
+    p_prov.set_defaults(func=cmd_seal)
+
+    p_vw = seal_sub.add_parser(
+        "verdict-write",
+        help="the sanctioned settlement-verdict writer: seal the doc on "
+             "stdin and land it at runs/settlement-verdict-<claim>.json "
+             "(the only writer the armed settlement face accepts)")
+    p_vw.add_argument("workspace", nargs="?", default=".")
+    p_vw.add_argument("claim")
+    p_vw.set_defaults(func=cmd_seal_verdict_write)
 
     args = ap.parse_args()
     return args.func(args)

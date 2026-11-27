@@ -2873,6 +2873,50 @@ def install_git_hooks(ws: Path, home: Path | None = None) -> tuple[bool, str]:
     return True, msg
 
 
+def _provision_learning_seal(ws: Path) -> int:
+    """Provision/arms the learning-channel seal for this host
+    (RC_OK = armed, RC_ERROR = refused). Idempotent: an existing valid
+    key is kept, never rotated; a short or unreadable key file is
+    refused loudly with the by-hand repair path — never auto-replaced.
+    A genuine provisioning failure (unwritable key directory, chmod
+    that cannot harden) refuses the init BEFORE scaffold, mirroring the
+    toolchain gate's verify-first symmetry. The key material never
+    reaches stdout, stderr, or the event ledger — the receipt names the
+    key path and a short sha256 id only."""
+    try:
+        from rlvr.learning_seal import provision
+    except Exception as exc:  # noqa: BLE001 — a broken skill install is
+        # an environment fault: refuse loudly, never scaffold unarmed.
+        print(f"kunglao-init: REFUSE — learning-seal module "
+              f"unimportable ({type(exc).__name__}: {exc}); the learning "
+              f"channel must not initialize unarmed", file=sys.stderr)
+        return RC_ERROR
+    st = provision()
+    if st.get("armed"):
+        line = (f"kunglao-init: learning seal ARMED "
+                f"(key path: {st['path']}")
+        if st.get("key_id"):
+            line += f", key id: sha256:{st['key_id']}"
+        # stderr, never stdout: the pending-decision channel (exit 8)
+        # owns a PURE-JSON stdout contract, and this receipt prints
+        # before any pending point.
+        print(line + ("; " + st["note"] if st.get("note")
+                      else "") + ")", file=sys.stderr)
+        try:
+            kunglao_log.emit(ws, actor="init", action="dispatch",
+                             detail="learning seal provisioned/armed "
+                                    f"({st.get('note') or 'key created'})")
+        except Exception as exc:  # noqa: BLE001 — telemetry never deadlocks init
+            kunglao_log.warn("init.seal_emit",
+                             f"{type(exc).__name__}: {exc}")
+        return RC_OK
+    print("kunglao-init: REFUSE — learning-seal provisioning failed: "
+          f"{st.get('note') or 'channel not armed'} (key path: "
+          f"{st.get('path')}); repair the key by hand, then re-run "
+          "kunglao-init", file=sys.stderr)
+    return RC_ERROR
+
+
 def resume(ws: Path, text: str) -> int:
     """Phase 1 resume mode: no drift → exit 0; drift → stderr WARNING, still exit 0."""
     recorded = extract_hash(text)
@@ -3398,6 +3442,12 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                                              plugin_mode=plugin_mode)
                 if rc != RC_OK:
                     return rc
+                # the seal provisioning is idempotent host state, not
+                # workspace state: a re-run on an initialized workspace
+                # keeps the channel armed (a deleted key re-provisions).
+                seal_rc = _provision_learning_seal(ws)
+                if seal_rc != RC_OK:
+                    return seal_rc
                 return resume(ws, text)
             # F1 (#304 review): marker present but project_type missing
             # (pre-#304 workspace). resume() alone would exit 0 forever and
@@ -3493,6 +3543,16 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     anchor_rc = _anchor_intake(ws, answers)
     if anchor_rc is not None:
         return anchor_rc
+
+    # The learning-channel seal provisions HERE (pre-scaffold, verify-
+    # first symmetry): an unprovisioned host rides the unarmed legacy
+    # faces forever, so provisioning is part of initialization, not an
+    # operator chore. Idempotent (an existing valid key is never
+    # touched); a genuine provisioning failure refuses the init loudly
+    # BEFORE any scaffold is written. The key material never prints.
+    seal_rc = _provision_learning_seal(ws)
+    if seal_rc != RC_OK:
+        return seal_rc
 
     # #304: toolchain.check BEFORE scaffold — HARD FAIL => #408
     # ask-then-install, then refuse + cleanup only for items still HARD.

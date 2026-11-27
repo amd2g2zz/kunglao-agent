@@ -337,32 +337,35 @@ def _deviation_ws(tmp_path):
 
 
 def test_out_of_support_declaration_is_never_a_recorded_deviation(tmp_path):
-    """R2 acceptance pin, under the MERGED #794 sampled-binds semantics:
-    a declared family OUTSIDE the sampler's support keeps the honest 0.0
-    store face, and #794's gate turns exactly that incoherence into a
-    REJECT before any usage row or sample_deviation event exists — so a
-    RECORDED deviation to arm A structurally carries propensity_A > 0
-    (the production 6/16 propensity-0.0 deviation rows can never
-    re-emerge). The gate face is pinned by
-    tests/test_sampled_binds_794.py; this pins the store face the gate
-    consumes."""
+    """R2 acceptance pin: a declared family OUTSIDE the sampler's support
+    keeps the honest store face — conditional sampler weight 0.0 and an
+    unknown behavior propensity (no probability is fabricated for an arm
+    the policy never supported). Under the record-only gate the
+    declaration is recorded as a deviation, and the record never pairs a
+    fabricated propensity with the out-of-support arm (the production
+    6/16 propensity-0.0 deviation rows can never re-emerge). This pins
+    the store face the record consumes; the gate face is pinned by
+    tests/test_sampled_binds_794.py."""
     from rlvr import strategy_store as ss
     ws = _deviation_ws(tmp_path)
     view = ss.reconcile_declaration(ws, FAM_B)
     assert view["deviates"] is True
     assert view["sampled_family"] in {FAM_A, FAM_C}
-    assert view["propensity"] == 0.0, (
-        "the store stays honest: an out-of-support arm has draw "
-        "probability 0 — #794's coherence gate consumes this face")
+    assert view["conditional_sampler_weight"] == 0.0, (
+        "an out-of-support arm has zero conditional sampler weight")
+    assert view["propensity"] is None
+    assert view["supported"] is False
 
 
 def test_recorded_deviation_to_in_support_arm_carries_positive_propensity(
         tmp_path):
-    """R2 acceptance pin (the recorded face): a deviation to arm A that
-    the current policy actually supports (declared in the candidate set,
-    != the draw) carries propensity_A > 0 — the only deviation shape
-    that reaches the usage row and the sample_deviation event under the
-    sampled-binds gate."""
+    """R2 acceptance pin (the recorded face): a deviation to an arm the
+    current policy actually supports (declared in the candidate set,
+    != the draw) carries a positive conditional sampler weight — the
+    store face behind the recorded pair. Under the record-only gate
+    every deviation reaches the usage row and the sample_deviation
+    event, and the in-support arm is the shape whose weight the
+    conditional view explains."""
     from rlvr import strategy_store as ss
     from rlvr import state as rlvr_state
     ws = _deviation_ws(tmp_path)
@@ -375,15 +378,17 @@ def test_recorded_deviation_to_in_support_arm_carries_positive_propensity(
     other = next(f for f in (FAM_A, FAM_C) if f != sampled)
     view = ss.reconcile_declaration(ws, other)
     assert view["deviates"] is True
-    assert view["propensity"] is not None and view["propensity"] > 0.0, (
-        f"recorded deviation with propensity {view['propensity']!r}")
-    assert view["propensity"] == pytest.approx(
+    assert view["propensity"] is None
+    assert view["supported"] is True
+    assert view["conditional_sampler_weight"] is not None and view["conditional_sampler_weight"] > 0.0, (
+        f"recorded deviation with propensity {view['conditional_sampler_weight']!r}")
+    assert view["conditional_sampler_weight"] == pytest.approx(
         weights[other] / total, abs=1e-6)
 
 
 def test_in_support_declaration_propensity_unchanged(tmp_path):
-    """The healthy face is byte-identical: a declared family inside the
-    sampler's support keeps its exact share."""
+    """A supported declaration keeps its conditional weight; the external
+    behavior probability remains unknown."""
     from rlvr import strategy_store as ss
     from rlvr import state as rlvr_state
     ws = _deviation_ws(tmp_path)
@@ -395,8 +400,9 @@ def test_in_support_declaration_propensity_unchanged(tmp_path):
     total = sum(weights.values())
     view = ss.reconcile_declaration(ws, sampled)
     assert view["deviates"] is False
-    assert view["propensity"] > 0.0
-    assert view["propensity"] == pytest.approx(
+    assert view["propensity"] is None
+    assert view["conditional_sampler_weight"] > 0.0
+    assert view["conditional_sampler_weight"] == pytest.approx(
         weights[sampled] / total, abs=1e-6)
 
 
@@ -443,11 +449,12 @@ def test_fixture_rank_face_is_byte_identical_across_rounds(tmp_path):
 
 
 def test_fixture_deviation_face_replays_propensity_positive(tmp_path):
-    """The fixture's deviation face replayed under the merged
-    sampled-binds semantics: the declared family rides the history
-    support (in-support arm, != the draw) and the recorded deviation
-    carries propensity > 0 — the production 0.0 shape (the fixture's
-    observed rows) is the REJECT face #794 pins."""
+    """The fixture's deviation face replayed against the store: the
+    declared family rides the history support (in-support arm, != the
+    draw) and the recorded deviation carries a positive conditional
+    weight — the production 0.0 shape (the fixture's observed rows) is
+    never fabricated into support; under the record-only gate the pair
+    is recorded as-is."""
     fx = _rank_fixture()
     material = fx["shape"]["deviation_face_material"]
     from rlvr import q_cells
@@ -466,7 +473,9 @@ def test_fixture_deviation_face_replays_propensity_positive(tmp_path):
                     if f != sampled)
     view = ss.reconcile_declaration(ws, declared)
     assert view["deviates"] is True
-    assert view["propensity"] is not None and view["propensity"] > 0.0
+    assert view["propensity"] is None
+    assert view["supported"] is True
+    assert view["conditional_sampler_weight"] > 0.0
     assert fx["expectations"].get("deviation-propensity-positive") == "PASS"
 
 

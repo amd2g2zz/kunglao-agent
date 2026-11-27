@@ -1,0 +1,48 @@
+# devkit/gc/config.yaml — #720 v1 defaults (spec-of-record §11).
+spec:
+  require_existing_check: true
+  orphan_days: 90
+
+test:
+  quarantine_days: 30
+  stale_failure_days: 180
+
+worktree:
+  merged_days: 7
+  abandoned_days: 14
+
+# code leg — witness sets (#1091). The old single list conflated two things:
+# it let a deployment row, an inventory row and a test reference each prove
+# that code is REACHED. They do not. liveness_surfaces is the dispatch face
+# (the agent/runtime reads these to know what to run) plus the CI/devkit
+# runners; declaration_surfaces is registration/deployment/coverage evidence
+# — reported as "declared:" context on a finding, never a keep-alive. The
+# split mirrors scripts/relib_audit.py's seed/diagnostic faces.
+code:
+  liveness_surfaces:
+    - scripts/mechanisms.yaml
+    - scripts/wire_up_settings.py
+    - agents/*.md
+    - skills/**
+    - hooks/**
+    - devkit/**
+    - .github/workflows/*.yml
+    - .github/workflows/*.yaml
+    - tools/_INDEX.yaml
+  declaration_surfaces:
+    - deploy-manifest.yaml
+    - release-manifest.yaml
+    - scripts/README.md
+    - tools/_INDEX.ext.yaml
+    - tools/_index-*.md
+    - tools/_INDEX.md
+    - pyproject.toml
+    - references/**
+    - tests/**
+    - docs/**
+    - openspec/**
+
+budget:
+  max_new_spec: 1
+  max_new_test: 5
+  max_new_files: 20

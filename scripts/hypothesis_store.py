@@ -46,11 +46,21 @@ kunglao-init (#538 CARRIER_READMES / SCAFFOLD_DIRS).
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 SCHEMA_VERSION = "2"
+
+#: the file-level seal row's schema stamp: the store seals a synthetic
+#: row {schema, id, sha256-of-file-without-the-seal-line} through the
+#: learning channel's own sign/verify faces, and carries the minted
+#: ``seal`` block as ONE frontmatter line (``seal: {json}``). Armed,
+#: a hypothesis file without a valid seal was written by someone other
+#: than the store — _parse refuses it (get() raises, list_all() skips
+#: with a warn); unarmed the files ride byte-identically.
+HF_SEAL_SCHEMA = "hypothesis-file/1"
 
 # issue-796 schema v2: the closure hypothesis TREE. Additive frontmatter
 # fields over v1 (v1 files parse with honest-absent defaults):
@@ -318,6 +328,7 @@ class HypothesisStore:
         if not m:
             raise InvalidTransition(f"no frontmatter: {path}")
         fm, body = m.group(1), m.group(2)
+        self._verify_file_seal(path, fm, body)
         fields: dict[str, str] = {}
         for line in fm.splitlines():
             if ":" not in line:
@@ -356,4 +367,73 @@ class HypothesisStore:
             h.path = self.root / f"{h.id}.md"
         h.path.parent.mkdir(parents=True, exist_ok=True)
         h.path.write_text(
-            h.to_frontmatter() + "\n" + h.body + "\n", encoding="utf-8")
+            self._sealed_text(h), encoding="utf-8")
+
+    # ---------- the file-level seal ----------
+
+    def _sealed_text(self, h: Hypothesis) -> str:
+        """The file text with the harness seal minted over it. The row
+        binds the file's bytes (everything except the seal line) and the
+        hypothesis id; armed, the mint rides the learning channel and
+        the ``seal:`` line lands as the LAST frontmatter line. Unarmed
+        the text is byte-identical to the legacy shape (no seal line)."""
+        import hashlib
+
+        from rlvr.learning_seal import sign_row  # noqa: PLC0415 — lazy
+        fm_text = h.to_frontmatter()
+        fm_body = fm_text[: -len("\n---\n")]
+        base = fm_body + "\n---\n" + "\n" + h.body + "\n"
+        row = {"schema": HF_SEAL_SCHEMA, "id": h.id,
+               "sha256": hashlib.sha256(base.encode("utf-8")).hexdigest()}
+        sealed = sign_row(row)
+        seal_doc = sealed.get("seal")
+        if not isinstance(seal_doc, dict):
+            return base
+        seal_json = json.dumps(seal_doc, sort_keys=True,
+                               separators=(",", ":"))
+        return (fm_body + "\n" + f"seal: {seal_json}"
+                + "\n---\n" + "\n" + h.body + "\n")
+
+    def _verify_file_seal(self, path: Path, fm: str, body: str) -> None:
+        """The read face: armed, a hypothesis file whose seal does not
+        verify (absent, altered bytes, foreign key) is refused —
+        InvalidTransition, so ``get()`` raises loudly and ``list_all()``
+        skips the file with ONE canonical warn. Unarmed this face is a
+        no-op (byte-identical legacy parse)."""
+        import hashlib
+
+        from rlvr import learning_seal as _seal  # noqa: PLC0415 — lazy
+        if not _seal.armed():
+            return
+        seal_doc = None
+        kept: list[str] = []
+        for line in fm.splitlines():
+            if seal_doc is None and line.startswith("seal: "):
+                try:
+                    seal_doc = json.loads(line[len("seal: "):])
+                except ValueError:
+                    seal_doc = None
+                continue
+            kept.append(line)
+        fm_wo = "\n".join(kept)
+        hid = ""
+        for line in kept:
+            if line.startswith("id:"):
+                hid = line.split(":", 1)[1].strip()
+                break
+        row = {"schema": HF_SEAL_SCHEMA, "id": hid,
+               "sha256": hashlib.sha256(
+                   ("---\n" + fm_wo + "\n---\n" + body).encode(
+                       "utf-8")).hexdigest()}
+        ok, why = (False, "file carries no seal line") if seal_doc is None \
+            else _seal.verify_row({**row, "seal": seal_doc})
+        if ok:
+            return
+        from kunglao_log import warn  # noqa: PLC0415 — lazy
+        warn("hypothesis_store.parse",
+             f"{path.name} refused: not a store-written hypothesis "
+             f"({why or 'seal line unparseable'}) — the file is skipped "
+             f"by scans and unreadable through get()")
+        raise InvalidTransition(
+            f"learning seal invalid: {path} "
+            f"({why or 'seal line unparseable'})")

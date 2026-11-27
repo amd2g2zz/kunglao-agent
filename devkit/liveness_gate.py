@@ -51,7 +51,26 @@ def _latest_log(ws: Path) -> Path | None:
 def _resolve_ledger(ws: Path, ledger: str) -> Path | None:
     if ledger == "runs/logs/latest":
         return _latest_log(ws)
+    if ledger.startswith("@knowledge/"):
+        return _knowledge_ledger(ws, ledger.split("/", 1)[1])
     return ws / ledger
+
+
+def _knowledge_ledger(ws: Path, rel: str) -> Path:
+    """The knowledge family's workspace-local face (the ``@knowledge/``
+    ledger prefix — the store root is the WORKSPACE's, the single
+    source is ``rlvr.strategy_store.store_root(ws)``; on an import
+    failure the ws-relative default mirror applies — never a second
+    resolver logic). The workspace-less guard lives in store_root's
+    contract."""
+    try:
+        sys.path.insert(0, str(SCRIPTS))
+        from rlvr import strategy_store  # noqa: PLC0415 — lazy (devkit)
+        return strategy_store.store_root(ws) / rel
+    except Exception as exc:  # noqa: BLE001 — mirror, loud in the detail
+        print(f"liveness: knowledge root unavailable ({exc!r}) — "
+              f"workspace-local mirror", file=sys.stderr)
+        return Path(ws) / "runs" / "posterior" / rel
 
 
 def _rows(path: Path) -> list[dict]:

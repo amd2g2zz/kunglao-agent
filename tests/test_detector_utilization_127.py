@@ -30,7 +30,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import mission_stall  # noqa: E402
 from convergence_health import (  # noqa: E402
-    EXIT_SPINNING,
     EXIT_STALLED,
     STALLED_FLATLINE,
     assess,
@@ -107,16 +106,17 @@ def test_convergence_health_flatline_injection():
 
 
 def test_convergence_health_churn_injection():
-    """Inject facts growing +6 while open_count holds -> the CHURN signal
-    fires SPINNING (busy spin masquerading as convergence)."""
+    """Inject facts growing +6 while open_count holds -> the churn signal
+    is reported as information only; the verdict comes from the flatline
+    (5 rounds -> STALLED), never SPINNING."""
     ledger = [_snap(f"2026-09-07T00:{m:02d}:00Z", 3,
                     ["C-1", "C-2", "C-3"], facts, ["C-1", "C-2", "C-3"])
               for m, facts in zip(range(10, 15), (10, 11, 12, 13, 16))]
     r = assess(ledger)
     assert r["churn"]["is_churning"] is True, (
         f"facts +6 with open_count held must flag churn, got {r['churn']}")
-    assert r["verdict"] == "SPINNING"
-    assert r["exit_code"] == EXIT_SPINNING
+    assert r["verdict"] == "STALLED"
+    assert r["exit_code"] == EXIT_STALLED
 
 
 # ---------- 3. fake-success flag must reach a consumed face ----------

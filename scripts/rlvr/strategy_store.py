@@ -51,10 +51,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
-from kunglao_log import iter_jsonl, warn  # canonical warn: ONE implementation
+from kunglao_log import warn  # canonical warn: ONE implementation
 
+from rlvr import consolidated_ledger as _cl
 from rlvr import learning_seal as _seal  # #799: the seal
 from rlvr import ledger as rl
 from rlvr import posteriors as dts
@@ -62,55 +64,92 @@ from rlvr import q_cells
 from rlvr.compose import method_family_of_row  # the settled-row face
 
 # --------------------------------------------------------------------------
-# the cross-task posterior store (#545, WS2) — append-only JSONL, keyed
-# (family, arm_key, feature_key, fingerprint), living inside the guarded
-# prior_store_root (eval/v1/split.yaml prior_store_roots →
-# scripts/rlvr/patterns). The store is repo-code territory: the OWNER
-# RULING (2026-10-07) keeps everything under eval/ WRITE-FORBIDDEN — this
-# module only ever READS split.yaml (the holdout firewall's filter face),
-# never writes anything under eval/.
+# the posterior store (#545, WS2) — append-only JSONL, keyed
+# (family, arm_key, feature_key, fingerprint), living in the knowledge
+# family file (``knowledge-store.jsonl``, issue-1004 R2c) under the
+# WORKSPACE-LOCAL store root (``<ws>/runs/posterior``, the owner ruling
+# keeps every learning store inside its workspace — no
+# cross-project carry-in, no shared-root read). The store file is
+# workspace data: this module only ever READS eval/v1/split.yaml (the
+# holdout firewall's filter face), never writes anything under eval/.
 #
 # Write face: the e2e settlement hook (e2e/checkpoints._settle_dispatch_outcome)
 # appends one row per settled dispatch — holdout-filtered BEFORE append,
-# fail-open telemetry (a store failure never breaks settlement).
+# sealed BEFORE the family append, fail-open telemetry (a store failure
+# never breaks settlement).
 # Read face: ``warm_pools`` — cross-task rows enter ONLY as
 # LAMBDA-tempered anchor mass through the sampler's existing pool face
 # (q_cells.cell_posterior's warm_pool), NEVER as a local-cell write; the
 # per-workspace q-cell log stays authoritative for local cells.
 # Firewall: eval_split_lint hard-fails any holdout unit-id reaching the
 # store rows (the write-face filter is the first gate, the lint the
-# second — defense in depth).
+# second — defense in depth; the lint's schema-aware face scans the
+# family file).
 
 STORE_SCHEMA = "posterior-store/1"
-STORE_REL = "posterior-store.jsonl"
+#: the knowledge family file (``consolidated_ledger.family_path``) under
+#: THIS module's root — the root single source is ``store_root``
 STORE_ENV = "KUNGLAO_POSTERIOR_STORE"
+#: the workspace-local store root rel (store_root(ws) resolves here;
+#: rel-based faces — source_reliability, the devkit ``@knowledge/``
+#: ledger prefix — resolve their files under this dir)
+WS_STORE_REL = "runs/posterior"
 
 #: the refutation fold's store arm (its rows ride the same keyed store —
-#: the cross-workspace verify stream — and are never method proposals).
+#: the verify stream — and are never method proposals).
 #: The fallback candidate channel excludes them by arm key; the
 #: registered-vocabulary intersect is the second wall. The literal
 #: mirrors rlvr.refutation_fold.STORE_ARM (pinned equal by test).
 _REFUTATION_ARM = "refutation"
 
 
-def store_root() -> Path:
-    """The store root: declared switch override, else the skill-dir
-    patterns path (the guarded prior_store_root)."""
+def _inside(child: Path, parent: Path) -> bool:
+    """Whether ``child`` is ``parent`` itself or lives under it
+    (both real-path resolved; non-existent tails resolve lexically)."""
+    c = child.expanduser().resolve()
+    p = parent.expanduser().resolve()
+    return c == p or p in c.parents
+
+
+def store_root(ws) -> Path:
+    """The store root — resolves INSIDE the workspace
+    (``<ws>/runs/posterior``). The declared switch override
+    (KUNGLAO_POSTERIOR_STORE) is honored ONLY when it points inside the
+    workspace (an eval arm relocating the store deeper within its own
+    staged workspace); an override outside the workspace is REFUSED
+    loud — the owner ruling keeps every learning store
+    workspace-local, so a run can never read or write another
+    project's memory — and the workspace-local default is used
+    instead (nothing is touched at the refused path)."""
     import runtime_switches  # noqa: PLC0415 — leaf face, import-light
+    ws_root = Path(ws).expanduser().resolve()
+    default = ws_root / WS_STORE_REL
     env = runtime_switches.get_str(STORE_ENV).strip()
     if env:
-        return Path(env)
-    return Path(__file__).resolve().parent / "patterns"
-
-
-def store_path() -> Path:
-    return store_root() / STORE_REL
+        override = Path(env).expanduser()
+        if _inside(override, ws_root):
+            return override.resolve()
+        warn("strategy_store.store_root",
+             f"{STORE_ENV}={env} points outside workspace {ws_root} — "
+             f"refused (cross-project learning is off, every learning "
+             f"store must resolve inside the workspace); using {default}")
+    resolved_default = default.resolve()
+    if not _inside(resolved_default, ws_root):
+        raise ValueError(
+            f"{default} resolves outside workspace {ws_root} (a symlink "
+            f"may be planted at the store root) — refused: every "
+            f"learning store must resolve inside the workspace")
+    return resolved_default
 
 
 def workspace_id_of(ws) -> str:
-    """The cross-task identity of a workspace: its directory name (stable
-    across the run's lifetime, human-traceable, never an eval unit id)."""
-    return Path(ws).name
+    """The cross-task identity of a workspace: a digest over the
+    resolved absolute path (stable across the workspace's lifetime,
+    same-named workspaces in different parents never collide — the
+    former ``Path(ws).name`` identity aliased them). Same length
+    convention as the feature key (12 hex)."""
+    return hashlib.sha256(
+        str(Path(ws).expanduser().resolve()).encode("utf-8")).hexdigest()[:12]
 
 
 def holdout_unit_ids() -> set[str]:
@@ -162,12 +201,16 @@ def _holdout_hit(row: dict) -> str | None:
                  if u in payload), None)
 
 
-def append_row(row: dict) -> dict:
+def append_row(ws, row: dict) -> dict:
     """Filter-and-append one store row. THE HOLDOUT FILTER PRECEDES THE
     APPEND: any row whose serialized form carries a holdout unit-id is
     refused with a loud warn (the same predicate eval_split_lint
-    enforces — belt and suspenders). Fail-open telemetry: a store
-    failure never breaks settlement."""
+    enforces — belt and suspenders). The row rides the workspace's
+    knowledge family file (issue-1004 R2c) — the seal (``sign_row``)
+    precedes the family append, unchanged from the pre-move write face.
+    A workspace-less call cannot resolve a store (cross-project off)
+    and fails-open telemetry: nothing appended, one warn.
+    Fail-open telemetry: a store failure never breaks settlement."""
     try:
         hit = _holdout_hit(row)
         if hit is not None:
@@ -175,7 +218,12 @@ def append_row(row: dict) -> dict:
                  f"holdout unit-id {hit!r} refused — the firewall "
                  f"filter precedes the append")
             return {"appended": False, "reason": f"holdout-filter:{hit}"}
-        ok = q_cells._append_row(store_path(), _seal.sign_row(row))
+        if ws is None:
+            warn("strategy_store.append_row",
+                 "no workspace — a store row cannot be written outside "
+                 "a workspace (cross-project learning is off)")
+            return {"appended": False, "reason": "no-workspace"}
+        ok = _cl.append(ws, "knowledge", _seal.sign_row(row))
         return {"appended": bool(ok),
                 "reason": None if ok else "write-failed"}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
@@ -250,6 +298,12 @@ def append_store_row(ws=None, *, method_family: str, status: str,
     tiebreaker — one field, no new machinery (the #548 verdict's fix
     rides the row). Delegates to ``append_row`` (filter + fail-open).
 
+    ``credit_kind`` is the WS CREDIT-SERIES population marker: the bank
+    read (``load_rows``) excludes rows carrying it, so a caller passing
+    it here writes a row the bank population never sees — the warned
+    path below makes that consequence loud at the write face. (The
+    credit-series rows themselves come from the credit-series face.)
+
     #705 MARL: ``agent_type`` rides the row (the agent-conditioned
     store), ``claim`` carries the claim ID for the solution-broadcast
     face, and ``credit_kind`` marks solve vs verification. All three
@@ -259,7 +313,12 @@ def append_store_row(ws=None, *, method_family: str, status: str,
     — the rlvr.scalar.classify_outcome vocabulary) rides the row
     additively: warm_pools excludes infra rows, an environment refusal
     is not strategy evidence."""
-    return append_row(_build_store_row(
+    if credit_kind is not None:
+        warn("strategy_store.append_store_row",
+             "credit_kind is the ws credit-series population marker - "
+             "a store row carrying it is EXCLUDED from load_rows (the "
+             "bank read); use the credit-series face instead")
+    return append_row(ws, _build_store_row(
         ws, method_family=method_family, status=status, credit=credit,
         censored=censored, facts_citing=facts_citing,
         propensity=propensity, phi_delta=phi_delta,
@@ -275,15 +334,17 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
                                 credit_kind: str | None = None,
                                 ts: str | None = None) -> dict:
     """The workspace credit-series face (the learning→decision bridge's
-    breaker contract): append one credit row to the WORKSPACE-LOCAL store
-    (``<ws>/runs/posterior-store.jsonl``) — the file
-    ``rlvr.signal_guard.recent_credits`` reads for the degeneracy series
-    and the rl-posterior-moved fingerprint counts. The row is the SAME
-    ``posterior-store/1`` shape as the cross-task store's (one builder,
-    ``_build_store_row``), so a credit is byte-consistent whichever file
-    carries it; the holdout filter precedes the append exactly as on the
-    cross-task face. Fail-open telemetry: a failure is one counted
-    result, never a settle break."""
+    breaker contract): append one credit row to the knowledge family
+    file (issue-1004 R2c; the ws-local series' only face since the
+    issue-1004 R3 schema cutover), where
+    ``rlvr.signal_guard.recent_credits`` reads the degeneracy
+    series (workspace-id filtered) and the rl-posterior-moved
+    fingerprint counts. The row is the SAME ``posterior-store/1`` shape
+    as the cross-task store's (one builder, ``_build_store_row``), so a
+    credit is byte-consistent whichever face produced it; the holdout
+    filter precedes the append exactly as on the cross-task face and
+    the seal precedes the family append. Fail-open telemetry: a failure
+    is one counted result, never a settle break."""
     row = _build_store_row(ws, method_family=method_family, status=status,
                            credit=credit, claim=claim,
                            dispatch_id=dispatch_id, credit_kind=credit_kind,
@@ -295,9 +356,7 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
                  f"holdout unit-id {hit!r} refused — the firewall "
                  f"filter precedes the append")
             return {"appended": False, "reason": f"holdout-filter:{hit}"}
-        target = (Path(ws) if ws is not None else Path(".")) \
-            / "runs" / "posterior-store.jsonl"
-        ok = q_cells._append_row(target, _seal.sign_row(row))
+        ok = _cl.append(ws, "knowledge", _seal.sign_row(row))
         return {"appended": bool(ok),
                 "reason": None if ok else "write-failed"}
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
@@ -306,36 +365,53 @@ def append_workspace_credit_row(ws=None, *, method_family: str,
         return {"appended": False, "reason": f"error:{type(exc).__name__}"}
 
 
-def load_rows(ws=None) -> list[dict]:
-    """The tolerant read: schema-filtered rows, oldest first; when ``ws``
-    is given, rows from THAT workspace are excluded (the leave-one-out
-    shape — a workspace never warm-starts from its own rows). Missing
-    store = [], corrupt lines skip, unknown schemas skip."""
+def load_rows(ws) -> list[dict]:
+    """The tolerant read of the WORKSPACE's own store: schema-filtered
+    rows, oldest first (the knowledge family read — the ONE face since
+    the issue-1004 R3 cutover; the pre-move rels retire with the R4
+    CLI). The store file is workspace data (cross-project off), so the
+    bank population is exactly what this workspace wrote (plus any
+    foreign-stamped rows an eval arm staged into it); the leave-one-out
+    consumers (warm pools, the store prior, the l1 cross-task face)
+    apply the workspace-id exclusion on top. Missing store = [],
+    corrupt lines skip, unknown schemas skip.
+
+    POPULATION CONTRACT (issue-1004 R2c review fix): the family file
+    co-locates the bank rows with the ws credit series (the breaker's
+    ``append_workspace_credit_row`` rows, whose non-empty
+    ``credit_kind`` column is the face's marker). The credit rows are
+    EXCLUDED here so every consumer of this face sees exactly the bank
+    population; the credit series' only reader is
+    ``rlvr.signal_guard.recent_credits``, which reads the family
+    directly. warm pools, the store prior, the solution-broadcast
+    dedupe, the l1_planner cross-task face, and the refutation fold
+    therefore keep their composition (a dense per-claim credit
+    series is breaker telemetry, never store knowledge)."""
     try:
-        text = store_path().read_text(encoding="utf-8", errors="replace")
-    except OSError:
+        rows = [r for r in _cl.read(ws, "knowledge",
+                                    schema_prefix="posterior-store")
+                if isinstance(r, dict)]
+    except Exception as exc:  # noqa: BLE001 — fail-open, loud
+        warn("strategy_store.load_rows", f"{type(exc).__name__}: {exc}")
         return []
-    rows = [r for r in iter_jsonl(text.splitlines())
-            if isinstance(r, dict)
-            and str(r.get("schema") or "") == STORE_SCHEMA]
+    rows = [r for r in rows if not r.get("credit_kind")]
     rows = _seal.trusted_rows(rows, op="strategy_store.load_rows")
-    if ws is not None:
-        mine = workspace_id_of(ws)
-        rows = [r for r in rows
-                if str(r.get("workspace_id") or "") != mine]
     return rows
 
 
 def warm_pools(ws, families) -> dict:
-    """The read face — cross-task rows as LAMBDA-tempered anchor pools.
-
-    Every OTHER workspace's settled store row contributes
-    LAMBDA · tiebroken_credit mass to its family's pool (the tempering
-    convention of meta_arms.hierarchical_prior, applied at the store
-    face; the #548 tiebreaker rides the credit). NEVER full weight,
-    NEVER a local-cell write. Returns {family → FeaturePool} (the
-    sampler's duck type) — families without pool rows are absent (a
-    zero-mass pool is a no-op at the anchor).
+    """The read face — cross-workspace rows as LAMBDA-tempered anchor
+    pools. Rows stamped with another workspace's id contribute
+    LAMBDA · tiebroken_credit mass to their family's pool (the
+    tempering convention of meta_arms.hierarchical_prior, applied at
+    the store face; the #548 tiebreaker rides the credit). NEVER full
+    weight, NEVER a local-cell write. Leave-one-out: the workspace's
+    OWN rows never pool — and with cross-project learning off a
+    production store carries only own rows, so the pools read empty
+    (the honest cold start; an eval arm can stage foreign-stamped
+    fixture rows to measure the warm face). Returns {family →
+    FeaturePool} (the sampler's duck type) — families without pool
+    rows are absent (a zero-mass pool is a no-op at the anchor).
 
     #705 agent-level credit: rows carrying ``credit_kind:
     "verification"`` are EXCLUDED — verification confirms existing
@@ -343,6 +419,9 @@ def warm_pools(ws, families) -> dict:
     evidence is verification credit warms from nothing. Absent
     credit_kind is the solve path (bit-identical)."""
     rows = load_rows(ws=ws)
+    mine = workspace_id_of(ws)
+    rows = [r for r in rows
+            if str(r.get("workspace_id") or "") != mine]
     if not rows:
         return {}
     wanted = set(families)
@@ -448,6 +527,202 @@ def _case_update_maps(ws) -> dict[str, list[str]]:
     return out
 
 
+def method_constraint_violation(ws, family: str) -> str | None:
+    """Check authorization, retaining legacy unknown-state compatibility."""
+    import yaml  # noqa: PLC0415
+
+    if family != "dynamic-trace":
+        return None
+    unknown = _support_material_present(ws)
+    try:
+        spec = yaml.safe_load((Path(ws) / "task_spec.yaml").read_text(
+            encoding="utf-8"))
+    except (OSError, UnicodeError, TypeError, yaml.YAMLError):
+        return "dynamic_re authorization unknown: task_spec unreadable" if unknown else None
+    constraints = spec.get("constraints") if isinstance(spec, dict) else None
+    if not isinstance(constraints, dict):
+        return "dynamic_re authorization unknown: constraints missing" if unknown else None
+    permission = str(constraints.get("dynamic_re") or "").strip().lower()
+    if permission == "forbidden":
+        return "task_spec forbids dynamic_re"
+    return "dynamic_re authorization unknown" if unknown and permission != "allowed" else None
+
+
+def _support_material_present(ws) -> bool:
+    """Recorded but invalid/withdrawn evidence must not enable a fallback."""
+    from rlvr import expansion, priors  # noqa: PLC0415
+    import method_families  # noqa: PLC0415
+
+    if (Path(ws) / priors.SUPPORT_MODE_REL).exists():
+        return True
+    present = any((Path(ws) / rel).exists() for rel in (
+        priors.SEED_REL, expansion.RECEIPT_DIR, method_families.DISCOVERED_REL))
+    if present:
+        priors.record_support_mode(ws)  # adopt existing sources before they can disappear
+    return present
+
+
+def _legacy_candidate_support(store, registered) -> tuple:
+    """Retain pre-intake proposal sources with current validation."""
+    import method_families  # noqa: PLC0415
+
+    ws = store.ws
+    for source, read in (("history", store._proposal_prior),
+                         ("case", store._case_prior),
+                         ("store", store._store_prior)):
+        try:
+            proposed = read()
+        except Exception as exc:  # noqa: BLE001 — outage is not support
+            warn("strategy_store.support", f"{source} unreadable: {exc}")
+            continue
+        eligible = {
+            family: float(weight) for family, weight in proposed.items()
+            if (family in registered and isinstance(weight, (int, float))
+                and not isinstance(weight, bool) and math.isfinite(weight)
+                and weight > 0
+                and method_families.validate_method_family(family, ws)[0]
+                and not method_constraint_violation(ws, family))}
+        if eligible:
+            return _share(eligible), source, {f: [source] for f in eligible}
+    return {}, "none", {}
+
+
+def _expansion_evidence_present(ws, receipt: dict) -> bool:
+    """Revalidate explicit artifact references; legacy receipts may omit them."""
+    trigger = receipt.get("trigger")
+    if not isinstance(trigger, dict) or "evidence" not in trigger:
+        return True
+    evidence = trigger["evidence"]
+    if not isinstance(evidence, list) or not evidence:
+        return False
+    for ref in evidence:
+        if not isinstance(ref, str) or not ref.strip():
+            return False
+        path = Path(ref)
+        if not path.is_absolute():
+            path = Path(ws) / path
+        try:
+            with path.open("rb") as artifact:
+                artifact.read(1)
+        except (OSError, ValueError):
+            return False
+    return True
+
+
+def _expansion_candidate_support(ws, registered) -> dict[str, list[str]]:
+    """Read currently closing admission receipts without duplicating mass."""
+    import method_families  # noqa: PLC0415
+    from rlvr import expansion  # noqa: PLC0415
+
+    # An expansion receipt may nominate an already registered method as
+    # well as an overlay token. Admission is rechecked against the live
+    # overlay and its receipt; duplicate receipts do not duplicate mass.
+    try:
+        receipts = expansion.read_receipts(ws)
+    except Exception as exc:  # noqa: BLE001 — corrupt evidence adds no support
+        warn("strategy_store.support", f"expansion unreadable: {type(exc).__name__}: {exc}")
+        receipts = []
+    expansion_families: dict[str, list[str]] = {}
+    for receipt in receipts:
+        if not _expansion_evidence_present(ws, receipt):
+            continue
+        admitted = receipt.get("admitted")
+        hypotheses = receipt.get("hypotheses")
+        if not isinstance(admitted, list) or not isinstance(hypotheses, list):
+            continue
+        admitted_ids = {str(h) for h in admitted}
+        for hyp in hypotheses:
+            if not isinstance(hyp, dict) or str(hyp.get("id") or "") not in admitted_ids:
+                continue
+            family = str(hyp.get("family") or "").strip()
+            if (family in registered and method_families.TOKEN_RE.fullmatch(family)
+                    and method_families.validate_method_family(family, ws)[0]
+                    and not method_constraint_violation(ws, family)):
+                expansion_families.setdefault(family, []).append(
+                    f"expansion_receipt:{receipt.get('receipt')}")
+    return expansion_families
+
+
+def _current_candidate_support(store) -> tuple:
+    """Build support from intake and current admitted expansion receipts.
+
+    History reweights this set but never adds a family. Registry and
+    overlay admission are checked at decision time, including revocation.
+    """
+    import method_families  # noqa: PLC0415
+    from rlvr import priors  # noqa: PLC0415
+
+    ws = store.ws
+    try:
+        registered = method_families.registered_tokens(ws)
+    except Exception as exc:  # noqa: BLE001 — never invent support
+        warn("strategy_store.support", f"registry unreadable: {type(exc).__name__}: {exc}")
+        return {}, "none", {}
+    weights: dict[str, float] = {}
+    sources: dict[str, list[str]] = {}
+    if not _support_material_present(ws):
+        return _legacy_candidate_support(store, registered)
+    try:
+        seeded = priors.intake_prior_weights(ws)
+    except Exception as exc:  # noqa: BLE001 — invalid intake is not support
+        warn("strategy_store.support", f"intake unreadable: {type(exc).__name__}: {exc}")
+        seeded = {}
+    for family, weight in sorted(seeded.items()):
+        if (family in registered and isinstance(weight, (int, float))
+                and not isinstance(weight, bool) and math.isfinite(weight)
+                and weight > 0 and method_families.validate_method_family(family, ws)[0]
+                and not method_constraint_violation(ws, family)):
+            weights[family] = float(weight)
+            sources[family] = ["llm_prior", f"intake:{priors.SEED_REL}"]
+
+    expansion_families = _expansion_candidate_support(ws, registered)
+    base = sum(weights.values()) / len(weights) if weights else 1.0
+    for family in sorted(expansion_families):
+        weights.setdefault(family, base)
+        sources.setdefault(family, []).extend(
+            ["expansion", *sorted(set(expansion_families[family]))])
+    try:
+        history = store._proposal_prior()
+    except Exception as exc:  # noqa: BLE001 — history adjusts, never authorizes
+        warn("strategy_store.support", f"history unreadable: {type(exc).__name__}: {exc}")
+        history = {}
+    try:
+        case_weights = store._case_prior()
+    except Exception as exc:  # noqa: BLE001 — corrupt learning adds no weight
+        warn("strategy_store.support", f"case prior unreadable: {type(exc).__name__}: {exc}")
+        case_weights = {}
+    for family in weights:
+        if family in history and history[family] > 0:
+            weights[family] *= 1.0 + history[family]
+            sources[family].append("history_weight")
+        if family in case_weights and case_weights[family] > 0:
+            weights[family] *= 1.0 + case_weights[family]
+            sources[family].append("case_weight")
+    labels = set().union(*sources.values())
+    source = "llm_prior" if "llm_prior" in labels else ("expansion" if weights else "none")
+    return _share(weights), source, sources
+
+
+# the harness-without-learning face — the SAME switch and semantics as
+# the e2e envelope sampler (scripts/e2e/checkpoints.py): an exact-match
+# KUNGLAO_SCHEDULER=uniform redirects every production sampling entry
+# (method_sample / method_lead / reconcile_declaration) to the flat
+# scheduler draw; any other value (set or unset) leaves the learned
+# face byte-identical.
+SCHEDULER_ENV = "KUNGLAO_SCHEDULER"
+SCHEDULER_UNIFORM = "uniform"
+
+
+def _scheduler_uniform() -> bool:
+    """True when the run demands the flat scheduler face: the envelope
+    prior goes flat (1.0 everywhere), the draw reads an EMPTY store
+    (every cell posterior stays the day-one Beta(1,1)) and the learned
+    extras are withheld — the learned state never influences selection.
+    Exact match only; registered so an undeclared read fails closed."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    return runtime_switches.get_str(SCHEDULER_ENV) == SCHEDULER_UNIFORM
+
+
 class PosteriorStrategyStore:
     """THE StrategyStore implementation over the landed faces."""
 
@@ -475,19 +750,19 @@ class PosteriorStrategyStore:
         receipt = self.method_sample(state_fingerprint)
         return str(receipt["family"]) if receipt else None
 
-    def method_sample(self, state_fingerprint: str) -> dict | None:
-        """#691: the full draw receipt behind ``method_lead`` — the SAME
-        prior chain (measured history → the explicit intake llm-prior →
-        the case posteriors → the cross-task store), the SAME
-        ``q_cells_seed_state`` seed, the SAME sampler kwargs, plus the
-        additive ``prior_source`` label (history | llm_prior | case |
-        store) so receipts distinguish a prior the workspace earned from
-        one it was TOLD or LEARNED. None = no candidates anywhere — the
-        honest cold gap, never a fabricated draw."""
-        prior, source = self.proposal_prior_labeled()
-        if not prior:
-            prior = self._store_prior()
-            source = "store" if prior else source
+    def method_sample(self, state_fingerprint: str, *, arm_context=None) -> dict | None:
+        """Draw from current support, with history used as weight evidence.
+
+        Legacy history/case/store fallback applies only before intake or
+        discovery material has been recorded. Candidate provenance is kept
+        separate from the unknown probability of an external declaration.
+        KUNGLAO_SCHEDULER=uniform (exact match) redirects the draw to
+        :meth:`_uniform_draw` — every other value leaves this path
+        byte-identical.
+        """
+        if _scheduler_uniform():
+            return self._uniform_draw(state_fingerprint)
+        prior, source, sources = _current_candidate_support(self)
         if not prior:
             return None
         rng, _round = q_cells.q_cells_seed_state(self.ws)
@@ -496,46 +771,47 @@ class PosteriorStrategyStore:
         kwargs.update(self._warm_pool_kwargs(prior.keys()))
         kwargs.update(self._negative_pool_kwargs(prior.keys()))
         kwargs.update(self._termination_kwargs(prior.keys()))
+        if arm_context is not None:
+            kwargs["arm_context"] = arm_context
         receipt = q_cells.sample_method_family(
             state_fingerprint, prior, self._qstore, rng=rng, **kwargs)
         receipt["prior_source"] = source
+        receipt["candidate_sources"] = sources
+        receipt["probability_source"] = "unknown"
+        return receipt
+
+    def _uniform_draw(self, state_fingerprint: str) -> dict | None:
+        """The flat scheduler's draw at this state — the exact mirror of
+        the e2e envelope sampler's uniform arm
+        (checkpoints.py:_sample_envelope_family): the candidate SET is
+        the live current support, the candidate prior is flat 1.0
+        everywhere, the draw reads an EMPTY cell store (day-one
+        Beta(1,1) posteriors) and the learned extras are withheld — the
+        learned state never influences selection. Recording is never
+        touched: only the draw law changes."""
+        prior, source, sources = _current_candidate_support(self)
+        if not prior:
+            return None
+        rng, _round = q_cells.q_cells_seed_state(self.ws)
+        receipt = q_cells.sample_method_family(
+            state_fingerprint, {family: 1.0 for family in prior},
+            q_cells.InMemoryStore(()), rng=rng)
+        receipt["scheduler"] = SCHEDULER_UNIFORM
+        receipt["prior_source"] = source
+        receipt["candidate_sources"] = {
+            family: [tag for tag in tags if not tag.endswith("_weight")]
+            for family, tags in sources.items()}
+        receipt["probability_source"] = "unknown"
         return receipt
 
     def proposal_prior_labeled(self) -> tuple[dict[str, float], str]:
-        """#691 T3 — ``_proposal_prior``'s labeled face: (prior, source),
-        source ∈ {``history``, ``llm_prior``, ``case``, ``none``}.
-        ``history`` is the workspace's measured declaration shares (the
-        prior it earned); ``llm_prior`` is the explicit
-        runs/llm-prior.json intake doc when no history exists (the prior
-        it was TOLD); ``case`` is the learning→decision bridge — the
-        runs/posteriors.yaml case Betas folded into family weights
-        through the update_map join (the prior the oracle TAUGHT it).
-        Retired tokens filtered by the same registry wall as every other
-        prior face, share-normalized like any candidate set. Fail-open:
-        the #544 tolerant read face maps a missing/corrupt intake doc to
-        empty silently (never a raise); only an unexpected failure at
-        THIS seam warns (one rate-limited warn, error class only) and
-        the chain continues empty."""
-        prior = self._proposal_prior()
-        if prior:
-            return prior, "history"
-        try:
-            from rlvr import priors as _priors  # noqa: PLC0415 — lazy
-            seeded = _priors.intake_prior_weights(self.ws)
-        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
-            warn("strategy_store.llm_prior",
-                 f"{type(exc).__name__}: {exc} (fail-open: no llm prior)")
-            seeded = {}
-        prior = _share(_registered_only(seeded or {}))
-        if prior:
-            return prior, "llm_prior"
-        try:
-            prior = self._case_prior()
-        except Exception as exc:  # noqa: BLE001 — fail-open at the seam
-            warn("strategy_store.case_prior",
-                 f"{type(exc).__name__}: {exc} (fail-open: no case prior)")
-            prior = {}
-        return (prior, "case") if prior else ({}, "none")
+        """Current proposal weights and their primary evidence source.
+
+        Per-candidate provenance is retained on the full sampling receipt.
+        Recorded invalid evidence never falls back to historical support.
+        """
+        prior, source, _sources = _current_candidate_support(self)
+        return prior, source
 
     # ------------------------------------------------ the case source
 
@@ -588,14 +864,15 @@ class PosteriorStrategyStore:
         return _share(_registered_only(weights))
 
     def _store_prior(self) -> dict[str, float]:
-        """The cross-task fallback candidate channel: families the keyed
-        store holds settled rows for (OTHER workspaces only — the
+        """The cross-workspace fallback candidate channel: families the
+        keyed store holds settled rows for (OTHER workspaces only — the
         leave-one-out shape), weighted by their row share, intersected
-        with the registered vocabulary. Empty when the store is empty or
-        unreadable: the honest cold start stays silence, never a
-        fabricated lead — and every sampled candidate then carries the
-        additive posterior_store receipt block through the warm pools,
-        so the fallback draw stays traceable to its rows."""
+        with the registered vocabulary. With cross-project learning off
+        a production store carries only own rows, so this reads empty —
+        the honest cold start stays silence, never a fabricated lead —
+        and every sampled candidate then carries the additive
+        posterior_store receipt block through the warm pools, so the
+        fallback draw stays traceable to its rows."""
         try:
             counts = self._store_family_counts()
         except Exception as exc:  # noqa: BLE001 — fail-open at the seam
@@ -605,13 +882,17 @@ class PosteriorStrategyStore:
         return _share(_registered_only(counts))
 
     def _store_family_counts(self) -> dict[str, int]:
-        """Row counts per method family over the cross-task store's
-        settled rows (the workspace's own rows excluded by the read
-        face). The refutation fold's rows ride the same store under
-        their own arm key — never proposals, excluded here."""
+        """Row counts per method family over the store's settled rows
+        from OTHER workspaces (the leave-one-out exclusion — a
+        workspace never proposes from its own rows). The refutation
+        fold's rows ride the same store under their own arm key — never
+        proposals, excluded here."""
+        mine = workspace_id_of(self.ws)
         counts: dict[str, int] = {}
         for row in load_rows(ws=self.ws):
             if not isinstance(row, dict):
+                continue
+            if str(row.get("workspace_id") or "") == mine:
                 continue
             if str(row.get("arm_key") or "") == _REFUTATION_ARM:
                 continue
@@ -687,7 +968,7 @@ class PosteriorStrategyStore:
             if not features:
                 return {}
             return {"features": features,
-                    "feature_table": _fp.default_table_path(self.ws)}
+                    "feature_table": _fp.family_table_rows(self.ws)}
         except Exception:  # noqa: BLE001 — fail-open at the seam
             return {}
 
@@ -834,97 +1115,88 @@ def _round_lead(ws) -> str | None:
     return lead or None
 
 
-def reconcile_declaration(ws, declared: str | None) -> dict:
-    """#691 — the dispatch-gate reconciliation view for ONE declared
-    method family: the gate's OWN sampler draw (the same face
-    ``method_lead`` renders, recomputed at dispatch time — anti-spoof:
-    nothing the envelope says can move it) plus the DECLARED family's
-    draw probability under it.
+def method_decision(receipt: dict, declared: str | None) -> dict:
+    """Project one draw and the actual choice into a dispatch record.
 
-    Returns ``{"sampled_family", "propensity", "prior_source",
-    "deviates", "sampled_propensity", "round_lead"}`` — or the all-None
-    gap view on every miss: no workspace, no declaration, no proposal
-    material (the honest cold gap), or any failure (ONE rate-limited
-    warn carrying the error class only). Fail-open by design: telemetry
-    never turns an ALLOW into anything else. ``propensity`` is the
-    sampler's draw probability of the DECLARED family (0.0 when it is
-    not a candidate at all — the draw could never have chosen it; the
-    honest number, not a gap); ``sampled_propensity`` is the same
-    quantity for the sampler's OWN draw, so the two families'
-    probabilities stay separable on the dispatch row. ``round_lead`` is
-    the composed round-strategy lead in force (advisory; None when no
-    strategy object exists)."""
+    An automatic adoption (a draw with no declared method) stamps the
+    draw's conditional probability under the law that produced it,
+    mirroring the e2e channel's ``selection_law_exact`` token; declared
+    and overridden rows and the flat scheduler arm stay on the honest
+    unknown face."""
+    sampled = str(receipt.get("family") or "").strip() or None
+    actual = declared or sampled
+    candidates = receipt.get("candidates") or {}
+    sources = receipt.get("candidate_sources") or {}
+    weights = {}
+    for family, candidate in candidates.items():
+        weight = candidate.get("weight") if isinstance(candidate, dict) else None
+        if (isinstance(weight, bool) or not isinstance(weight, (int, float))
+                or not math.isfinite(weight) or weight <= 0):
+            weights = {}
+            break
+        weights[family] = float(weight)
+    total = sum(weights.values())
+    usable = total > 0 and math.isfinite(total)
+    deviates = bool(declared and sampled and declared != sampled)
+    cond_weight = (weights.get(sampled, 0.0) / total
+                   if usable and sampled else None)
+    method_source = ("override" if deviates else "declared" if declared
+                     else "sampled-adoption" if sampled else None)
+    exact_law = (method_source == "sampled-adoption"
+                 and receipt.get("scheduler") != SCHEDULER_UNIFORM
+                 and bool(cond_weight))
+    return {
+        "actual_method_family": actual,
+        "method_source": method_source,
+        "sampled_family": sampled,
+        "propensity": cond_weight if exact_law else None,
+        "probability_source": ("selection_law_exact" if exact_law
+                               else "unknown"),
+        "conditional_sampler_weight": (weights.get(actual, 0.0) / total
+                                       if usable else None),
+        "sampled_conditional_weight": cond_weight,
+        "supported": actual in sources,
+        "candidates": candidates,
+        "candidate_sources": sources,
+        "prior_source": receipt.get("prior_source"),
+        "deviates": deviates,
+        "sampled_propensity": None,
+    }
+
+
+def reconcile_declaration(ws, declared: str | None) -> dict:
+    """Sample once, even when the caller delegates the method choice."""
     gap = {"sampled_family": None, "propensity": None,
            "prior_source": None, "deviates": False,
            "sampled_propensity": None, "round_lead": None}
-    if not ws or not declared:
+    if declared:
+        gap.update(method_decision({}, declared))
+        gap.pop("supported")
+    if not ws:
         return gap
+    evidence_mode = True
     try:
-        from rlvr import state as rlvr_state  # noqa: PLC0415 — lazy
+        evidence_mode = _support_material_present(ws)
+        from rlvr import state as rlvr_state  # noqa: PLC0415
         store = PosteriorStrategyStore(ws)
         fp = rlvr_state.signature_hash(rlvr_state.snapshot(Path(ws)))
         receipt = store.method_sample(fp)
         if receipt is None:
+            if _support_material_present(ws):
+                return {**gap, "supported": False,
+                        "probability_source": "unknown", "candidates": {},
+                        "candidate_sources": {}}
             return gap
-        sampled = str(receipt.get("family") or "").strip() or None
-        weights: dict[str, float] = {}
-        for fam, cand in (receipt.get("candidates") or {}).items():
-            try:
-                weights[str(fam)] = float((cand or {}).get("weight") or 0.0)
-            except (TypeError, ValueError):
-                weights[str(fam)] = 0.0
-        total = sum(weights.values())
-        propensity = (round(weights.get(str(declared), 0.0) / total, 6)
-                      if total > 0.0 else None)
-        sampled_propensity = (
-            round(weights.get(sampled, 0.0) / total, 6)
-            if (total > 0.0 and sampled) else None)
-        return {
-            "sampled_family": sampled,
-            "propensity": propensity,
-            "prior_source": receipt.get("prior_source"),
-            "deviates": bool(sampled) and str(declared) != sampled,
-            "sampled_propensity": sampled_propensity,
-            "round_lead": _round_lead(ws),
-        }
-    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        return {**method_decision(receipt, declared),
+                "round_lead": _round_lead(ws)}
+    except Exception as exc:  # noqa: BLE001 — retain the authorization boundary
         warn("strategy_store.reconcile_declaration",
              f"{type(exc).__name__}: {exc}")
-        return gap
-
-
-def gate_sample(ws) -> dict:
-    """#773 W2 — the dispatch gate's own draw as a DECISION input (not
-    telemetry): the same sampler face reconcile_declaration renders,
-    returned for the gate to enforce. Returns ``{"family", "propensity",
-    "prior_source"}`` — the all-None gap on every miss (cold store, no
-    proposal material, any failure). Fail-open: a sampler hiccup must
-    never fabricate a family."""
-    gap = {"family": None, "propensity": None, "prior_source": None}
-    try:
-        from rlvr import state as rlvr_state  # noqa: PLC0415 — lazy
-        store = PosteriorStrategyStore(ws)
-        fp = rlvr_state.signature_hash(rlvr_state.snapshot(Path(ws)))
-        receipt = store.method_sample(fp)
-        if receipt is None:
-            return gap
-        family = str(receipt.get("family") or "").strip() or None
-        if not family:
-            return gap
-        weights: dict[str, float] = {}
-        for fam, cand in (receipt.get("candidates") or {}).items():
-            try:
-                weights[str(fam)] = float((cand or {}).get("weight") or 0.0)
-            except (TypeError, ValueError):
-                weights[str(fam)] = 0.0
-        total = sum(weights.values())
-        propensity = (round(weights.get(family, 0.0) / total, 6)
-                      if total > 0.0 else None)
-        return {"family": family, "propensity": propensity,
-                "prior_source": receipt.get("prior_source")}
-    except Exception as exc:  # noqa: BLE001 — the gap is the honest face
-        warn("strategy_store.gate_sample",
-             f"{type(exc).__name__}: {exc}")
+        gap["sample_error"] = type(exc).__name__
+        if evidence_mode:
+            return {**gap, "supported": False, "support_error": type(exc).__name__,
+                    "probability_source": "unknown", "candidates": {},
+                    "candidate_sources": {}}
         return gap
 
 

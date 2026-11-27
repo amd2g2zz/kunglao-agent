@@ -595,17 +595,22 @@ class TestStrategyDataFace:
     def test_strategy_dispatch_row_logged_by_gate(self, tmp_path) -> None:
         """The gate appends the dispatch row on its PASS path when the
         prompt carries `[strategy <id>]` — the only writer the mechanism
-        needs (interface not forced: no marker, no row)."""
+        needs (interface not forced: no marker, no row). Issue-1004 R2b:
+        the row lands in the telemetry family file, stamped."""
         root = tmp_path / "s3"
         ws = _top1_ws(root)
         r = _run_gate(root, ws,
                       '{"kunglao_dispatch": {"version": 1, "claim": "C-1", "tier": 1, "tools": ["grep"]}}\nbackground sweep [strategy first-pass]')
         assert r.returncode == 0, f"stderr={r.stderr!r}"
-        log = ws / "runs" / "strategy-log.jsonl"
+        import dispatch_gate as _dg_teeth
+        log = ws / "runs" / "telemetry.jsonl"
         assert log.exists(), "the strategy dispatch row must be logged"
         rows = [json.loads(ln) for ln in
                 log.read_text(encoding="utf-8").splitlines() if ln.strip()]
-        row = next((e for e in rows if e.get("strategy") == "first-pass"), None)
+        row = next((e for e in rows
+                    if e.get("strategy") == "first-pass"
+                    and e.get("schema") == _dg_teeth.STRATEGY_LOG_SCHEMA),
+                   None)
         assert row is not None, f"rows={rows}"
         assert row["event"] == "dispatch"
         assert row["claim"] == "C-1"

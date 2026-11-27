@@ -117,7 +117,8 @@ Run hook + heartbeat activation before the first dispatch (orchestrator-only, 30
 ```bash
 uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --wire-up       # idempotent; before first dispatch
 uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-on  # worker_budget REJECTS dispatch without .heartbeat.json
-uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_loop_prompt.py <WORKSPACE>           # stdout = /loop prompt → CronCreate */5 * * * *
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_wake_gate.py <WORKSPACE> --print-registration  # the OS cron runs the GATE wrapper (*/5, carries --wake-gate): QUIET (rc 0) injects NOTHING, WAKE (rc 3) injects the /loop prompt once
+uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_loop_prompt.py <WORKSPACE>           # stdout = the /loop prompt body (what the gate injects on WAKE) → CronCreate */5 * * * * as the armed watchdog (the cron is demoted, never deleted)
 ```
 
 MUSTs: `--renew` every 30 min; `--reconcile` every tick (self-heals zombie workers); cron acceptance HARD — `heartbeat_loop_prompt.py --verify` non-zero = CronCreate did not take. A PASSING dispatch auto-renews the TTL, flips phase to DISPATCH, and writes the dispatch event.
@@ -138,9 +139,9 @@ The not-done counterexamples are the load-bearing half: concrete negatives in th
 
 ### 1.4 Tick binding
 
-Run `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention. Every convergence decision is a COMMAND with a required action; no action in a tick = idle fault.
+Run `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention. The scheduler is the pre-LLM wake gate (`heartbeat_wake_gate.py <WORKSPACE> --wake-gate`): a QUIET verdict (rc 0) is a legal outcome — nothing is injected, no model turn happens, and no action is owed for it (`sleep`/`none` are cost-0 actions in the registry). In a WAKEN tick (rc 3) every convergence decision is a COMMAND with a required action; no action in a tick = idle fault.
 
-- **THINK seat**: while the tick waits, heartbeat_tick writes `runs/.think-<ts>.md` — filling its three sections IS that tick's action (EMPTY forbidden); execute `suggested_searches` as the NEXT action.
+- **THINK seat**: in a WAKEN tick, while the tick waits, heartbeat_tick writes `runs/.think-<ts>.md` — filling its three sections IS that tick's action (EMPTY forbidden); execute `suggested_searches` as the NEXT action. Under a QUIET verdict there is no tick turn and no seat to fill.
 - **Premise expiry**: an env-class blocker unverified >12 ticks drops out; a premise contradicting a liveness PASS is SUSPECT → one-shot re-probe, the probe wins.
 - **Teardown**: stop the loop at closeout with `hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
 
@@ -167,6 +168,8 @@ Act on the decision + exit code — it is a command, not a suggestion:
 | `VERSION_MISMATCH` | 67 | workspace format stamp != executing skill version (older AND newer refuse; missing stamp included) | Run `uv run --project <SKILL_DIR> python scripts/kunglao_upgrade.py <ws>` — the transactional upgrade is the only path forward; never dispatch, never read as converged |
 
 **Settler drain first** — on any tick (CONVERGED included) when the decision carries `pending_settlements`, dispatch `kunglao-settler` for the FIRST entry as a background task; carry the `facts-snapshot: <N> facts` marker in its prompt (the dispatch gate applies to it). The settler counts toward the ≤3 in-flight cap and the step barrier rejects it while any worker step is unsettled: drain in a no-open-step window, never alongside a worker dispatch in the same turn. Input `runs/settlement-input-<claim>.json`; its ruling `runs/settlement-verdict-<claim>.json` is what lets the SubagentStop settlement run.
+
+**Rollout deadline timer** — every dispatch commit arms a ONE-SHOT deadline (`runs/rollout-timer-wake.json` carries one wake contract per armed rollout). MUSTs: after each dispatch, read YOUR rollout's entry and `CronCreate` its `cron` exactly once (never a `*/5` loop); a worker finishing early → `CronDelete` that job (the round-closure hook cancels the timer and learns the outcome); the deadline wake runs `uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/rollout_timer_wake.py <WORKSPACE> --wake <rollout_id>` and then performs the graceful wrap-up ONLY — persist evidence → settle → cancel → learn → arm next. It must NOT start, dispatch, resume, or expand any claim.
 
 Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md` for PARTIAL facts. DISPATCH and DISPATCH_VERIFIER act before the turn ends — background launches, never awaited inline.
 
@@ -229,7 +232,7 @@ Four rules: (1) repair AT the failed layer N — jumping to another tool on a la
 
 ## Convergence health
 
-`uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd turn — HEALTHY/STALLED/SPINNING; `worker_budget.py` REJECTS dispatch while STALLED (exit 1) or SPINNING (exit 2).
+`uv run --project <SKILL_DIR> python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd turn — HEALTHY/STALLED/SPINNING; `worker_budget.py` REJECTS dispatch while STALLED (exit 1) or SPINNING (exit 2) except the prescribed remedy dispatch (the verdict's `remedy` block: `dispatch_marker` + `mint_cmd`).
 
 **A failed attempt is not a negative result**: run `failure_analysis_gate.py <WORKSPACE> <C-NN>` before re-dispatch or NEGATIVE; `--lessons` aggregates closed-loop analyses into `references/lessons/`.
 
@@ -271,8 +274,13 @@ Isolation-first: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never enabled — no 
 ## Phase 5 Delivery
 
 1. **Closeout**: §6.3 checklist + independent verification (blind_gate sign-off sampling + L1 re-run) + handoff-check PASS before declaring delivery.
-2. **Teardown**: `hook_activation.py <WORKSPACE> --heartbeat-off`; unconverged teardown is rejected.
-3. **Receipt**: `scripts/release_receipt.py` + downstream contract — see `references/_INDEX.md`.
+2. **Deliverable-use review**. For a candidate fact contribution, use a fresh `general-purpose` Agent from the orchestrator with `run_in_background: false` and a unique name such as `deliverable-use-F001`. Put a single JSON assignment on the first line of the prompt:
+   `{"schema":"deliverable-use-review/1","fact_id":"F001-example","deliverable":"notes/answer.md"}`.
+   Put the normal `facts-snapshot:` checkpoint on the next line. Give the checker the workspace and exact fact file. Ask it to inspect the deliverable in context and compute SHA-256 over the bytes of both files. When the fact contributes to the answer, the checker returns a single raw JSON object directly as its final response, without a Markdown fence or hand-back summary. Include `schema: "deliverable-use/1"`, the assigned `fact_id` and `deliverable`, `fact_sha256`, `deliverable_sha256`, an exact shared `excerpt` of at least 32 characters, `verdict: "used"`, and a `reason` explaining the contribution. For incidental mentions, rejection, or uncertain use, return `verdict: "unknown"`. The completion hook records and seals a positive result using the host checker identity when the learning seal is armed.
+   The hook supplies `verifier_id` from the completed Agent result. After a checker receipt appears in `<WORKSPACE>/runs/deliverable-use/`, run `uv run --project <SKILL_DIR> python <WORKSPACE>/.claude/scripts/settle_round_credit.py <WORKSPACE>` to reconcile the original producer's credit. This review is optional for completion.
+   If Claude Code's fork mode prevents a foreground result, the review needs a session launched with `CLAUDE_CODE_FORK_SUBAGENT=0`. Background results and hand-back summaries leave use unknown. [Claude Code foreground subagents](https://code.claude.com/docs/en/sub-agents#let-claude-wait-for-a-subagent).
+3. **Teardown**: `hook_activation.py <WORKSPACE> --heartbeat-off`; unconverged teardown is rejected.
+4. **Receipt**: `scripts/release_receipt.py` + downstream contract — see `references/_INDEX.md`.
 
 **System boundary**: In = orchestrator + workers + modules + fact base + state files + verify loop + dual hook + Phase 0. Out = hr-report (downstream), report generation, symbol recovery as an end, CTI re-query.
 

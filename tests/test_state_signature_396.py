@@ -71,11 +71,11 @@ def _register(ws: Path, claims: list[dict]) -> None:
 
 
 def _cost(ws: Path, amounts: list[float]) -> None:
-    p = ws / "cost_events.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as fh:
-        for a in amounts:
-            fh.write(json.dumps({"amount": a}) + "\n")
+    """Stamp the cost rows into the settlement family file (the only
+    cost face since the issue-1004 R3 schema cutover)."""
+    import cost_gate as cg
+    for a in amounts:
+        cg.append_event(ws, a, "hook")
 
 
 # ---------- fact face ----------
@@ -499,10 +499,24 @@ class TestVAnchor:
         assert ssig.v_anchor(snap) == pytest.approx(0.7)
 
     def test_budget_present_only_with_cost_face(self, tmp_path):
-        # no cost_events.jsonl -> budget dim absent; no facts/chain -> V 0
+        # no cost face on disk -> budget dim absent; no facts/chain -> V 0
         assert ssig.v_anchor(ssig.snapshot(tmp_path)) == 0.0
         _cost(tmp_path, [50.0])  # spent everything, remaining 0
         assert ssig.v_anchor(ssig.snapshot(tmp_path)) == pytest.approx(0.0)
+
+    def test_budget_present_with_family_written_cost_row(self, tmp_path):
+        """A hook-written (settlement family) cost row keeps the budget
+        dim alive: present=True and the fraction readable from the SAME
+        snapshot — the V anchor never silently drops its 0.2-weight
+        budget term while spend is measured."""
+        import cost_gate as cg
+        cg.append_event(tmp_path, 12.5, "hook")
+        snap = ssig.snapshot(tmp_path)
+        assert snap["budget"]["fraction"] == pytest.approx(12.5 / 50.0)
+        assert snap["budget"]["present"] is True
+        # the anchor carries the budget term: remaining 0.75 at weight
+        # 0.2 — the ONLY dim here, so V = (0.2 * 0.75) / 0.2 = 0.75
+        assert ssig.v_anchor(snap) == pytest.approx(0.75)
 
     def test_bounds_and_determinism(self):
         import random
@@ -552,15 +566,18 @@ class TestSituationStream:
         assert row["state"]["schema"] == "state-sig/2"
         assert row["signature"] == ssig.signature_str(row["state"])
         assert row["signature_hash"] == ssig.signature_hash(row["state"])
-        p = tmp_path / "runs" / "situation-stream.jsonl"
+        # issue-1004 R2b: the rows live in the consolidated telemetry
+        # family file (the legacy rel is not written by production)
+        p = tmp_path / "runs" / "telemetry.jsonl"
         lines = p.read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 1
         assert json.loads(lines[0])["trigger"] == "worker_return"
+        assert not (tmp_path / "runs" / "situation-stream.jsonl").exists()
 
     def test_append_only_stream_grows(self, tmp_path):
         ssig.append_snapshot(tmp_path, trigger="worker_return")
         ssig.append_snapshot(tmp_path, trigger="terminal")
-        p = tmp_path / "runs" / "situation-stream.jsonl"
+        p = tmp_path / "runs" / "telemetry.jsonl"
         assert len(p.read_text(encoding="utf-8").strip().splitlines()) == 2
 
     def test_tick_inherited_from_convergence_ledger(self, tmp_path):
@@ -583,4 +600,4 @@ class TestSituationStream:
         res = ssig.append_snapshot(tmp_path, trigger="terminal")
         assert res["appended"] is False
         assert res["row"] == {}
-        assert not (tmp_path / "runs" / "situation-stream.jsonl").exists()
+        assert not (tmp_path / "runs" / "telemetry.jsonl").exists()

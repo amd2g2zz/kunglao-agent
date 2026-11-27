@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 """cost_input_capture.py — PostToolUse 成本输入捕获 (#873)。
 
-缺口0：cost_events.jsonl 的写入方在仓库内不存在——cost_gate.py 只读，
-docstring 声明的 "written by PostToolUse hook" 是纸面。本 hook 补上输入端：
-  - tool_response 含 "COST WARNING: session total ~$<float>"
-    （COST CRITICAL 同构）→ 追加 {"ts","amount","source"} 到
-    <ws>/cost_events.jsonl（schema 与 cost_gate 解析器逐字段一致）
-  - 无匹配 / ws 未解析 / IO 异常 → 静默不写（FAIL_OPEN，永不打断工具流）
+Input face for the cost-event rows: the tool_response carries
+"COST WARNING: session total ~$<float>" (COST CRITICAL isomorphic) ->
+one stamped cost-event/1 row {"ts","amount","source"} appended to the
+consolidated settlement family ledger (<ws>/runs/settlement.jsonl —
+the only cost face since the issue-1004 R3 schema cutover). No match /
+unresolvable ws / IO trouble → silent no-write (FAIL_OPEN, never
+interrupts the tool stream).
 
 口径边界（proposal 声明）：Claude Code 不暴露 per-call 计费遥测——amount
 是会话累计 session total（PostToolUse 文本解析口径），非增量。
@@ -25,6 +26,12 @@ try:
 # issue 275 batch-3: fail-open handlers leave ONE rate-limited trace —
 # the canonical kunglao_log.warn.
     from kunglao_log import warn
+# The session read domain now lives in _common (see the note by
+# WORKER_MEMO_REL). On the except branch it stays unbound and any fold
+# NameErrors into cockpit_ratio's own except — the same degradation an
+# unreachable kunglao_log already causes; never a blocked tool stream.
+    from _common import (SUBAGENT_DIRNAME,  # noqa: F401 (re-export face)
+                         SUBAGENT_GLOB, sidechain_transcripts)
 except Exception:  # noqa: BLE001 — fail-open lifeline, never block the hook
     def warn(op: str, reason: str) -> None:
         print(f"[kunglao-agent] WARN (fail-open): {op}: {reason}",
@@ -37,7 +44,7 @@ from pathlib import Path
 
 COST_RE = re.compile(
     r"COST (?:WARNING|CRITICAL): session total ~\$([0-9]+(?:\.[0-9]+)?)")
-COST_EVENTS = "cost_events.jsonl"
+COST_SCHEMA = "cost-event/1"
 
 # #801 Face 3: the machine:analysis cockpit ratio — machine-overhead input
 # tokens (orchestrator transcript rows) over analysis-output tokens
@@ -55,12 +62,28 @@ DETECTOR_EVAL_WORD = "detector_eval"
 DETECTOR_FIRED_WORD = "detector_fired"
 LEDGER_TAIL_BYTES = 65_536  # the #883 read budget (rank_face pattern)
 
+# The session's worker rows do not live in the main transcript: Claude
+# Code writes each subagent's rows to <session>/subagents/agent-*.jsonl
+# beside <session>.jsonl, and the main file carries no isSidechain-truthy
+# row at all. A fold over the main file alone therefore answers 0 for the
+# analysis side of any session that dispatched workers, which degenerated
+# the ratio to machine_input/1 and made the alarm unreadable. The memo
+# beside it exists because this hook samples on every Edit/Write/Agent
+# call: re-reading every closed worker transcript per sample (the largest
+# real workspace carries 1.5 GB across 307 files, measured) would price
+# the gauge above what it measures.
+# The read-domain enumeration (SUBAGENT_DIRNAME / SUBAGENT_GLOB /
+# sidechain_transcripts) moved verbatim to scripts/_common.py — the ONE
+# shared source every reader of "which files make up one session" imports
+# (the bench meter included); see the import in the fail-open prologue.
+WORKER_MEMO_REL = Path("runs") / ".cockpit-worker-memo.json"
+WORKER_MEMO_SCHEMA = "cockpit-worker-memo/1"
 
-def _fold_usage(transcript_path: str | Path) -> tuple[int, int]:
-    """(machine_input, analysis_output) over a transcript JSONL. Machine
-    side: isSidechain-falsy rows' input tokens incl. cache reads; analysis
-    side: isSidechain-truthy rows' output tokens. Rows without usage are
-    skipped."""
+
+def _fold_rows(transcript_path: str | Path) -> tuple[int, int]:
+    """(machine_input, analysis_output) over ONE transcript JSONL:
+    isSidechain-falsy rows' input tokens incl. cache reads, isSidechain-
+    truthy rows' output tokens. Rows without a usage face are skipped."""
     machine = 0
     analysis = 0
     with Path(transcript_path).open("r", encoding="utf-8",
@@ -71,9 +94,16 @@ def _fold_usage(transcript_path: str | Path) -> tuple[int, int]:
                 continue
             try:
                 row = json.loads(line)
-                usage = (row.get("message") or {}).get("usage") or {}
             except ValueError:
                 continue
+            if not isinstance(row, dict):
+                continue
+            msg = row.get("message")
+            # A row whose message is not an object (or carries no usage) is
+            # not a usage row: skipped, never an exception — this fold now
+            # runs over every worker file of a session, and one odd row must
+            # not cost the whole sample.
+            usage = msg.get("usage") if isinstance(msg, dict) else None
             if not isinstance(usage, dict):
                 continue
             inp = int(usage.get("input_tokens") or 0) + \
@@ -86,10 +116,101 @@ def _fold_usage(transcript_path: str | Path) -> tuple[int, int]:
     return machine, analysis
 
 
-def compute_ratio(transcript_path: str | Path) -> float:
-    """machine_input / analysis_output over a Claude Code transcript JSONL
-    (the rc1 arithmetic — see _fold_usage). Denominator floored at 1."""
-    machine, analysis = _fold_usage(transcript_path)
+def _load_worker_memo(memo_path: Path | None) -> dict[str, dict]:
+    """The (name -> size, mtime_ns, tokens) face; {} on absent/corrupt —
+    a lost memo costs a recompute, never a wrong number."""
+    if memo_path is None:
+        return {}
+    try:
+        doc = json.loads(Path(memo_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    files = doc.get("files") if isinstance(doc, dict) else None
+    if not isinstance(files, dict):
+        return {}
+    return {str(k): v for k, v in files.items() if isinstance(v, dict)}
+
+
+def _memo_fingerprint(entry: object) -> tuple[int, int] | None:
+    """The memo's (size, mtime_ns) pair, or None when the entry is not a
+    usable pair — an unusable entry is a MISS (recompute), never a
+    failure and never a borrowed number."""
+    if not isinstance(entry, dict):
+        return None
+    try:
+        return int(entry["size"]), int(entry["mtime_ns"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _worker_output_tokens(path: Path, memo: dict[str, dict],
+                         fingerprint: tuple[int, int]) -> int:
+    """Analysis-side tokens (isSidechain-truthy rows' output) of one worker
+    transcript. A file whose size and mtime_ns match the memo is folded by
+    the memo; anything else folds from disk and rewrites its entry."""
+    if _memo_fingerprint(memo.get(path.name)) == fingerprint:
+        try:
+            return max(0, int(memo[path.name].get("tokens") or 0))
+        except (TypeError, ValueError):
+            return 0
+    _machine, analysis = _fold_rows(path)
+    memo[path.name] = {"size": fingerprint[0], "mtime_ns": fingerprint[1],
+                       "tokens": analysis}
+    return analysis
+
+
+def _fold_session(transcript_path: str | Path,
+                  *, worker_memo: str | Path | None = None) -> dict:
+    """The whole-session fold: the main transcript plus the worker
+    transcripts beside it. The machine side stays orchestrator input only
+    — widening it would move the ratio's numerator; the analysis side is
+    every isSidechain-truthy row's output, wherever that row is written.
+    An unreadable worker transcript loses its own contribution (one
+    rate-limited warn) and never drops the sample; the counts keep the
+    blind spot visible in the face."""
+    machine, analysis = _fold_rows(transcript_path)
+    memo = _load_worker_memo(Path(worker_memo) if worker_memo else None)
+    seen: set[str] = set()
+    unread = 0
+    for path in sidechain_transcripts(transcript_path):
+        seen.add(path.name)
+        try:
+            stat = path.stat()
+            analysis += _worker_output_tokens(
+                path, memo, (stat.st_size, stat.st_mtime_ns))
+        except OSError as exc:
+            unread += 1
+            warn("cockpit_worker_fold",
+                 f"{path.name}: {type(exc).__name__}: {exc}")
+    if worker_memo:
+        for name in [n for n in memo if n not in seen]:
+            memo.pop(name)  # rotated-away transcripts are not re-kept
+        try:
+            Path(worker_memo).write_text(
+                json.dumps({"schema": WORKER_MEMO_SCHEMA, "files": memo},
+                           ensure_ascii=False), encoding="utf-8")
+        except OSError as exc:
+            warn("cockpit_worker_memo_write",
+                 f"{type(exc).__name__}: {exc}")
+    return {"machine_input": machine, "analysis_output": analysis,
+            "worker_transcripts": len(seen), "worker_unread": unread}
+
+
+def _fold_usage(transcript_path: str | Path,
+                *, worker_memo: str | Path | None = None) -> tuple[int, int]:
+    """(machine_input, analysis_output) — the _fold_session pair, kept as
+    the tuple face compute_ratio and the replay runners consume."""
+    face = _fold_session(transcript_path, worker_memo=worker_memo)
+    return face["machine_input"], face["analysis_output"]
+
+
+def compute_ratio(transcript_path: str | Path,
+                  *, worker_memo: str | Path | None = None) -> float:
+    """machine_input / analysis_output over a Claude Code session (the rc1
+    arithmetic — see _fold_usage, now over the whole session). Denominator
+    floored at 1."""
+    machine, analysis = _fold_usage(transcript_path,
+                                    worker_memo=worker_memo)
     return machine / max(analysis, 1)
 
 
@@ -165,13 +286,18 @@ def cockpit_ratio(ws: Path, transcript_path: str | Path) -> dict | None:
     read/parse trouble (nothing written, nothing alarmed).
     """
     try:
-        machine, analysis = _fold_usage(transcript_path)
+        fold = _fold_session(transcript_path,
+                             worker_memo=Path(ws) / WORKER_MEMO_REL)
+        machine = fold["machine_input"]
+        analysis = fold["analysis_output"]
         ratio = machine / max(analysis, 1)
         face = {
             "ts": datetime.now(timezone.utc).isoformat(
                 timespec="seconds").replace("+00:00", "Z"),
             "machine_input_tokens": machine,
             "analysis_output_tokens": analysis,
+            "worker_transcripts": fold["worker_transcripts"],
+            "worker_unread": fold["worker_unread"],
             "ratio": ratio,
             "alarm": ratio > COCKPIT_RATIO_ALARM,
         }
@@ -245,13 +371,31 @@ def process_event(payload: dict) -> int:
     if ws is None:
         return 0
     try:
-        row = {"ts": datetime.now(timezone.utc).isoformat(
+        row = {"schema": COST_SCHEMA,
+               "ts": datetime.now(timezone.utc).isoformat(
                    timespec="seconds").replace("+00:00", "Z"),
                "amount": amount,
                "source": str(payload.get("tool_name") or "unknown")}
-        with (ws / COST_EVENTS).open("a", encoding="utf-8") as f:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except OSError as exc:
+        try:
+            from rlvr import consolidated_ledger as _cl
+        except Exception:  # noqa: BLE001 — a broken facade sibling must
+            # never starve cost capture: load the ledger core DIRECTLY
+            # from its file via the ONE delegated by-path loader (the
+            # loader-delegation contract). The scripts dir joins sys.path first (the hygiene-route
+            # helper — never a bare insert) so the core's own repo
+            # import (kunglao_log) resolves even when the facade is
+            # importable neither way. Both faces failing falls to the
+            # ONE warn below — the record is dropped, the tool stream
+            # never breaks.
+            from _path_hygiene import (ensure_scripts_path,
+                                       load_module_by_path)
+            ensure_scripts_path()
+            _cl = load_module_by_path(
+                "kunglao_consolidated_ledger_core",
+                Path(__file__).resolve().parent.parent / "scripts"
+                / "rlvr" / "consolidated_ledger.py")
+        _cl.append(ws, "settlement", row)
+    except Exception as exc:  # noqa: BLE001 — FAIL_OPEN at the record face
         warn("process_event", f"{type(exc).__name__}: {exc}")
     return 0
 

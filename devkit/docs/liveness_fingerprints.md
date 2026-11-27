@@ -34,9 +34,23 @@ arm key (`arm_key` or `arm`): case-level movement — key-less rows,
 dispatch-pending structural mass, or credits with no arm attribution —
 does NOT satisfy the sentinel. The two 2026-10 production runs broadcast
 same-value mass to case cells with arm=NULL while the family dimension
-never moved; the sentinel now reads that shape RED. Synthetic fixtures
-for this face live in devkit/production_shapes/ and are replayed by
-devkit/production_replay_gate.py.
+never moved; the sentinel now reads that shape RED. Since issue-1004 R2c
+the rows live in the knowledge family file (`knowledge-store.jsonl`
+under the guarded cross-task root — the `@knowledge/` ledger prefix in
+liveness_gate resolves through strategy_store.store_root, the single
+root source); the ws-local `runs/posterior-store.jsonl` rel stopped
+growing at the move. GLOBAL-BY-DESIGN (review fix, stated honestly):
+post-move the sentinel is a FAMILY-level face — any single live
+workspace's bank row satisfies min 1 on every workspace sharing the
+root, so a frozen workspace can read LIVE on foreign mass; the
+static check grammar cannot template a per-workspace `contains` face.
+The per-workspace movement signal rides that workspace's own breaker
+series (`rlvr.signal_guard.recent_credits`, workspace-scoped by
+workspace_id + credit_kind). Synthetic fixtures for this face live in
+devkit/production_shapes/ and are replayed by
+devkit/production_replay_gate.py (the inv003 staging face materializes
+an isolated knowledge root per replay — a replay never touches the real
+guarded root).
 
 ## blind-settlement-wired (#802, 2026-10-24)
 
@@ -45,9 +59,10 @@ a `settlement-wire/1` row (runs/settlement.jsonl, non-empty `identity`)
 proves a ruling was consumed through the blind face
 (rlvr.settlement_wire.settle_parked — parked blind-settlement-input/1
 doc, sha re-check, scalar.validate_verdict_doc stack, claims_store
-mint). The unblinded settle_step judgment is eval-only
-(KUNGLAO_EVAL_SETTLE); a settlement event that did NOT settle still
-lands its row with `settled: false` — refusals are loud, never silent.
+mint). The stop face is blind-only — the unblinded settle_step
+judgment has no production reader; a settlement event that did NOT
+settle still lands its row with `settled: false` — refusals are loud,
+never silent.
 Content-hash dedupe: the same event on an unchanged workspace appends
 once.
 

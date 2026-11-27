@@ -740,16 +740,18 @@ def test_injection_changes_with_evidence_across_two_runs(tmp_path):
 
 # ------------------------------- the live store seam (candidate fallback)
 
-def _store_root(tmp_path, monkeypatch, rows) -> Path:
-    """An isolated posterior store holding the given rows (the conftest
-    autouse fixture already isolates the env; this points it at rows)."""
+def _store_root(tmp_path, monkeypatch, rows, ws) -> Path:
+    """Stage the given rows into the WORKSPACE's own posterior store
+    (cross-project off: a store lives inside its workspace; the rows
+    carry a foreign workspace_id — the staged-donor shape the fallback
+    channel's leave-one-out read admits)."""
     from rlvr import strategy_store
-    root = tmp_path / "posterior-store"
-    root.mkdir()
-    (root / strategy_store.STORE_REL).write_text(
+    monkeypatch.delenv(strategy_store.STORE_ENV, raising=False)
+    store_file = ws / "runs" / "posterior" / "knowledge-store.jsonl"
+    store_file.parent.mkdir(parents=True, exist_ok=True)
+    store_file.write_text(
         "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-    monkeypatch.setenv(strategy_store.STORE_ENV, str(root))
-    return root
+    return store_file.parent
 
 
 def _store_row(ws_id, family, arm_key=None, credit=0.9):
@@ -771,7 +773,7 @@ def test_method_lead_falls_back_to_the_cross_task_store(tmp_path,
     material."""
     ws = _ws(tmp_path)  # no q-cell rows, no settled rows: no proposals
     _store_root(tmp_path, monkeypatch,
-                [_store_row("other-ws", "static-decompile")])
+                [_store_row("other-ws", "static-decompile")], ws)
     store = compose.load_store(ws)
     assert store._proposal_prior() == {}, "no local proposal channel"
     assert store.method_lead("abcdabcdabcd") == "static-decompile"
@@ -786,7 +788,7 @@ def test_store_fallback_filters_unregistered_and_refutation_rows(
     _store_root(tmp_path, monkeypatch, [
         _store_row("other-ws", "zz-retired-token"),
         _store_row("other-ws", "verify", arm_key="refutation"),
-    ])
+    ], ws)
     store = compose.load_store(ws)
     assert store.method_lead("abcdabcdabcd") is None, \
         "no registered method-arm candidate exists in the store"

@@ -14,12 +14,11 @@ sequenceDiagram
   WB->>WB: check_worker_plan 计划闸 + 粒度闸 MAX_STEPS=8
   WB->>WB: 零输出断路器 zero_output_fingerprint
   WB->>MFG: _method_family_gate(paths,prompt,cid,...)
-  MFG->>SS: 未声明 → gate_sample(ws)
-  SS-->>MFG: family,propensity,prior_source 或冷隙
-  MFG--xO: 有料→REJECT methodfamily 携带采样家族
-  MFG->>SS: 已声明→reconcile_declaration 反账
-  MFG->>SS: append_usage_row 使用行
-  MFG-->>WB: None, mf_value
+  MFG->>SS: reconcile_declaration(ws, declared)
+  SS-->>MFG: One decision with actual method and source
+  MFG->>MFG: Validate authorization and vocabulary
+  MFG-->>WB: Accepted decision
+  WB->>WB: Stage decision until PostToolUse confirms input
   WB-->>DG: 放行进入牙齿
   DG->>DG: must-stop → top1 → capability → MCP → plan-author
   DG->>RI: recall 判断 默认关

@@ -39,6 +39,7 @@ for p in (str(ROOT), str(SCRIPTS)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 from rlvr import feature_prior as fp  # noqa: E402
 from rlvr import meta_arms  # noqa: E402
 from rlvr import q_cells  # noqa: E402
@@ -479,22 +480,33 @@ class TestTolerantFold:
 
     def test_warm_pools_fold_by_family_not_by_feature_key(self, tmp_path,
                                                           monkeypatch):
-        """Old-store rows written under pre-bump feature keys still warm
-        the new-key workspace: the store read face is family-keyed, so
-        the richer key cold-starts through pooling (the deliberate
-        compat face), never through a key match that can no longer
-        hit."""
-        store = tmp_path / "store"
-        monkeypatch.setenv(strategy_store.STORE_ENV, str(store))
+        """Donor rows written under pre-bump feature keys still warm the
+        new-key workspace: the store read face is family-keyed, so the
+        richer key cold-starts through pooling (the deliberate compat
+        face), never through a key match that can no longer hit. The
+        donor rows are staged INSIDE the workspace's own store with a
+        foreign id (cross-project off)."""
+        ws_new = tmp_path / "ws-new"
         for credit in (1.0, 0.0):
-            assert strategy_store.append_store_row(
-                tmp_path / "ws-old", method_family="static-decompile",
-                status="settled", credit=credit,
-                feature_key="legacy-key-0000")["appended"] is True
+            assert strategy_store.append_row(ws_new, {
+                "schema": strategy_store.STORE_SCHEMA,
+                "ts": "2026-10-07T00:00:00Z",
+                "workspace_id": "ws-donor-old-key",
+                "arm_key": "static-decompile|facts_snapshot|none|1",
+                "method_family": "static-decompile",
+                "feature_key": "legacy-key-0000",
+                "fingerprint": "fp000011112222",
+                "status": "settled",
+                "credit": credit,
+                "censored": False,
+                "facts_citing": 0,
+                "propensity": None,
+                "phi_delta": None,
+                "provenance": {"dispatch_id": "C-001"},
+            })["appended"] is True
         # a workspace whose mined features carry the new probe tokens
-        _write_die(tmp_path / "ws-new", 7.6)
-        pools = strategy_store.warm_pools(tmp_path / "ws-new",
-                                          ["static-decompile"])
+        _write_die(ws_new, 7.6)
+        pools = strategy_store.warm_pools(ws_new, ["static-decompile"])
         assert "static-decompile" in pools
         assert pools["static-decompile"].rows == 2
 
@@ -560,10 +572,8 @@ def _plain_cell(tmp_path: Path, arm: str, unit: str, verdict: str,
                      "session": {"session_cost": {"total_cost_usd": 1.0},
                                  "wall_s": 90.0},
                      "workspace": str(ws)}}]}), encoding="utf-8")
-    p = ws / "runs" / "transitions.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("".join(json.dumps(r) + "\n" for r in mean_rows),
-                 encoding="utf-8")
+    for row in mean_rows:
+        _cl.append(ws, "experience", {**row, "schema": "transition/1"})
 
 
 def _spine(tmp_path: Path, tiers: dict[str, str],

@@ -30,6 +30,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 
 
 def _load(mod_name: str, file_name: str):
@@ -320,18 +323,16 @@ def test_skeleton_routes_to_reflect_missing_precision(tmp_path):
 def test_skeleton_carries_machine_known_context(tmp_path):
     """what_happened summarises the claim's OUTCOME ledger rows;
     method_assumption names the declared dispatch method_family from the
-    q-cell observation log (runs/q-cell-log.jsonl)."""
+    q-cell observation face (the experience family's q-cell-obs rows)."""
     ws = tmp_path / "ws"
     ws.mkdir()
     cid = "C-12"
     _write_register(ws, [{"id": cid, "status": "PROVEN", "statement": "ctx"}])
     _write_ledger_outcome(ws, cid, result="passes", checker="verify-note")
-    runs = ws / "runs"
-    runs.mkdir(exist_ok=True)
-    (runs / "q-cell-log.jsonl").write_text(
-        json.dumps({"schema": "q-cell-obs/1", "source": "dispatch",
-                    "claim": cid, "method_family": "static-decompile",
-                    "credit": None}) + "\n", encoding="utf-8")
+    _cl.append(ws, "experience", {
+        "schema": "q-cell-obs/1", "source": "dispatch",
+        "claim": cid, "method_family": "static-decompile",
+        "credit": None})
     lib = tmp_path / "lib"
     lib.mkdir()
 

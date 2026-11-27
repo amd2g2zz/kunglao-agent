@@ -6,8 +6,11 @@ adapter shim was retired by the legacy-surface card — importers use
 ``rlvr.ledger`` directly.
 
 Owner ruling (2026-09-23): the whole RLVA reward is unified — ALL rollout
-kinds share ONE accounting system. This module owns the ledger:
-``<ws>/runs/rollout-ledger.jsonl``, append-only JSONL, one row schema:
+kinds share ONE accounting system. This module owns the ledger rows,
+append-only JSONL in the consolidated settlement family file
+``<ws>/runs/settlement.jsonl`` (the row schema and the
+``rollout-ledger/1`` stamp are unchanged; the family move retired the
+per-module file):
 
     {"schema": "rollout-ledger/1",
      "rollout_id": "<kind>/<anchor>",   # identity (stable across folds)
@@ -45,9 +48,12 @@ marked ``advisory: true`` (U3 whitelist): the ledger stores them, but the
 settlement engine never reads them for rule matching, and no single signal
 — advisory or not — settles a band alone.
 
-Locking: appends take an flock on ``runs/.rollout-ledger.lock`` (the repo's
-lock-file pattern; POSIX fcntl, graceful unlocked fallback where flock is
-unavailable — O_APPEND single-writes stay atomic, and CI is single-tenant).
+Locking: appends ride the consolidated settlement family's flock
+(``runs/.settlement.lock`` via rlvr.consolidated_ledger — the ONE
+writer guard; the per-module ``runs/.rollout-ledger.lock`` rel retired
+with the family move; graceful unlocked fallback where flock is
+unavailable — O_APPEND single-writes stay atomic, and CI is
+single-tenant).
 
 The ONE prior interface (U4): ``settled(ws, kind=..., window=...)`` — the
 Thompson/rank family reads settled rows through this call and no other
@@ -62,11 +68,10 @@ import json
 from pathlib import Path
 
 from harness_common import utc_now_z as _utc_now
-from kunglao_log import iter_jsonl
+
+from rlvr import consolidated_ledger as _cl
 
 SCHEMA = "rollout-ledger/1"
-LEDGER_REL = "runs/rollout-ledger.jsonl"
-LOCK_REL = "runs/.rollout-ledger.lock"
 
 # --- kinds registry (open enum, registered centrally) ----------------------
 KIND_TASK = "task"
@@ -279,66 +284,15 @@ def row_schema_lint(row: dict) -> list[str]:
 
 # --- IO ---------------------------------------------------------------------
 
-def _path(ws) -> Path:
-    return Path(ws) / LEDGER_REL
-
-
-def _lock_path(ws) -> Path:
-    return Path(ws) / LOCK_REL
-
-
-def _locked_append(ws, data: bytes) -> bool:
-    """Append under the ledger lock. flock (POSIX) with an unlocked
-    O_APPEND fallback where fcntl is unavailable. Never raises."""
-    p = _path(ws)
-    try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        lock = _lock_path(ws)
-        lock.touch(exist_ok=True)
-        fd = None
-        try:
-            import fcntl
-            fd = lock.open("a", encoding="utf-8")
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
-        except ImportError:
-            fd = None  # Windows/CI: O_APPEND write stays atomic
-        except OSError:
-            fd = None
-        try:
-            import os
-            append_fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-                                0o644)
-            try:
-                os.write(append_fd, data)
-            finally:
-                os.close(append_fd)
-            return True
-        finally:
-            if fd is not None:
-                try:
-                    fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
-                except Exception as exc:  # noqa: BLE001 — unlock best-effort
-                    warn("lock_unlock", f"{type(exc).__name__}: {exc}")
-                fd.close()
-    except Exception as exc:  # noqa: BLE001 — never raise into the producer
-        warn("locked_append", f"{type(exc).__name__}: {exc}")
-        return False
-
-
 def read(ws) -> list[dict]:
     """Schema-enforced read: only rows passing row_schema_lint are signal
     (a settlement currency never half-reads a row); unparseable or
     schema-violating lines are skipped with one rate-limited WARN.
-    Missing ledger -> []."""
-    p = _path(ws)
-    if not p.exists():
-        return []
-    try:
-        text = p.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
+    Rows come from the consolidated settlement family read (legacy
+    rollout-ledger rows first, then live family rows — chronology);
+    missing ledger -> []."""
     out: list[dict] = []
-    for row in iter_jsonl(text.splitlines()):
+    for row in _cl.read(ws, "settlement", schema_prefix="rollout-ledger"):
         if not isinstance(row, dict) or row_schema_lint(row):
             warn("read_dirty", "schema-violating row skipped")
             continue
@@ -346,9 +300,9 @@ def read(ws) -> list[dict]:
     return out
 
 
-def _row_bytes(rollout_id: str, kind: str, anchor: str, ts: str,
-               signals: list[dict], settlement: dict | None) -> bytes:
-    row = {
+def _row(rollout_id: str, kind: str, anchor: str, ts: str,
+         signals: list[dict], settlement: dict | None) -> dict:
+    return {
         "schema": SCHEMA,
         "rollout_id": rollout_id,
         "kind": kind,
@@ -358,7 +312,6 @@ def _row_bytes(rollout_id: str, kind: str, anchor: str, ts: str,
         "reward": None if settlement is None else settlement["reward"],
         "settlement": settlement,
     }
-    return (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 # --- fold + query faces ------------------------------------------------------
@@ -448,8 +401,30 @@ def pending_settlement(ws) -> list[dict]:
 
 # --- write faces ---------------------------------------------------------------
 
+def _sign_checked(sign, row: dict, rid: str, op: str) -> dict | None:
+    """Apply the producer-injected seal, then RE-VALIDATE: the signed row
+    must stay a schema-clean mapping (the lint is additive-key tolerant,
+    so the channel's additive seal passes untouched). A signer that
+    drops required fields or corrupts the shape gets ONE loud warn and a
+    refused write — the schema-invalid-rows-refused promise holds for
+    signed writes too, and the blast radius of a buggy signer is the
+    producer's own append, never the ledger."""
+    signed = sign(row)
+    if not isinstance(signed, dict):
+        warn(op, f"{rid}: sign callback returned "
+                 f"{type(signed).__name__} (not a mapping) — write refused")
+        return None
+    errors = row_schema_lint(signed)
+    if errors:
+        warn(op, f"{rid}: post-sign schema violations ({'; '.join(errors)}"
+                 f") — write refused")
+        return None
+    return signed
+
+
 def record(ws, kind: str, anchor: str, signals: list[dict],
-           rollout_id: str | None = None, ts: str | None = None) -> dict:
+           rollout_id: str | None = None, ts: str | None = None,
+           sign=None) -> dict:
     """Identity append (deduped) / signal amendment.
 
     - unseen rollout_id -> append the identity row (unsettled);
@@ -457,7 +432,17 @@ def record(ws, kind: str, anchor: str, signals: list[dict],
     - seen rollout_id, grown/changed signals -> append an amendment row
       carrying the FULL current signal set (last-wins fold).
     Refuses unregistered kinds and schema-invalid rows (loud result, no
-    raise)."""
+    raise).
+
+    ``sign`` is the PRODUCER-INJECTED seal step (a row->row callable,
+    the learning channel's additive seal): the ledger core never seals
+    on its own — a producer that owes sealed rows passes its signer and
+    every row THIS call appends is sealed before the write; without it
+    the write stays byte-identical legacy. The seal rides the row as an
+    additive key, so the schema lint (which runs before the seal) and
+    every fold/read face are untouched; the signed row is RE-VALIDATED
+    after the callback (a signer that breaks the schema gets a loud
+    refusal, never an append)."""
     ws = Path(ws)
     kind = str(kind or "").strip()
     anchor = str(anchor or "").strip()
@@ -490,20 +475,34 @@ def record(ws, kind: str, anchor: str, signals: list[dict],
         row["settlement"] = settlement  # an amendment never un-settles
         row["reward"] = None if settlement is None else settlement["reward"]
         row["ts"] = existing[0].get("ts") or row["ts"]  # identity ts stable
-    ok = _locked_append(ws, _row_bytes(
-        rid, kind, anchor, row["ts"], signals, row["settlement"]))
+    out_row = _row(rid, kind, anchor, row["ts"], signals,
+                   row["settlement"])
+    if sign is not None:
+        out_row = _sign_checked(sign, out_row, rid, "ledger.record")
+        if out_row is None:
+            return {"appended": False,
+                    "reason": "sign: post-sign validation refused"}
+    ok = _cl.append(ws, "settlement", out_row)
     return {"appended": bool(ok),
             "reason": None if ok else "write failed",
             "rollout_id": rid}
 
 
 def settle(ws, rollout_id: str, settlement: dict,
-           ts: str | None = None) -> dict:
+           ts: str | None = None, sign=None) -> dict:
     """Append the settlement amendment for one rollout (the engine's only
     write path). Idempotent: refused only when the fold already carries the
     SAME settlement over the SAME signals (a signal-set change reopens the
     rollout — DEFERRED->wake->PROVEN upgrades its band). Carries signals=[]
-    so the fold keeps the identity signals. Loud result, no raise."""
+    so the fold keeps the identity signals. Loud result, no raise.
+
+    ``sign`` is the producer-injected seal step (same contract as
+    ``record``): the ledger core never seals on its own; the seal rides
+    the appended amendment row as an additive key and the settlement
+    dedupe compares the settlement BLOCK only — a sealed row dedupes
+    against its unsealed predecessor exactly like an unsealed one. The
+    signed row is re-validated after the callback (same refusal face as
+    ``record``)."""
     ws = Path(ws)
     if not isinstance(settlement, dict):
         return {"appended": False, "reason": "settlement: not a mapping"}
@@ -540,10 +539,16 @@ def settle(ws, rollout_id: str, settlement: dict,
     if errors:
         return {"appended": False,
                 "reason": "schema: " + "; ".join(errors)}
-    ok = _locked_append(ws, _row_bytes(
-        rollout_id, str(identity.get("kind")),
-        str(identity.get("anchor")), str(identity.get("ts")),
-        [], st))
+    out_row = _row(rollout_id, str(identity.get("kind")),
+                   str(identity.get("anchor")), str(identity.get("ts")),
+                   [], st)
+    if sign is not None:
+        out_row = _sign_checked(sign, out_row, str(rollout_id),
+                                "ledger.settle")
+        if out_row is None:
+            return {"appended": False,
+                    "reason": "sign: post-sign validation refused"}
+    ok = _cl.append(ws, "settlement", out_row)
     return {"appended": bool(ok),
             "reason": None if ok else "write failed"}
 

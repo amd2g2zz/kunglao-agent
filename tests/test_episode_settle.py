@@ -22,7 +22,6 @@ ledger rows, cost events):
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -32,6 +31,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from rlvr import consolidated_ledger as cl  # noqa: E402
 from rlvr import episode_settle as es  # noqa: E402
 from rlvr import commit_semantics  # noqa: E402
 from rlvr import meta_policy  # noqa: E402
@@ -54,18 +54,15 @@ def _mk_ws(tmp_path: Path, *, terminal: bool = True) -> Path:
         yaml.safe_dump(claims), encoding="utf-8")
     runs = ws / "runs"
     runs.mkdir()
-    rows = [
-        {"schema": "rollout-ledger/1",
-         "rollout_id": "mainline_decision/t1", "kind": "mainline_decision",
-         "ts": "t1", "signals": [], "reward": None},
-        {"schema": "rollout-ledger/1",
-         "rollout_id": "mainline_decision/t2", "kind": "mainline_decision",
-         "ts": "t2", "signals": [], "reward": None},
-    ]
-    (runs / "rollout-ledger.jsonl").write_text(
-        "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-    (ws / "cost_events.jsonl").write_text(
-        '{"amount": 0.4}\n{"amount": 0.25}\n', encoding="utf-8")
+    for rid, ts in (("mainline_decision/t1", "t1"),
+                    ("mainline_decision/t2", "t2")):
+        assert cl.append(ws, "settlement", {
+            "schema": "rollout-ledger/1", "rollout_id": rid,
+            "kind": "mainline_decision", "ts": ts, "signals": [],
+            "reward": None})
+    for amount in (0.4, 0.25):
+        assert cl.append(ws, "settlement",
+                         {"schema": "cost-event/1", "amount": amount})
     (ws / "task_spec.yaml").write_text(
         "primary_questions:\n- id: pq1\n  q: produce the trainer\n",
         encoding="utf-8")
@@ -351,26 +348,23 @@ class TestPerMissionSpendWindow:
         a1+b1+a2, any family whose missions spend >= $1 total saturated
         to reward <= 0 and could never master."""
         ws = _mk_ws(tmp_path)
-        (ws / "cost_events.jsonl").write_text('{"amount": 0.4}\n',
-                                              encoding="utf-8")
         es.settle_mission(ws)
         ep1, _b = es.episode_schema.read_episode_file(
             es.episode_pool.episode_path(ws, "C-001"))
-        assert ep1["cost"]["spend_usd"] == pytest.approx(0.4)
-        assert ep1["reward"] == pytest.approx(0.6), \
-            "reward computed from THIS episode's own spend"
+        assert ep1["cost"]["spend_usd"] == pytest.approx(0.65), \
+            "a first episode owns everything before it"
         # mission 2 in the same workspace: fresh register + fresh spend
         (ws / "claim-register.yaml").write_text(yaml.safe_dump(
             {"claims": [{"id": "C-101", "status": "PROVEN",
                          "title": "retry"}]}), encoding="utf-8")
-        with (ws / "cost_events.jsonl").open("a", encoding="utf-8") as fh:
-            fh.write('{"amount": 0.25}\n')
+        assert cl.append(ws, "settlement",
+                         {"schema": "cost-event/1", "amount": 0.25})
         out = es.settle_mission(ws)
         assert out["episodes_written"] == 1
         ep2, _b = es.episode_schema.read_episode_file(
             es.episode_pool.episode_path(ws, "C-101"))
         assert ep2["cost"]["spend_usd"] == pytest.approx(0.25), \
-            "NOT the cumulative 0.65 — the window starts after the mark"
+            "NOT the cumulative 0.9 — the window starts after the mark"
         assert ep2["reward"] == pytest.approx(0.75), \
             "the reward reads the per-episode spend, not the history"
         assert ep2["reward_block"]["cost_term"] == pytest.approx(0.25)

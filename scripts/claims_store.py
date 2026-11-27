@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess  # noqa: F401 — (pid liveness uses os.kill; kept for typing parity)
 import sys
 import uuid
@@ -77,6 +78,30 @@ DISPATCH_LEDGER_SCHEMA = "dispatch-ledger/1"
 #: production 392-warn lesson).
 MISSING_ROLLOUT_REPEAT_LIMIT = 3
 MISSING_ROLLOUT_AUDIT_REL = Path("runs") / ".missing-rollout-audit.json"
+
+_Q_CELL_STAMP = "q-cell-obs"
+
+#: the trace kinds ``dispatch_attempts`` reports, in report order
+DISPATCH_TRACE_KINDS = ("ledger", "register", "experience", "q_cell_log",
+                        "provenance")
+
+#: the shape of a claim id a trace row may name. Same family as
+#: incremental_reward._STASH_TOKEN_RE. A value outside this shape is a
+#: dirty row, not a claim id.
+_CLAIM_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def _claim_token(value) -> str | None:
+    """Return the claim id a trace row names, or None when the row carries
+    no usable id. Only a ``str`` scalar whose stripped text matches
+    ``_CLAIM_TOKEN_RE`` qualifies; every other shape (None, list, dict,
+    bool, int, a non-conforming string) is dropped rather than
+    stringified — a dirty row is skipped, never turned into a phantom
+    claim id."""
+    if not isinstance(value, str):
+        return None
+    token = value.strip()
+    return token if _CLAIM_TOKEN_RE.match(token) else None
 
 #: a journal older than this (or with a dead owner pid) is recovered
 RECOVERY_WINDOW_S = 120.0
@@ -429,17 +454,190 @@ def _audit_state_save(ws, state: dict) -> None:
               f"({type(exc).__name__}: {exc})", file=sys.stderr)
 
 
+def _committed_rows(ws, claim: str) -> list[dict]:
+    """Read committed dispatches in order, excluding rolled-back attempts."""
+    rows = [row for row in _iter_ledger_rows(ws)
+            if str(row.get("claim") or "") == str(claim)]
+    aborted = {row.get("dispatch_id") for row in rows
+               if row.get("state") == "aborted"
+               and isinstance(row.get("dispatch_id"), str)}
+    return [row for row in rows if row.get("state") == "committed"
+            and str(row.get("dispatch_id") or "") not in aborted]
+
+
 def latest_committed_dispatch(ws, claim: str) -> dict | None:
-    """The last COMMITTED ledger row for the claim — the settlement
-    face's dispatch-id resolver. None = no ledger row (a pre-#800
-    workspace: unsupported per the no-backcompat ruling; the settle
-    face reports it as a loud off-ledger gap, never an alias)."""
-    latest = None
+    """Resolve the latest committed, non-aborted dispatch for settlement."""
+    rows = _committed_rows(ws, claim)
+    return rows[-1] if rows else None
+
+
+def committed_dispatch_ids(ws, claim: str) -> list[str]:
+    """Resolve every committed, non-aborted dispatch ID in ledger order."""
+    return [str(row["dispatch_id"]) for row in _committed_rows(ws, claim)
+            if row.get("dispatch_id")]
+
+
+def _jsonl_dicts(path: Path) -> list:
+    """Every parseable object row of one JSONL file. An absent file reads
+    as empty; an unreadable one warns on stderr and reads as empty — a
+    trace reader never raises."""
+    if not path.is_file():
+        return []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"{path.name} read failed ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
+        return []
+    from kunglao_log import iter_jsonl
+    return [row for row in iter_jsonl(text.splitlines())
+            if isinstance(row, dict)]
+
+
+def _positive_count(value) -> bool:
+    try:
+        return int(value or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _register_dispatch_claims(ws) -> list:
+    """Ids of the claims whose register row carries ``dispatch_count`` > 0.
+    A failed register read warns on stderr and yields none — the other
+    traces still stand."""
+    try:
+        doc = _load_register_doc(ws)
+    except Exception as exc:  # noqa: BLE001 — trace reader, never the caller
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"register read failed for the dispatch-count trace "
+              f"({type(exc).__name__}: {exc})", file=sys.stderr)
+        return []
+    claims = doc.get("claims") if isinstance(doc, dict) else None
+    return [c.get("id") for c in claims or []
+            if isinstance(c, dict) and _positive_count(c.get("dispatch_count"))]
+
+
+def _legacy_q_cell_rel() -> Path | None:
+    """The retired q-cell log's rel, taken from the migration registry —
+    the only sanctioned naming site for a retired rel. None when the
+    registry is unavailable (that trace is skipped; the other four
+    stand)."""
+    try:
+        from consolidate_ledgers import LEGACY_SOURCES
+    except Exception as exc:  # noqa: BLE001 — trace reader, never the caller
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"migration registry unavailable ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
+        return None
+    rels = LEGACY_SOURCES.get("experience") or {}
+    for rel, stamps in rels.items():
+        stamps = stamps if isinstance(stamps, (list, tuple)) else (stamps,)
+        if any(str(s).startswith(_Q_CELL_STAMP) for s in stamps):
+            return Path(str(rel))
+    return None
+
+
+def _attempt_traces(ws):
+    """Yield ``(kind, claim)`` for every persisted trace of a dispatch
+    attempt, one pair per trace row."""
+    from rlvr import consolidated_ledger
     for row in _iter_ledger_rows(ws):
-        if (row.get("state") == "committed"
-                and str(row.get("claim") or "") == str(claim)):
+        yield "ledger", row.get("claim")
+    for claim in _register_dispatch_claims(ws):
+        yield "register", claim
+    for row in consolidated_ledger.read(ws, "experience",
+                                        schema_prefix=_Q_CELL_STAMP):
+        if row.get("source") == "dispatch":
+            yield "experience", row.get("claim")
+    legacy_rel = _legacy_q_cell_rel()
+    if legacy_rel is not None:
+        for row in _jsonl_dicts(Path(ws) / legacy_rel):
+            if (str(row.get("schema") or "").startswith(_Q_CELL_STAMP)
+                    and row.get("source") == "dispatch"):
+                yield "q_cell_log", row.get("claim")
+    for row in _jsonl_dicts(Path(ws) / PROVENANCE_REL):
+        if row.get("event") in ("dispatch", "abort_dispatch"):
+            yield "provenance", row.get("claim")
+
+
+def dispatch_attempts(ws) -> dict:
+    """Claim id -> the trace kinds showing a dispatch of the claim was
+    attempted, for every claim with at least one. The union of five
+    persisted traces, because no single one survives every workspace
+    generation:
+
+      ledger      runs/dispatch-ledger.jsonl, a row of ANY state
+      register    claim-register.yaml ``dispatch_count`` > 0
+      experience  runs/experience.jsonl q-cell rows with source=dispatch
+      q_cell_log  the retired q-cell log (named by the migration registry)
+      provenance  runs/claims-provenance.jsonl, event dispatch/abort_dispatch
+
+    A committed dispatch is itself an attempt (ledger kind); a caller
+    that needs the attempted-but-uncommitted set excludes the claims
+    ``latest_committed_dispatch`` resolves. Kinds come back in
+    ``DISPATCH_TRACE_KINDS`` order. Tolerant: absent files read as empty,
+    a row whose claim is not a usable id (wrong shape or out-of-token
+    text) is skipped — never stringified into a phantom key — and a
+    failed register read leaves the other four traces standing."""
+    found: dict = {}
+    for kind, claim in _attempt_traces(ws):
+        cid = _claim_token(claim)
+        if cid:
+            found.setdefault(cid, set()).add(kind)
+    return {cid: [k for k in DISPATCH_TRACE_KINDS if k in kinds]
+            for cid, kinds in found.items()}
+
+
+def dispatch_failure_reason(ws, claim: str) -> str:
+    """The claim's recorded dispatch outcome word: the ``reason`` of its
+    LATEST provenance row when that row is a dispatch/abort failure
+    (a failed commit records ``step-<name>-failed``; an abort records
+    its reason) — the infrastructure-outcome carrier the settlement's
+    censoring classifier reads. "" when the latest row is not a failure
+    (a claim that recovered and settled keeps its terminal outcome) or
+    no provenance exists."""
+    latest = None
+    for row in _jsonl_dicts(Path(ws) / PROVENANCE_REL):
+        if _claim_token(row.get("claim")) == _claim_token(claim):
             latest = row
-    return latest
+    if latest is not None and str(latest.get("event")) in (
+            "dispatch", "abort_dispatch") and str(latest.get("outcome")) \
+            in ("failed", "aborted"):
+        return str(latest.get("reason") or "")
+    return ""
+
+
+def _marked_settlement(ws, claim: str) -> bool:
+    """True when the claim's round-credit settlement carries a
+    censored/pending marker — a close that recorded its no-mass route is
+    a settlement, never the silent gap the audit hunts. Fail-open: an
+    unreadable ledger reads as unmarked (the gap stands, loud)."""
+    try:
+        from rlvr import ledger as _rl  # noqa: PLC0415 — lazy sibling
+        st = (_rl.fold(ws, f"round_credit/{claim}") or {}).get("settlement")
+    except Exception:  # noqa: BLE001 — fail-open telemetry
+        return False
+    if not isinstance(st, dict):
+        return False
+    return bool(st.get("censored") or st.get("pending_no_mass"))
+
+
+def _settled_quietly(ws, did: str, claim: str) -> bool:
+    """The missing-rollout audit's quiet predicate: the dispatch bank
+    already carries rows, or the claim's settlement carries a
+    censored/pending marker (a close that recorded its no-mass route is
+    a settlement). An UNREADABLE bank log reads quiet (fail-open skip,
+    never a false alarm)."""
+    if did:
+        try:
+            from rlvr import q_cells  # noqa: PLC0415 — lazy sibling
+            bm = q_cells.banked_mass(ws, did)
+        except Exception:  # noqa: BLE001 — fail-open
+            bm = None
+        if bm is None or bm[2] > 0:
+            return True
+    return _marked_settlement(ws, claim)
 
 
 def audit_missing_rollouts(ws) -> list:
@@ -454,7 +652,6 @@ def audit_missing_rollouts(ws) -> list:
     gaps: list = []
     try:
         from status_defs import TERMINAL
-        from rlvr import q_cells
         doc = _load_register_doc(ws)
         statuses = {str(c.get("id") or ""):
                     str(c.get("status") or "").upper()
@@ -468,22 +665,11 @@ def audit_missing_rollouts(ws) -> list:
             if statuses.get(claim) not in TERMINAL:
                 continue  # in-flight: owes no settlement yet
             did = str(row.get("dispatch_id") or "")
-            # banked presence via the public mass face: banked_mass
-            # returns None = log UNREADABLE (fail-open skip, never a
-            # false alarm) and (s, f, n_rows) otherwise — n_rows is
-            # the existence test (a band-valued solve row counts:
-            # zero mass, existence only). The pre-R2 claim-id alias
-            # is NOT consulted (no-backcompat ruling: the ledger id
-            # is the one key).
-            quiet = False
-            if did:
-                try:
-                    bm = q_cells.banked_mass(ws, did)
-                except Exception:  # noqa: BLE001 — fail-open
-                    bm = None
-                if bm is None or bm[2] > 0:
-                    quiet = True
-            if quiet:
+            # quiet = banked rows exist, or the close recorded a
+            # censored/pending marker (see _settled_quietly). The pre-R2
+            # claim-id alias is NOT consulted (no-backcompat ruling: the
+            # ledger id is the one key).
+            if _settled_quietly(ws, did, claim):
                 continue
             # Standard 11: count per dispatch, escalate once, degrade
             key = did or f"claim:{claim}"
@@ -613,7 +799,8 @@ def _txn_step_stash(ws, journal: dict) -> bool:
         doc = ir.record_launch(ws, journal["claim"],
                                journal.get("method_family") or "dispatch",
                                branch_budget=journal.get("branch_budget")
-                               or None)
+                               or None,
+                               dispatch_id=journal.get("id"))
         return doc is not None
     except Exception:  # noqa: BLE001 — telemetry face, never the verdict
         return False
@@ -698,8 +885,24 @@ def commit_dispatch(ws, claim: str) -> TransitionResult:
                             "actor": journal.get("actor", ""),
                             "outcome": "applied", "reason": "",
                             "journal": journal["id"]})
+    _arm_rollout_timer(ws, claim, journal)
     return TransitionResult(True, claim, "dispatch", "OPEN", "IN_PROGRESS",
                             reason="committed", journal_id=journal["id"])
+
+
+def _arm_rollout_timer(ws, claim: str, journal: dict) -> None:
+    """Arm the dispatch's one-shot deadline timer (the rollout-timer
+    host face; rollout_id = the dispatch ledger id). Fail-open
+    telemetry: a timer trouble is ONE stderr WARN and never disturbs an
+    already-committed dispatch."""
+    try:
+        from rlvr.rollout_timer_host import arm_for_dispatch
+        arm_for_dispatch(ws, claim, str(journal.get("id") or ""),
+                         method_family=journal.get("method_family") or None)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the dispatch
+        print(f"[kunglao-agent] claims_store WARN (fail-open): "
+              f"rollout timer arm failed ({type(exc).__name__}: {exc})",
+              file=sys.stderr)
 
 
 def _txn_restore_anchor(ws, journal: dict) -> None:
@@ -808,6 +1011,21 @@ def recover(ws) -> list[TransitionResult]:
     applied = list(journal.get("applied") or [])
     _txn_rollback(ws, journal)
     _journal_save(ws, None)
+    # a COMMITTED journal's dispatch had armed its one-shot deadline
+    # timer (the commit's last face) — the inversion says the dispatch
+    # never happened, so the timer must not survive it: cancel-only
+    # cleanup, no learn (a rollout that never ran owes no outcome).
+    # Fail-open telemetry: the recovery face is never blocked by it.
+    if journal.get("state") == "committed":
+        try:
+            from rlvr.rollout_timer_host import discard_rollout_timer
+            discard_rollout_timer(
+                ws, str(journal.get("id") or ""),
+                reason="dispatch recovered (never confirmed)")
+        except Exception as exc:  # noqa: BLE001 — telemetry face
+            print(f"[kunglao-agent] claims_store WARN (fail-open): "
+                  f"recovered-dispatch timer cleanup failed "
+                  f"({type(exc).__name__}: {exc})", file=sys.stderr)
     from_status = "IN_PROGRESS" if "register" in applied else None
     _append_provenance(ws, {"claim": journal.get("claim", ""),
                             "event": str(journal.get("kind") or "dispatch"),

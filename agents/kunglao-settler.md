@@ -86,7 +86,13 @@ the learning loop consumes it.
 
 ## Output file: `runs/settlement-verdict-<claim>.json`
 
-```json
+Land your verdict ONLY through the sanctioned writer (a direct file
+write is refused on an armed channel and refused at the settlement read
+face even when it lands):
+
+```bash
+python3 <skill_root>/scripts/kunglao.py seal verdict-write \
+    <workspace> <claim> <<'VERDICT'
 {
   "schema": "settlement-verdict/1",
   "identity": "<your settler id>",
@@ -98,7 +104,13 @@ the learning loop consumes it.
   ],
   "trajectory_credit": 0.4
 }
+VERDICT
 ```
+
+The writer mints the harness seal over the doc (additive — never emit a
+`seal` key yourself) and lands the canonical bytes atomically; a
+refusal (schema/claim/identity wall) prints its reason on stderr and
+exits non-zero.
 
 - `credit` per action in [0, 1] — the entry clamps out-of-range values
   into the declared rails (clamped, never rejected, for range only).
@@ -117,7 +129,8 @@ the learning loop consumes it.
 ## Hard constraints
 
 - No external API calls; pure local reads of the input doc's artifacts.
-- Write ONLY your status file and `output_path` — never facts, notes,
+- Write ONLY your status file — the verdict lands through
+  `kunglao.py seal verdict-write` (see Output file); never facts, notes,
   claim-register, task_spec, or any ledger.
 - Never re-dispatch (Agent/Task) — a differently-identified helper would
   launder the denied faces past the barrier.
@@ -160,10 +173,11 @@ expected verdict structure (one action per settled step, credit in
 denied faces, never a guess).
 
 <!-- contract: status-sync -->
-Write ONLY `runs/settlement-verdict-<claim>.json` (the analysis output)
-and your worker-status file; stay deterministic (same bytes => same
-verdict); every action cites only input-doc artifacts; identity is
-non-empty or nothing settles. W-15: the `status: done` line carries
+Land `runs/settlement-verdict-<claim>.json` ONLY through the sanctioned
+writer (`kunglao.py seal verdict-write`, see Output file) and write your
+worker-status file; stay deterministic (same bytes => same verdict);
+every action cites only input-doc artifacts; identity is non-empty or
+nothing settles. W-15: the `status: done` line carries
 `| artifacts: runs/settlement-verdict-<claim>.json` — the file exists
 before the line; heartbeat replies to the orchestrator's ping in the
 same status file so a long artifact pass is never mistaken for stuck.

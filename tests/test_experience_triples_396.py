@@ -19,7 +19,6 @@ All fixtures are SYNTHETIC (privacy rule).
 from __future__ import annotations
 
 import csv
-import json
 import sys
 from pathlib import Path
 
@@ -31,6 +30,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import experience_triples as xt  # noqa: E402
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 from rlvr import ledger as rl  # noqa: E402
 import scalar_settlement as ss  # noqa: E402
 import state_signature as ssig  # noqa: E402
@@ -84,12 +84,9 @@ def _seed_round(ws: Path, dispatch_id: str, r: float, claim="C-5") -> str:
 
 
 def _strategy_row(ws: Path, strategy: str, claim: str) -> None:
-    runs = ws / "runs"
-    runs.mkdir(exist_ok=True)
-    with (runs / "strategy-log.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"ts": TS, "event": "dispatch",
-                             "strategy": strategy, "claim": claim,
-                             "attempts_at_snapshot": 0}) + "\n")
+    _cl.append(ws, "telemetry", {"schema": "strategy-log/1", "ts": TS,
+                                 "event": "dispatch", "strategy": strategy,
+                                 "claim": claim, "attempts_at_snapshot": 0})
 
 
 def _read_csv_rows(ws: Path) -> list[dict]:

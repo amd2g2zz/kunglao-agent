@@ -10,11 +10,9 @@ from __future__ import annotations
 
 from rlvr.state import (  # noqa: F401 — the compat surface
     BUDGET_BUCKET_EDGES,
-    COST_EVENTS_REL,
     FACT_BUCKET_EDGES,
     SCHEMA,
     SITUATION_SCHEMA,
-    SITUATIONS_REL,
     TERMINAL_FACT_STATUSES,
     W_BUDGET,
     W_CHAIN,
@@ -42,11 +40,10 @@ from rlvr.state import (  # noqa: F401 — the compat surface
 )
 
 __all__ = [
-    "SCHEMA", "SITUATIONS_REL", "SITUATION_SCHEMA",
+    "SCHEMA", "SITUATION_SCHEMA",
     "TERMINAL_FACT_STATUSES",
     "FACT_BUCKET_EDGES", "BUDGET_BUCKET_EDGES",
     "W_CHAIN", "W_FACTS", "W_BUDGET", "W_SIDES",
-    "COST_EVENTS_REL",
     "fact_face", "fact_bucket", "claim_pattern", "budget_fraction",
     "budget_bucket", "chain_progress", "phase", "obstacle_face",
     "snapshot", "signature_str", "signature_hash",

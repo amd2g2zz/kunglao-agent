@@ -78,10 +78,6 @@ arms:
       # inherited from the ambient shell).
       KUNGLAO_RECALL: "0"
       KUNGLAO_PREDICT_BEFORE_TRY: "0"
-      KUNGLAO_META_RETRIEVAL: "0"
-      KUNGLAO_META_VALUE_TABLE: "0"
-      KUNGLAO_META_ATTRIBUTION: "0"
-      KUNGLAO_META_PLAYBOOK: "0"
 
   - id: cc-warm-context
     runner_face: cc-warm-context
@@ -94,10 +90,6 @@ arms:
     env:
       KUNGLAO_RECALL: "0"
       KUNGLAO_PREDICT_BEFORE_TRY: "0"
-      KUNGLAO_META_RETRIEVAL: "0"
-      KUNGLAO_META_VALUE_TABLE: "0"
-      KUNGLAO_META_ATTRIBUTION: "0"
-      KUNGLAO_META_PLAYBOOK: "0"
 
   - id: cc-multisample
     runner_face: cc-default
@@ -116,10 +108,6 @@ arms:
     env:
       KUNGLAO_RECALL: "0"
       KUNGLAO_PREDICT_BEFORE_TRY: "0"
-      KUNGLAO_META_RETRIEVAL: "0"
-      KUNGLAO_META_VALUE_TABLE: "0"
-      KUNGLAO_META_ATTRIBUTION: "0"
-      KUNGLAO_META_PLAYBOOK: "0"
 
   - id: kunglao-cold
     runner_face: loop
@@ -132,10 +120,6 @@ arms:
       # declares the exact "0" ablation.
       KUNGLAO_RECALL: "1"
       KUNGLAO_PREDICT_BEFORE_TRY: "0"
-      KUNGLAO_META_RETRIEVAL: "1"
-      KUNGLAO_META_VALUE_TABLE: "1"
-      KUNGLAO_META_ATTRIBUTION: "1"
-      KUNGLAO_META_PLAYBOOK: "1"
 
   - id: kunglao-uniform
     runner_face: loop
@@ -154,10 +138,6 @@ arms:
       KUNGLAO_SCHEDULER: "uniform"
       KUNGLAO_RECALL: "1"
       KUNGLAO_PREDICT_BEFORE_TRY: "0"
-      KUNGLAO_META_RETRIEVAL: "1"
-      KUNGLAO_META_VALUE_TABLE: "1"
-      KUNGLAO_META_ATTRIBUTION: "1"
-      KUNGLAO_META_PLAYBOOK: "1"
 
   - id: kunglao-warm
     runner_face: loop
@@ -168,10 +148,6 @@ arms:
     env:
       KUNGLAO_RECALL: "1"
       KUNGLAO_PREDICT_BEFORE_TRY: "0"
-      KUNGLAO_META_RETRIEVAL: "1"
-      KUNGLAO_META_VALUE_TABLE: "1"
-      KUNGLAO_META_ATTRIBUTION: "1"
-      KUNGLAO_META_PLAYBOOK: "1"
 
   - id: kunglao-warm-no-l1
     runner_face: loop
@@ -186,22 +162,19 @@ arms:
     env:
       KUNGLAO_RECALL: "0"
       KUNGLAO_PREDICT_BEFORE_TRY: "0"
-      KUNGLAO_META_RETRIEVAL: "1"
-      KUNGLAO_META_VALUE_TABLE: "1"
-      KUNGLAO_META_ATTRIBUTION: "1"
-      KUNGLAO_META_PLAYBOOK: "1"
 
 # Hermeticity contract (enforced by the launcher, not by this file):
 # the launcher strips KUNGLAO_RECALL / KUNGLAO_EXPANSION /
-# KUNGLAO_PREDICT_BEFORE_TRY / KUNGLAO_META_RETRIEVAL /
-# KUNGLAO_META_VALUE_TABLE / KUNGLAO_META_ATTRIBUTION /
-# KUNGLAO_META_PLAYBOOK / KUNGLAO_DIRECTION / KUNGLAO_EVAL_SETTLE /
-# KUNGLAO_PLAYBOOK / KUNGLAO_SCHEDULER from the inherited environment
+# KUNGLAO_PREDICT_BEFORE_TRY / KUNGLAO_PLAYBOOK /
+# KUNGLAO_SCHEDULER from the inherited environment
 # before merging each arm's declared env — ambient shell state can never
 # contaminate an arm. Every arm declares the supply/learning defaults
 # above explicitly (declaration matrix), so no arm relies on an
 # invisible default. KUNGLAO_SCHEDULER is declared exactly where the B3
-# arm needs it (every other arm rides the learned DTS scheduler).
+# arm needs it (every other arm rides the learned DTS scheduler). The
+# former component-ablation switches (KUNGLAO_META_RETRIEVAL /
+# VALUE_TABLE / ATTRIBUTION / PLAYBOOK) are retired — the meta-policy
+# components run unconditionally on every loop arm.
 
 units:
   # --- interpolation holdout (eval/v1/split.yaml, release tier) — READ,

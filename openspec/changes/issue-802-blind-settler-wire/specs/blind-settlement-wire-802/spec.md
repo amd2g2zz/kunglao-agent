@@ -10,8 +10,9 @@ whitelist builder (producer narrative and the policy learning faces
 excluded by construction), and every parked claim with a ruling SHALL
 settle through `settlement_scorer.settle_blind` (the
 `scalar.validate_verdict_doc` stack). The unblinded `settle_step`
-judgment legs (#712 credit, crystallization, belief) SHALL run only
-behind the explicit eval gate (`KUNGLAO_EVAL_SETTLE=1`); the hash-only
+judgment legs (#712 credit, crystallization, belief) have NO production
+reader — the stop face is blind-only and no environment value can steer
+it back into the unblinded judgment; the hash-only
 mechanical bookkeeping (step-record/2, transition close, attributed
 waste) runs in every mode.
 
@@ -23,11 +24,11 @@ waste) runs in every mode.
   and carries `blind-settlement-input/1`, the receipt carries
   `step_credit: null`, and no forbidden-face bytes appear in the doc
 
-#### Scenario: the eval gate restores the legacy face
+#### Scenario: the stop face stays blind with the removed switch set
 
-- **WHEN** `KUNGLAO_EVAL_SETTLE=1`
-- **THEN** the legacy unblinded settlement runs unchanged and nothing
-  is parked
+- **WHEN** `KUNGLAO_EVAL_SETTLE=1` is present in the environment
+- **THEN** the stop face still parks the blind input doc and banks no
+  unblinded credit (the removed switch is inert)
 
 ### Requirement: A blind settlement settles exactly what was blinded
 

@@ -163,10 +163,6 @@ def test_real_registry_no_l1_arm_declares_the_recall_switch():
     for other in mx.config_arms(doc):
         env = other.get("env") or {}
         assert "KUNGLAO_RECALL" in env
-        assert "KUNGLAO_META_RETRIEVAL" in env
-        assert "KUNGLAO_META_VALUE_TABLE" in env
-        assert "KUNGLAO_META_ATTRIBUTION" in env
-        assert "KUNGLAO_META_PLAYBOOK" in env
         if other["id"] == "kunglao-warm-no-l1":
             continue
         if other.get("runner_face") != "loop":
@@ -259,9 +255,15 @@ def test_child_env_store_faces_per_kind(tmp_path):
     cold = mx.child_env(_plan(tmp_path, store_kind="cold", env_extra=()))
     warm = mx.child_env(_plan(tmp_path, store_kind="warm", env_extra=()))
     none = mx.child_env(_plan(tmp_path, store_kind="none", env_extra=()))
-    assert cold[mx.STORE_ENV] == str(tmp_path / "arm" / "u-1" / "store")
-    assert warm[mx.STORE_ENV] == cold[mx.STORE_ENV]
+    # the store is workspace-local: cold/warm stage SEED/EXPORT dirs
+    # (the warm seed is materialized from the configured warm source),
+    # the store root override itself is never set
+    assert cold[mx.SEED_STORE_ENV] == str(tmp_path / "arm" / "u-1" / "store")
+    assert warm[mx.SEED_STORE_ENV] == cold[mx.SEED_STORE_ENV]
+    assert warm[mx.EXPORT_STORE_ENV] == warm[mx.SEED_STORE_ENV]
+    assert mx.STORE_ENV not in cold  # the store root override: never set
     assert mx.STORE_ENV not in none  # cc faces: unset, not defaulted
+    assert mx.SEED_STORE_ENV not in none
 
 
 def test_child_env_corpus_face(tmp_path):

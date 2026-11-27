@@ -52,6 +52,7 @@ machine signals — no model-call path, no judgment slots (U3 extended).
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -59,6 +60,7 @@ from pathlib import Path
 import numpy as np  # issue 420: ordered-float reductions only (see _seq_sum)
 
 from rlvr import ledger as rl  # the package face (issue 420 Phase 2)
+from rlvr import learning_seal as _seal  # the row seal (additive at write)
 
 # the round-credit rollout kind — the ledger's OPEN ENUM registration API
 # (a new kind is one register_kind entry, never an ad-hoc string).
@@ -176,6 +178,65 @@ OUTCOME_INFRA = "infra"
 OUTCOME_CENSORED = "censored"
 INFRA_OUTCOMES = frozenset({"BLOCKED"})
 CENSORED_OUTCOMES = frozenset({"TIMEOUT"})
+
+# --- settlement censoring: the outcome classes the close path books ------
+#
+# A claim whose outcome is parked/expired/killed or an infrastructure
+# failure carries NO strategy signal: censoring removes information, it
+# never adds wrong signal. The route below keeps those outcomes out of
+# every Beta/mass face and records them as censored on the settlement
+# receipt. Decisive-success outcomes never censor (their settlement is
+# the ladder's own signal); the rule-out outcomes get their own sign.
+CENSORED_CLAIM_STATUSES = frozenset({"DEFERRED", "STALE", "SUPERSEDED",
+                                     "DEAD"})
+SUCCESS_CLAIM_STATUSES = frozenset({"PROVEN", "VERIFIED"})
+RULE_OUT_CLAIM_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
+
+#: the rule-out FINDING class: a NEGATIVE fact is a proven-negative
+#: rule-out (the hypothesis arm died on evidence — real verified work).
+#: A REFUTED fact is a REFUTED PROPOSITION (the finding itself failed —
+#: the strategy's own outcome, priced by the ladder as failure).
+RULE_OUT_FACT_STATUSES = frozenset({"NEGATIVE"})
+
+#: the settlement's censoring route kinds -> the receipt marker key
+ROUTE_CENSORED = "censored"
+ROUTE_PENDING = "pending_no_mass"
+
+#: infrastructure failure reason markers (normalized: lowercase, the
+#: ``_``/space run collapsed to ``-``): a dispatch that died on the
+#: model-API quota or the API itself is an environment outcome, never a
+#: strategy outcome.
+_INFRA_REASON_MARKERS = ("quota", "rate-limit", "api-error", "api-quota")
+#: the right-censoring reason markers (the end was never observed)
+_CENSORED_REASON_MARKERS = ("timeout", "timed-out")
+
+
+def _normalize_word(word: str) -> str:
+    return re.sub(r"[\s_]+", "-", str(word or "").strip().lower())
+
+
+def outcome_censor_class(word: str) -> str | None:
+    """The censoring class (OUTCOME_CENSORED / OUTCOME_INFRA) of one
+    settlement outcome word: the act-outcome classes first (classify_
+    outcome — TIMEOUT censored, BLOCKED infra), then the infrastructure
+    failure reasons (timeout family censored; the commit-transaction's
+    ``step-<name>-failed`` family and the quota / API failures infra).
+    None = a strategy outcome (settles on the ladder). Pure; never
+    guesses an unknown word into a class."""
+    s = str(word or "").strip()
+    if not s:
+        return None
+    cls = classify_outcome(s)
+    if cls in (OUTCOME_CENSORED, OUTCOME_INFRA):
+        return cls
+    low = _normalize_word(s)
+    if any(marker in low for marker in _CENSORED_REASON_MARKERS):
+        return OUTCOME_CENSORED
+    if low.startswith("step-") and low.endswith("-failed"):
+        return OUTCOME_INFRA
+    if any(marker in low for marker in _INFRA_REASON_MARKERS):
+        return OUTCOME_INFRA
+    return None
 
 TIER_GOLD = "GOLD"
 TIER_SILVER = "SILVER"
@@ -411,7 +472,8 @@ def settle_workspace_scalars(ws, rules_path: Path | str | None = None,
         amended["experience_tuple"] = extract_tuple(
             row.get("signals") or [], tier_doc)
         amended["tier_settled_ts"] = now or _now()
-        res = rl.settle(ws, str(row.get("rollout_id")), amended)
+        res = rl.settle(ws, str(row.get("rollout_id")), amended,
+                        sign=_seal.sign_row)  # seal before the ledger write
         if res.get("appended"):
             settled_n += 1
             by_tier[tier_doc["tier"]] = \
@@ -447,28 +509,34 @@ _REFUTATION_STATUSES = frozenset({"NEGATIVE", "REFUTED"})
 def _artifact_cited(artifact: dict) -> bool:
     """The citation relation — the issue-433 single chokepoint.
 
-    An artifact is CITED iff it is named by a deliverable
-    (``cited_by_deliverable`` — the deliverable citation face) OR linked
+    An artifact is credited iff independently checked downstream use is
+    recorded (``verified_deliverable_use``) OR it is linked
     via claim provenance to a question-bearing claim
     (``answers_question`` — the fact frontmatter claim_id resolving in
     claim-register.yaml to a claim with a non-null answers_question; the
     same surface the verdict scorer walks pq -> claim -> linked fact).
     Pure: same artifact face -> same verdict; the workspace-side
     determination of both legs lives in fact_artifacts."""
-    return bool(artifact.get("cited_by_deliverable")
+    return bool(artifact.get("verified_deliverable_use")
                 or artifact.get("answers_question"))
 
 
 def _artifact_credit(artifact: dict) -> tuple[float, str | None]:
     """One artifact's round-credit value under the issue-433 ladder:
     ``(value, demotion reason or None)``. FIRST-MATCH:
+      verified rule-out (independent sign-off)  -> (FULL, None)
       terminal-verified + cited             -> (FULL, None)
       terminal-verified, never cited        -> (TRACE, uncited_verified)
       oracle-backed refutation w/ replay    -> (TRACE,
                                                 refuted_with_replay_evidence)
       anything else (action/tool success)   -> (0.0, None)
-    An unverified artifact earns nothing even when cited — verified is
-    the admission ticket, not an alternative value path."""
+    A VERIFIED rule-out is real work — a verified negative eliminates a
+    hypothesis and banks SUCCESS; the independent sign-off is the
+    verification currency (the maker cannot self-certify). An unverified
+    artifact earns nothing even when cited — verified is the admission
+    ticket, not an alternative value path."""
+    if artifact.get("verified_rule_out"):
+        return ROUND_CREDIT_FULL, None
     status = str(artifact.get("status") or "").strip().upper()
     if status in _CREDIT_TERMINALS:
         if _artifact_cited(artifact):
@@ -493,6 +561,59 @@ def classify_outcome(o_status: str) -> str:
     if s in INFRA_OUTCOMES:
         return OUTCOME_INFRA
     return OUTCOME_STRATEGY
+
+
+def rule_out_pending(claim_artifacts: list[dict]) -> tuple[str, dict] | None:
+    """The unverified rule-out's PENDING route: the claim's rule-out
+    finding (the NEGATIVE fact) exists but carries no independent
+    verification and no replay-backed refutation — the outcome is not
+    evidence, so no mass moves either way. A verified rule-out settles
+    SUCCESS on its producer; replay-backed refutations keep the
+    information option; any credited artifact means real work settles on
+    the ladder. None = the ladder settles the claim."""
+    rule_outs = [a for a in (claim_artifacts or [])
+                 if str(a.get("status") or "").strip().upper()
+                 in RULE_OUT_FACT_STATUSES]
+    if not rule_outs:
+        return None
+    if any(a.get("verified_rule_out") for a in rule_outs):
+        return None
+    if any(_artifact_credit(a)[0] >= ROUND_CREDIT_FULL
+           for a in (claim_artifacts or [])):
+        return None
+    unverified = [str(a.get("id") or "") for a in rule_outs
+                  if not (a.get("oracle_backed_refutation")
+                          and str(a.get("verify_status") or "")
+                          .strip().lower() == "passes")]
+    if not unverified:
+        return None
+    return (ROUTE_PENDING,
+            {"reason": "unverified-rule-out",
+             "facts": [fid for fid in unverified if fid]})
+
+
+def settlement_route(status, outcome,
+                     claim_artifacts: list[dict]) -> tuple[str, dict] | None:
+    """One claim's settlement route — the censoring/pending face the
+    close path books BEFORE the ladder: ``(marker key, marker block)``
+    when the outcome carries no Beta/mass signal, None = the ladder
+    settles it. Decisive-success outcomes never route; a censored
+    claim-status outcome routes on the status word; a rule-out outcome
+    first consults the recorded infrastructure failure (the outcome
+    word), then the unverified-rule-out pending face. Pure."""
+    st = str(status or "").strip().upper()
+    if st in SUCCESS_CLAIM_STATUSES:
+        return None
+    if st in CENSORED_CLAIM_STATUSES:
+        return (ROUTE_CENSORED,
+                {"class": OUTCOME_CENSORED, "reason": st})
+    word = str(outcome or "").strip()
+    cls = outcome_censor_class(word) if word else None
+    if cls is not None:
+        return (ROUTE_CENSORED, {"class": cls, "reason": word})
+    if st in RULE_OUT_CLAIM_STATUSES:
+        return rule_out_pending(claim_artifacts)
+    return None
 
 
 def budget_overrun(branch_budget, usage) -> float:
@@ -630,6 +751,45 @@ def round_credit(dispatches: list[dict], artifacts: list[dict],
             "unattributed_waste": unattributed_waste}
 
 
+def _settlement_routes(dispatches: list[dict],
+                       artifacts: list[dict]) -> dict[str, tuple[str, dict]]:
+    """dispatch id -> the censoring/pending route (the claim-status +
+    outcome face), keyed off the dispatch words and the claim's own
+    artifacts. Bare dispatch dicts (no status word) route nothing."""
+    arts_by_claim: dict[str, list[dict]] = {}
+    for a in artifacts:
+        cid = str(a.get("claim_id") or "")
+        if cid:
+            arts_by_claim.setdefault(cid, []).append(a)
+    routes: dict[str, tuple[str, dict]] = {}
+    for d in (dispatches or []):
+        did = str(d.get("dispatch_id") or "")
+        route = settlement_route(d.get("status"), d.get("outcome"),
+                                 arts_by_claim.get(did, []))
+        if route is not None:
+            routes[did] = route
+    return routes
+
+
+def _add_deliverable_audit(settlement, artifacts, dispatch_id):
+    # Textual references are audit-only; they do not establish use.
+    refs = sorted((str(a["id"]),
+                   "verified" if a.get("verified_deliverable_use") else "unknown",
+                   a.get("deliverable_reference_evidence") or [])
+                  for a in artifacts
+                  if str(a.get("creator") or "").strip() == str(dispatch_id)
+                  and a.get("id") and a.get("cited_by_deliverable"))
+    if refs:
+        settlement["deliverable_references"] = [
+            {"id": aid, "use": use, **({"sources": sources} if sources else {})}
+            for aid, use, sources in refs]
+    used = [{"id": str(a["id"]), **a["deliverable_use_evidence"]}
+            for a in artifacts if a.get("deliverable_use_evidence")
+            and str(a.get("creator") or "").strip() == str(dispatch_id)]
+    if used:
+        settlement["deliverable_use_evidence"] = sorted(used, key=lambda x: x["id"])
+
+
 def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                         waste: list[dict] | None = None,
                         now=None) -> dict:
@@ -656,6 +816,14 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     dispatch_ids = [str(d.get("dispatch_id") or "")
                     for d in (dispatches or [])]
     artifacts = backfill_artifact_creators(artifacts, dispatch_ids)
+    # the creating dispatch per fact — the harness stamp, authoritative
+    # at the bank seam; a fact without it keeps the legacy claim-latest
+    # fallback and names the degradation on its credit row
+    producer_of = _producer_map(artifacts)
+    # the censoring/pending routes (the claim-status + outcome face):
+    # routed rows settle a marked receipt and never touch a Beta/mass
+    # face. Bare dispatch dicts (no status word) route nothing.
+    routes = _settlement_routes(dispatches, artifacts)
     doc = round_credit(dispatches, artifacts, waste)
     settled_n = 0
     banked: list[str] = []
@@ -663,6 +831,7 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
     ts = now or _now()
     for row in doc["rows"]:
         rid = f"{KIND_ROUND_CREDIT}/{row['dispatch_id']}"
+        route = routes.get(str(row["dispatch_id"]))
         existing = rl.fold(ws, rid)
         if existing is not None:
             # re-run: freeze the signal ts at the row's identity ts so the
@@ -679,7 +848,8 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                     "ts": ts_row}]
         rec = rl.record(ws, kind=KIND_ROUND_CREDIT,
                         anchor=str(row["dispatch_id"]), signals=signals,
-                        ts=ts_row)  # identity ts == signal ts on first write
+                        ts=ts_row,  # identity ts == signal ts on first write
+                        sign=_seal.sign_row)  # seal before the ledger write
         if not rec.get("appended") and rec.get("reason") not in (
                 "duplicate: unchanged",):
             warn("settle_round_credit", f"{rid}: {rec.get('reason')}")
@@ -710,21 +880,21 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
                       "round": row["round"],
                       "untraced": doc["untraced"],
                       "settled_ts": ts}
+        _add_deliverable_audit(settlement, artifacts, row["dispatch_id"])
         # additive-when-present fairness seams: the sorted observation
         # face (never the banked reward) and the budget-overrun audit
         # trail ride the settlement only when the dispatch carried the
         # inputs — legacy rows stay byte-identical.
-        if "r_sorted" in row:
-            settlement["r_sorted"] = row["r_sorted"]
-        if "budget_overrun" in row:
-            settlement["budget_overrun"] = row["budget_overrun"]
+        _settlement_seams(settlement, row, producer_of)
+        if route is not None:
+            settlement[route[0]] = route[1]
         prior_late = [str(x) for x in (prior_st.get("late_cited") or [])]
         late_cited = prior_late + [
             aid for aid in row["credited"]
             if aid in prior_demoted and aid not in prior_late]
         if late_cited:
             settlement["late_cited"] = late_cited
-        res = rl.settle(ws, rid, settlement)
+        res = rl.settle(ws, rid, settlement, sign=_seal.sign_row)
         if res.get("appended"):
             settled_n += 1
             # issue 462 W5 — the settlement feed: the FIRST SUCCESSFUL
@@ -736,14 +906,16 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             # the late-cite amendment path (both carrying a settlement in
             # the fold) refine the LEDGER only — the append-only
             # observation log has no retraction face, so re-banking would
-            # double-count the round.
-            if not (existing and existing.get("settlement") is not None):
-                bank = _bank_q_cell_credit(ws, row)
-                # #718: the same first-settlement tick banks the L1
-                # rollout return — the claim-terminal learning target the
-                # orchestration layer consumes (fail-open, lazy import;
-                # the L2 bank above is never affected by this leg)
-                _bank_l1_rollout_return(ws, row, bank)
+            # double-count the round. A censored/pending route banks
+            # NOTHING — the marker is the record.
+            if route is None and not (
+                    existing and existing.get("settlement") is not None):
+                bank = _bank_q_cell_credit(ws, row, producer_of)
+                # the companion legs follow the bank: a dispatch whose
+                # bank was skipped (a foreign face owns the mass) keeps
+                # its rollout-return leg with the face that banked it
+                if bank is not None:
+                    _bank_l1_rollout_return(ws, row, bank)
                 banked.append(str(row["dispatch_id"]))
         elif res.get("reason") not in ("duplicate: already settled",):
             warn("settle_round_credit", f"{rid}: {res.get('reason')}")
@@ -752,8 +924,9 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
         # so a bank that failed on pass 1 is repaired whatever the
         # ledger says); the repair/amendment NEVER reports into
         # `banked` — the case-posterior leg keys on that set.
-        if existing and existing.get("settlement") is not None:
-            if _reconcile_q_cell_bank(ws, row):
+        if route is None and existing \
+                and existing.get("settlement") is not None:
+            if _reconcile_q_cell_bank(ws, row, producer_of):
                 amended.append(str(row["dispatch_id"]))
     return {"settled": settled_n, "untraced": doc["untraced"],
             "unattributed_waste": doc["unattributed_waste"],
@@ -764,7 +937,13 @@ def settle_round_credit(ws, dispatches: list[dict], artifacts: list[dict],
             "banked": banked,
             # the dispatches whose bank was corrected or repaired
             # on this pass (the learning signal tracking the ledger)
-            "amended": amended}
+            "amended": amended,
+            # the routed rows: censored outcomes and pending rule-outs
+            # settled without moving any Beta/mass
+            "censored": [d for d, (k, _) in routes.items()
+                         if k == ROUTE_CENSORED],
+            "pending_no_mass": [d for d, (k, _) in routes.items()
+                                if k == ROUTE_PENDING]}
 
 
 def _calibration_delta(ladder_credit, step_sum: float, step_n: int,
@@ -812,7 +991,105 @@ def _real_did(ws, did: str) -> str:
     return did
 
 
-def _reconcile_q_cell_bank(ws, row: dict) -> bool:
+def _settlement_seams(settlement: dict, row: dict,
+                      producer_of: dict | None) -> None:
+    """The settlement's additive-when-present seams: the sorted
+    observation face, the budget-overrun audit trail, and the named
+    producer-attribution degradation (a credited fact without the
+    creating-dispatch stamp keeps the legacy fallback — named, never a
+    silent guess). Legacy rows stay byte-identical."""
+    if "r_sorted" in row:
+        settlement["r_sorted"] = row["r_sorted"]
+    if "budget_overrun" in row:
+        settlement["budget_overrun"] = row["budget_overrun"]
+    note = _attribution_note(row, producer_of)
+    if note:
+        settlement["producer_attribution"] = note
+
+
+#: the creating-dispatch id shape (the dispatch ledger's mint) — a stamp
+#: that fails it is never trusted as a producer (unstamped, named below)
+_DISPATCH_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+
+
+def _producer_map(artifacts: list[dict]) -> dict[str, str]:
+    """fact id -> the harness-stamped creating dispatch id (present only
+    on facts carrying a stamp that passes the dispatch-id shape; an
+    absent or inconsistent stamp keeps the named fallback — a forged or
+    malformed value is never trusted as a producer)."""
+    out: dict[str, str] = {}
+    for a in (artifacts or []):
+        did = str(a.get("created_by_dispatch") or "").strip()
+        if did and _DISPATCH_ID_RE.match(did):
+            out[str(a.get("id") or "")] = did
+    return out
+
+
+def _attribution_note(row: dict,
+                      producer_of: dict | None) -> dict | None:
+    """The named degradation block for a credit row whose credited facts
+    predate the creating-dispatch stamp: the fallback is named, never a
+    silent guess. None when every credited fact carries the stamp."""
+    unstamped = [aid for aid in (row.get("credited") or [])
+                 if not (producer_of or {}).get(str(aid))]
+    if not unstamped:
+        return None
+    return {"fallback": "creator-stamp-missing", "facts": unstamped}
+
+
+def _producer_groups(row: dict,
+                     producer_of: dict | None) -> dict[str, dict]:
+    """The row's facts grouped by their creating dispatch id (the harness
+    stamp): ``{dispatch_id: {"credited": [...], "n": int}}`` where ``n``
+    counts credited + demoted facts (the residue carriers). An unstamped
+    fact groups under "" — the legacy claim-latest fallback, named on the
+    credit row at settle."""
+    groups: dict[str, dict] = {}
+    for fid in (row.get("credited") or []):
+        did = str((producer_of or {}).get(str(fid)) or "").strip()
+        g = groups.setdefault(did, {"credited": [], "n": 0})
+        g["credited"].append(str(fid))
+        g["n"] += 1
+    for e in (row.get("demoted") or []):
+        if not isinstance(e, dict):
+            continue
+        fid = str(e.get("id") or "")
+        did = str((producer_of or {}).get(fid) or "").strip()
+        g = groups.setdefault(did, {"credited": [], "n": 0})
+        g["n"] += 1
+    return groups or {"": {"credited": [], "n": 0}}
+
+
+#: the bank rows' ownership marker — THIS face's banks carry it so the
+#: reconcile can tell its own drift from a mass banked by another
+#: settlement face (the blind verdict banks at its own stop)
+BANK_OWNER_ROUND_CREDIT = "round-credit"
+
+
+def _round_credit_banked(ws, did: str) -> bool:
+    """True when this face's own bank (the ``round-credit``-marked
+    settlement rows) exists for the identity — the reconcile's ownership
+    gate: a mass banked by another settlement face is not this ledger's
+    drift, and the correction must never claw it. Fail-open: an
+    unreadable log reads as unowned (the reconcile then skips)."""
+    try:
+        from rlvr import q_cells as _qc  # noqa: PLC0415
+        for row in _seal.trusted_rows(_qc.JSONLQStore(ws).observations(),
+                                      op="scalar.round_credit_banked"):
+            if not isinstance(row, dict) \
+                    or str(row.get("reason") or "") != BANK_OWNER_ROUND_CREDIT:
+                continue
+            if did and (str(row.get("claim") or "") == did
+                        or str(row.get("dispatch_id") or "") == did):
+                return True
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("q_cell_reconcile",
+             f"ownership read failed: {type(exc).__name__}: {exc}")
+    return False
+
+
+def _reconcile_q_cell_bank(ws, row: dict,
+                           producer_of: dict | None = None) -> bool:
     """The bank tracks the LEDGER, not the first write. Two faces
     behind one guard: a bank that never landed (no settlement-source
     rows) gets the full first bank via the q-cell faces DIRECTLY —
@@ -823,38 +1100,58 @@ def _reconcile_q_cell_bank(ws, row: dict) -> bool:
     break."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        did = _real_did(ws, str(row["dispatch_id"]))
-        mass = _qc.banked_mass(ws, did)
-        if mass is None:
-            # an unreadable log is not an empty one — amending against a
-            # fabricated (0, 0) read would fire a full-target overshoot
-            warn("q_cell_reconcile", f"{did}: log unreadable — skipped")
-            return False
-        _s, _f, n_rows = mass
-        if n_rows == 0:
-            step_sum, step_n = _qc.step_credit_totals(ws, did)
-            if step_n == 0:
-                bank = _qc.observe_settlement(
-                    ws, did, row["r"], reward=float(row["r"]),
-                    confidence_band=BAND_ROUND_CREDIT)  # #799 R2b
-            else:
-                d_s, d_f = _calibration_delta(
-                    row["r"], step_sum, step_n,
-                    band_ceil=_qc.OBSERVATION_BAND_CEIL)
-                bank = _qc.observe_step_calibration(
-                    ws, did, d_s, failure_delta=d_f)
-            return bool((bank or {}).get("appended"))
-        bank = _qc.amend_settlement(ws, did, row["r"],
-                                    reason="ledger-amendment")
-        return bool(bank.get("appended"))
+        fallback_did = _real_did(ws, str(row["dispatch_id"]))
+        groups = _producer_groups(row, producer_of)
+        total = sum(g["n"] for g in groups.values())
+        residue = float(row["r"]) - float(len(row.get("credited") or []))
+        ok = False
+        for did, g in groups.items():
+            target = did or fallback_did
+            share = (g["n"] / total) if total else 1.0
+            value = float(len(g["credited"])) + residue * share
+            mass = _qc.banked_mass(ws, target)
+            if mass is None:
+                # an unreadable log is not an empty one — amending against a
+                # fabricated (0, 0) read would fire a full-target overshoot
+                warn("q_cell_reconcile", f"{target}: log unreadable — skipped")
+                continue
+            _s, _f, n_rows = mass
+            if n_rows == 0:
+                step_sum, step_n = _qc.step_credit_totals(ws, target)
+                if step_n == 0:
+                    bank = _qc.observe_settlement(
+                        ws, target, value, reward=float(row["r"]),
+                        confidence_band=BAND_ROUND_CREDIT,
+                        reason=BANK_OWNER_ROUND_CREDIT)
+                else:
+                    d_s, d_f = _calibration_delta(
+                        value, step_sum, step_n,
+                        band_ceil=_qc.OBSERVATION_BAND_CEIL)
+                    bank = _qc.observe_step_calibration(
+                        ws, target, d_s, failure_delta=d_f,
+                        reason=BANK_OWNER_ROUND_CREDIT)
+                ok = ok or bool((bank or {}).get("appended"))
+                continue
+            if not _round_credit_banked(ws, target):
+                # a foreign settlement face owns the mass — not this
+                # ledger's drift; the correction must never claw it
+                continue
+            bank = _qc.amend_settlement(ws, target, value,
+                                        reason="ledger-amendment")
+            ok = ok or bool(bank.get("appended"))
+        return ok
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_reconcile", f"{type(exc).__name__}: {exc}")
         return False
 
 
-def _bank_q_cell_credit(ws, row: dict) -> dict | None:
-    """Issue 462 W5: bank one settled round credit into the matching Q
-    cell (rlvr.q_cells.observe_settlement — the match-and-bank face).
+def _bank_q_cell_credit(ws, row: dict,
+                        producer_of: dict | None = None) -> dict | None:
+    """Bank one settled round credit into the matching Q cell
+    (rlvr.q_cells.observe_settlement — the match-and-bank face).
+    Production credit keys on the dispatch that CREATED the credited
+    facts (the harness stamp); a fact without the stamp keeps the legacy
+    claim-latest fallback and names the degradation on the credit row.
     The bank result carries the matched row's ``arm_key``/``fingerprint``
     so the SAME settled credit keys the cross-task posterior store row
     (rlvr.strategy_store.append_store_row) without a second scan — the
@@ -862,40 +1159,68 @@ def _bank_q_cell_credit(ws, row: dict) -> dict | None:
     caller. Telemetry posture: fail-open, a banked-credit failure is one
     rate-limited WARN and never breaks settlement (the determinism wall
     covers the ledger receipt; the Q bank is the learning feed). Returns
-    the bank dict (None on failure) so the caller can thread the matched
-    dispatch signature into the L1 rollout-return bank (#718) without a
+    the first bank dict (None on failure) so the caller can thread the
+    matched dispatch signature into the L1 rollout-return bank without a
     second match scan.
 
-    #712 branch: when step credit already banked for this dispatch
-    (``step_credit_totals`` — n > 0) the terminal bank is the RESIDUAL,
-    not the raw ladder — one signed ``observe_step_calibration`` row so
-    cumulative success lands on the ladder value (over-credit clawed
-    back, under-credit topped up) and cumulative failure on 1 − L.
-    n == 0 is the NORMAL claim-shape under the real-id key (#804
-    restatement, not a compat acceptance): a claim with no banked step
-    credit settles whole through ``observe_settlement`` — the ladder
-    value IS the terminal mass, there is nothing to residualize."""
+    When step credit already banked for a producing dispatch
+    (``step_credit_totals`` — n > 0) that producer's terminal bank is
+    the RESIDUAL, not the raw share — one signed
+    ``observe_step_calibration`` row so cumulative success lands on the
+    ladder value (over-credit clawed back, under-credit topped up) and
+    cumulative failure on 1 − L. n == 0 is the NORMAL claim-shape under
+    the real-id key: a producer with no banked step credit settles whole
+    through ``observe_settlement`` — the ladder value IS the terminal
+    mass, there is nothing to residualize."""
     try:
         from rlvr import q_cells as _qc  # noqa: PLC0415
-        did = _real_did(ws, str(row["dispatch_id"]))
-        step_sum, step_n = _qc.step_credit_totals(ws, did)
-        if step_n == 0:
-            bank = _qc.observe_settlement(
-                ws, did, row["r"], reward=float(row["r"]),
-                confidence_band=BAND_ROUND_CREDIT)  # #799 R2b
-        else:
-            delta_success, delta_failure = _calibration_delta(
-                row["r"], step_sum, step_n,
-                band_ceil=_qc.OBSERVATION_BAND_CEIL)
-            bank = _qc.observe_step_calibration(
-                ws, did, delta_success, failure_delta=delta_failure)
+        fallback_did = _real_did(ws, str(row["dispatch_id"]))
+        groups = _producer_groups(row, producer_of)
+        total = sum(g["n"] for g in groups.values())
+        # the row's trace/waste residue rides the producers' fact shares;
+        # a row with no fact carriers rides its full residue on the
+        # fallback group
+        residue = float(row["r"]) - float(len(row.get("credited") or []))
+        bank = None
+        for did, g in groups.items():
+            target = did or fallback_did
+            mass = _qc.banked_mass(ws, target)
+            if mass is None or (mass[0] + mass[1]) > 0:
+                # one bank per dispatch: mass already carried by the
+                # identity is owned by another settlement face (the
+                # blind verdict banks at its own stop) — banking here
+                # would double-count it. A MASSLESS row (the
+                # information option) owns no mass and never pre-empts:
+                # the honest terminal outcome still banks through here.
+                continue
+            share = (g["n"] / total) if total else 1.0
+            value = float(len(g["credited"])) + residue * share
+            step_sum, step_n = _qc.step_credit_totals(ws, target)
+            if step_n == 0:
+                one = _qc.observe_settlement(
+                    ws, target, value, reward=float(row["r"]),
+                    confidence_band=BAND_ROUND_CREDIT,
+                    reason=BANK_OWNER_ROUND_CREDIT)
+            else:
+                delta_success, delta_failure = _calibration_delta(
+                    value, step_sum, step_n,
+                    band_ceil=_qc.OBSERVATION_BAND_CEIL)
+                one = _qc.observe_step_calibration(
+                    ws, target, delta_success, failure_delta=delta_failure,
+                    reason=BANK_OWNER_ROUND_CREDIT)
+            if bank is None:
+                bank = one
+            # the store row carries the SAME real dispatch id the Q
+            # bank matched (the rollout key) and ONLY its own share —
+            # a multi-producer round never double-counts the claim's
+            # value across the cross-task store
+            _bank_strategy_store_row(
+                ws, {**row, "dispatch_id": target, "r": value,
+                     "credited": list(g["credited"])}, one)
+        return bank
     except Exception as exc:  # noqa: BLE001 — telemetry, never settlement
         warn("q_cell_bank", f"{type(exc).__name__}: {exc}")
         return None
-    # #800 R2: the store row carries the SAME real dispatch id the Q
-    # bank matched (the rollout key), never the claim-grained row id
-    _bank_strategy_store_row(ws, {**row, "dispatch_id": did}, bank)
-    return bank
 
 
 def _bank_l1_rollout_return(ws, row: dict, bank: dict | None) -> None:
@@ -1143,6 +1468,203 @@ def _deliverable_cited(fid: str, cited: set[str]) -> bool:
     return bool(token) and token.group(0) in cited
 
 
+#: the independent sign-off shape rule — mirrors blind_gate's required
+#: fields, kept import-free by the scalar engine's U3 import wall
+#: (pinned equal to its source by test)
+SIGN_OFF_REQUIRED = ("verifier_id", "refute_attempt", "sign_off_at",
+                     "verdict")
+#: verdict words that count as a PASSED independent check — mirrors
+#: verifier_integrity.PASS_VERDICTS (pinned equal to its source by test)
+SIGN_OFF_PASS_VERDICTS = frozenset(
+    {"verified", "confirmed", "pass", "passed", "passes"})
+
+
+def _claim_workers(ws) -> dict[str, str]:
+    """claim id -> the claim's assigned worker identity (the register's
+    ``worker_id`` / ``last_dispatched_worker`` — the maker-checker's
+    key). Tolerant read: a missing or malformed register maps nothing."""
+    import yaml
+    try:
+        doc = yaml.safe_load(
+            (Path(ws) / "claim-register.yaml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return {}
+    out: dict[str, str] = {}
+    for c in (doc or {}).get("claims") or []:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "").strip()
+        for key in ("worker_id", "last_dispatched_worker"):
+            val = str(c.get(key) or "").strip()
+            if cid and val and val.lower() not in ("null", "none", "~"):
+                out[cid] = val
+                break
+    return out
+
+
+def _dispatch_agents(ws) -> dict[str, set[str]]:
+    """dispatch id -> the recorded worker identities (the dispatch row's
+    ``agent``) — the maker behind a creating-dispatch stamp. Tolerant
+    read; a read failure is one warn (the claim-worker and fact-echo
+    comparisons still run)."""
+    out: dict[str, set[str]] = {}
+    try:
+        from rlvr import q_cells as _qc  # noqa: PLC0415 — intra-package
+        for row in _seal.trusted_rows(_qc.JSONLQStore(ws).observations(),
+                                      op="scalar.dispatch_agents"):
+            if not isinstance(row, dict) or str(
+                    row.get("source") or "") != "dispatch":
+                continue
+            did = str(row.get("dispatch_id") or "").strip()
+            agent = str(row.get("agent") or "").strip()
+            if did and agent:
+                out.setdefault(did, set()).add(agent)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the settle
+        warn("scalar.dispatch_agents", f"{type(exc).__name__}: {exc}")
+    return out
+
+
+def _maker_ids(meta: dict, claim_worker: str | None,
+               dispatch_agents: dict[str, set[str]]) -> set[str]:
+    """The fact's maker identities (maker-checker: the maker cannot
+    self-certify): the fact's own identity echoes (creator / trace_id /
+    the creating-dispatch stamp), the claim's assigned worker identity,
+    and the worker behind the creating dispatch."""
+    out = {str(meta.get(k) or "").strip()
+           for k in ("creator", "trace_id", "created_by_dispatch")}
+    if claim_worker:
+        out.add(str(claim_worker).strip())
+    did = str(meta.get("created_by_dispatch") or "").strip()
+    out |= set(dispatch_agents.get(did, ()))
+    return {m.casefold() for m in out if m}
+
+
+def _independent_rule_out(meta: dict, claim_worker: str | None = None,
+                          dispatch_agents: dict[str, set[str]] | None = None
+                          ) -> bool:
+    """True when the fact is a rule-out finding (the NEGATIVE
+    proven-negative class) carrying INDEPENDENT verification evidence: a
+    ``verifier_sign_off`` block with every required field non-empty, a
+    PASSED independent verdict, and a ``verifier_id`` that is NOT the
+    maker (maker-checker: a self-stamped sign-off is not verification).
+    The producer's own reproduce gate is never independent either."""
+    if str(meta.get("status") or "").strip().upper() \
+            not in RULE_OUT_FACT_STATUSES:
+        return False
+    sign_off = meta.get("verifier_sign_off")
+    if not isinstance(sign_off, dict):
+        return False
+    if not all(str(sign_off.get(f) or "").strip()
+               for f in SIGN_OFF_REQUIRED):
+        return False
+    verdict = str(sign_off.get("verdict") or "").strip().casefold()
+    if verdict not in SIGN_OFF_PASS_VERDICTS:
+        return False
+    vid = str(sign_off.get("verifier_id") or "").strip().casefold()
+    return bool(vid) and vid not in _maker_ids(
+        meta, claim_worker, dispatch_agents or {})
+
+
+def _deliverable_reference_sources(ws):
+    """Audit reference paths and byte digests; never infer contribution."""
+    root = Path(ws).resolve()
+    found = {}
+    for rel in CITED_DELIVERABLE_RELS:
+        base = root / rel
+        try:
+            if not base.is_dir() or not base.resolve().is_relative_to(root):
+                continue
+            for path in sorted(base.rglob("*")):
+                if (path.is_symlink() or not path.is_file()
+                        or path.suffix.lower() not in CITED_DELIVERABLE_SUFFIXES
+                        or not path.resolve().is_relative_to(root)):
+                    continue
+                try:
+                    data = path.read_bytes()
+                    ids = set(FACT_ID_CITE_RE.findall(data.decode("utf-8", errors="replace")))
+                    ref = {"path": path.relative_to(root).as_posix(),
+                           "sha256": hashlib.sha256(data).hexdigest()}
+                    for fid in ids:
+                        found.setdefault(fid, []).append(ref)
+                except OSError:
+                    continue
+        except (OSError, RuntimeError):
+            continue
+    return found
+
+
+def _verified_deliverable_use(ws, fact_bytes, fid, meta, claim_worker, agents):
+    """Validate a checker's explicit, byte-bound finding of downstream use.
+
+    Armed settlement requires a host-issued checker receipt.
+    """
+    root = Path(ws).resolve()
+    makers = _maker_ids(meta, claim_worker, agents)
+    if not makers:
+        return False
+    try:
+        fact_body = fact_bytes.decode("utf-8").split("---", 2)[2]
+    except (OSError, UnicodeError, IndexError):
+        return False
+    records = root / "runs" / "deliverable-use"
+    try:
+        if not records.resolve().is_relative_to(root):
+            return False
+        paths = sorted(records.glob("*.json"))
+    except (OSError, RuntimeError):
+        return None
+    for path in paths:
+        try:
+            matched = _check_deliverable_use_record(path, records, root, fact_bytes,
+                                                    fact_body, fid, makers)
+            if matched:
+                return matched
+        except (OSError, ValueError, UnicodeError, TypeError, RuntimeError):
+            continue
+    return None
+
+
+def _check_deliverable_use_record(path, records, root, fact_bytes, fact_body, fid, makers):
+    if not path.resolve().is_relative_to(records.resolve()):
+        return None
+    record_bytes = path.read_bytes()
+    record = json.loads(record_bytes)
+    if not isinstance(record, dict) or record.get("schema") != "deliverable-use/1":
+        return None
+    if _seal.armed():
+        from rlvr.deliverable_checker import is_host_bound
+
+        if not is_host_bound(root, record):
+            return None
+    if record.get("fact_id") != fid or record.get("verdict") != "used":
+        return None
+    verifier, reason = record.get("verifier_id"), record.get("reason")
+    excerpt, rel = record.get("excerpt"), record.get("deliverable")
+    if not all(isinstance(x, str) and x.strip()
+               for x in (verifier, reason, excerpt, rel)):
+        return None
+    if verifier.strip().casefold() in makers or len(excerpt.strip()) < 32:
+        return None
+    target = (root / rel).resolve()
+    if not target.is_relative_to(root) or not any(
+            target.is_relative_to((root / base).resolve())
+            for base in CITED_DELIVERABLE_RELS):
+        return None
+    data = target.read_bytes()
+    if (hashlib.sha256(fact_bytes).hexdigest() != record.get("fact_sha256")
+            or hashlib.sha256(data).hexdigest() != record.get("deliverable_sha256")):
+        return None
+    if excerpt in fact_body and excerpt in data.decode("utf-8"):
+        return {"record": path.relative_to(root).as_posix(),
+                "record_sha256": hashlib.sha256(record_bytes).hexdigest(),
+                "deliverable": target.relative_to(root).as_posix(),
+                "deliverable_sha256": record["deliverable_sha256"],
+                "fact_sha256": record["fact_sha256"],
+                "verifier_id": verifier}
+
+    return None
+
+
 def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
     """Read <ws>/facts/*.md frontmatter into round-credit artifact rows.
 
@@ -1166,17 +1688,23 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
         cited = cited_ids_from_deliverables(ws)
     else:
         cited = {str(c) for c in cited_ids}
+    reference_sources = _deliverable_reference_sources(ws)
     question_bearing = question_claims(ws)
+    # the maker-checker's identity sources (once per read)
+    workers = _claim_workers(ws)
+    agents = _dispatch_agents(ws)
     out: list[dict] = []
     facts_dir = Path(ws) / "facts"
     if not facts_dir.is_dir():
         return out
     for path in sorted(facts_dir.glob("F*.md")):
         try:
-            parts = path.read_text(
-                encoding="utf-8", errors="replace").split("---", 2)
+            if path.is_symlink() or not path.resolve().is_relative_to(Path(ws).resolve()):
+                continue
+            fact_bytes = path.read_bytes()
+            parts = fact_bytes.decode("utf-8", errors="replace").split("---", 2)
             meta = yaml.safe_load(parts[1]) if len(parts) >= 3 else None
-        except OSError:
+        except (OSError, RuntimeError):
             continue
         except yaml.YAMLError:
             continue
@@ -1185,8 +1713,16 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
         fid = str(meta.get("id") or path.stem)
         creator = str(meta.get("creator") or meta.get("trace_id") or "")
         claim_id = str(meta.get("claim_id") or "").strip()
+        stamped = str(meta.get("created_by_dispatch") or "").strip()
+        use_evidence = _verified_deliverable_use(
+            ws, fact_bytes, fid, meta, workers.get(claim_id or None), agents)
         out.append({"id": fid,
                     "creator": creator or None,
+                    **({"created_by_dispatch": stamped} if stamped else {}),
+                    **({"verified_rule_out": True}
+                       if _independent_rule_out(
+                           meta, workers.get(claim_id or None), agents)
+                       else {}),
                     "status": str(meta.get("status") or ""),
                     "verify_status": str(meta.get("verify_status") or ""),
                     "claim_id": claim_id or None,
@@ -1194,6 +1730,13 @@ def fact_artifacts(ws, cited_ids: set | list | None = None) -> list[dict]:
                     and claim_id in question_bearing,
                     "cited_by_deliverable": _deliverable_cited(fid,
                                                                cited),
+                    **({"deliverable_reference_evidence": reference_sources.get(
+                        (FACT_ID_CITE_RE.search(fid).group(0)), [])}
+                       if FACT_ID_CITE_RE.search(fid) and reference_sources.get(
+                           FACT_ID_CITE_RE.search(fid).group(0)) else {}),
+                    "verified_deliverable_use": bool(use_evidence),
+                    **({"deliverable_use_evidence": use_evidence}
+                       if use_evidence else {}),
                     "oracle_backed_refutation": str(
                         meta.get("status") or "").strip().upper()
                         in _REFUTATION_STATUSES})
@@ -1411,7 +1954,8 @@ def apply_trajectory_settlement(ws, rollout_id, verdict_doc, *,
         "evidence_refs": refs,
         "settled_ts": ts,
     })
-    res = rl.settle(ws, str(rollout_id), amended)
+    res = rl.settle(ws, str(rollout_id), amended,
+                    sign=_seal.sign_row)  # seal before the ledger write
     if res.get("appended"):
         return {"settled": True, "validation": validation,
                 "settlement": amended}

@@ -431,27 +431,79 @@ class TestHostWiring:
         assert store._termination_kwargs() == {}
 
     def test_envelope_host_threads_verdicts_source_pin(self):
-        """scripts/e2e/checkpoints._sample_envelope_family carries the
-        termination threading beside the feature-prior kwargs (the
-        action-selection site is wired, not just the advisory lead).
-        #545 refactor: the optional-kwargs threading lives in the
-        _sampler_extras helper the sampler site calls — the pin follows
-        the call edge so the wiring stays adjacent and INVOKED."""
-        src = (ROOT / "scripts" / "e2e" / "checkpoints.py").read_text(encoding="utf-8")
-        tree = ast.parse(src)
-        fns = {
-            n.name: ast.get_source_segment(src, n)
-            for n in ast.walk(tree)
-            if isinstance(n, ast.FunctionDef)
-            and n.name in ("_sample_envelope_family", "_sampler_extras")
+        """The envelope delegates both learning inputs through the store.
+
+        #545 optional sampler kwargs follow the shared store call edge.
+        """
+        sources = [
+            (ROOT / "scripts" / "e2e" / "checkpoints.py").read_text(encoding="utf-8"),
+            (SCRIPTS / "rlvr" / "strategy_store.py").read_text(encoding="utf-8"),
+        ]
+        functions = {
+            node.name: node
+            for source in sources
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.FunctionDef)
         }
-        body = fns.get("_sample_envelope_family") or ""
-        assert "_sampler_extras(" in body, \
-            "the envelope sampler host must invoke the kwargs helper"
-        extras = fns.get("_sampler_extras") or ""
-        assert "termination" in extras, "envelope sampler host has no termination threading"
-        assert "verdicts" in extras
-        assert "death" in extras
+
+        def calls(name):
+            return {
+                ast.unparse(node.func)
+                for node in ast.walk(functions[name])
+                if isinstance(node, ast.Call)
+            }
+
+        assert "store.method_sample" in calls("_sample_envelope_family")
+        assert {"self._termination_kwargs", "self._feature_prior_kwargs",
+                "q_cells.sample_method_family"} <= calls("method_sample")
+        assert "_term.verdicts" in calls("_termination_kwargs")
+        assert {"_fp.features_from_workspace", "_fp.family_table_rows"} <= calls(
+            "_feature_prior_kwargs")
+        sampler_call = next(
+            node for node in ast.walk(functions["method_sample"])
+            if isinstance(node, ast.Call)
+            and ast.unparse(node.func) == "q_cells.sample_method_family")
+        assert any(keyword.arg is None and ast.unparse(keyword.value) == "kwargs"
+                   for keyword in sampler_call.keywords)
+
+    def test_envelope_host_applies_real_verdicts_and_feature_pool(self, tmp_path, monkeypatch):
+        from e2e import checkpoints
+        from rlvr import feature_prior, priors
+
+        monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(tmp_path / "isolated"))
+        monkeypatch.delenv("KUNGLAO_SCHEDULER", raising=False)
+        monkeypatch.setenv(feature_prior.FLAG_ENV, "1")
+        (tmp_path / "task_spec.yaml").write_text(
+            "family: native-signature\nconstraints:\n  dynamic_re: allowed\n")
+        assert priors.seed_intake_prior(tmp_path, families=[FAM, FAM2])
+        _record_deaths(tmp_path, "detection_trigger", FAM, 2)
+        features = {"lane": "static", "project_type": "linux"}
+        table = [{"features": features, "outcomes": [{
+            "method_family_or_claim_source": FAM2, "act_result": "landed",
+            "settled": False, "credit": None}]}]
+        monkeypatch.setattr(feature_prior, "features_from_workspace", lambda _ws: features)
+        monkeypatch.setattr(feature_prior, "family_table_rows", lambda _ws: table)
+
+        _, receipt = checkpoints._sample_envelope_family(tmp_path)
+        assert receipt is not None
+        dead = receipt["candidates"][FAM]
+        learned = receipt["candidates"][FAM2]
+        assert dead["death"]["dead"] is True
+        assert dead["death"]["weight_multiplier"] == term.ARM_FLOOR
+        assert dead["weight"] > 0
+        assert learned["feature_prior"]["rows"] == 1
+        assert learned["feature_prior"]["pool_success"] == 1.0
+        assert learned["alpha"] > learned["beta"]
+        assert learned["arm_key"].startswith(FAM2 + "|facts_snapshot|none|1")
+
+        monkeypatch.setattr(term, "verdicts", lambda *_args, **_kwargs: {})
+        _, without_death = checkpoints._sample_envelope_family(tmp_path)
+        no_death = without_death["candidates"][FAM]
+        assert "death" not in no_death
+        assert abs(dead["weight"] / no_death["weight"] - term.ARM_FLOOR) < 1e-12
+        monkeypatch.setenv(feature_prior.FLAG_ENV, "0")
+        _, without_features = checkpoints._sample_envelope_family(tmp_path)
+        assert "feature_prior" not in without_features["candidates"][FAM2]
 
 
 # ===========================================================================

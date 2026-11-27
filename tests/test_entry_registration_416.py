@@ -71,13 +71,17 @@ TARGET_FILES = {
 UTF8_BOOT_WRAPPERS = {"kunglao", "kunglao-upgrade", "heartbeat-tick", "convergence-check"}
 NO_BOOT_WRAPPERS = {"kunglao-init", "kunglao-verify"}
 
-ADD_PARSER_RE = re.compile(r'sub\.add_parser\(\s*\n?\s*"([a-z][a-z-]*)"', re.M)
+ADD_PARSER_RE = re.compile(
+    r'(?<![\w.])sub\.add_parser\(\s*\n?\s*"([a-z][a-z-]*)"', re.M)
 
 
 def _router_subcommands() -> set[str]:
-    """The router's subcommand set, parsed from scripts/kunglao.py itself."""
+    """The router's TOP-LEVEL subcommand set, parsed from
+    scripts/kunglao.py itself (nested verbs like `seal provision` are
+    group members, not top-level UX — the lookbehind keeps the loose
+    `sub.add_parser` prefix from matching `seal_sub.add_parser`)."""
     found = set(ADD_PARSER_RE.findall(ROUTER.read_text(encoding="utf-8")))
-    assert len(found) == 9, f"router subcommand anchor drifted: {sorted(found)}"
+    assert len(found) == 10, f"router subcommand anchor drifted: {sorted(found)}"
     return found
 
 
@@ -97,11 +101,14 @@ def _cli_registry() -> dict:
 # 1. registration — pyproject [project.scripts] + build backend
 # ---------------------------------------------------------------------------
 
-def test_router_has_nine_subcommands() -> None:
-    """Anchor: the router really exposes the 9-subcommand surface #416 names."""
+def test_router_has_ten_subcommands() -> None:
+    """Anchor: the router exposes the 9-subcommand surface #416 names
+    plus the operator seal group (nested verb: `kunglao seal provision`
+    — the learning-key provisioning face)."""
     assert _router_subcommands() == {
         "decide", "tick", "verify", "record", "health",
         "resume", "check-stale", "upgrade", "analysis",
+        "seal",
     }
 
 

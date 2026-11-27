@@ -411,17 +411,20 @@ def self_distill_signals(lesson_path: Path) -> list[dict]:
     return signals
 
 
-def resolve_library(library: Path | str | None) -> Path:
-    """Same resolution aggregate_lessons uses (one library, one truth)."""
-    from failure_analysis_gate import LESSONS_DIR_DEFAULT
-    return Path(library) if library else LESSONS_DIR_DEFAULT
+def resolve_library(library: Path | str | None,
+                    workspace=None) -> Path:
+    """Same resolution aggregate_lessons uses (one library, one truth):
+    the WORKSPACE's lessons library by default (cross-project off)."""
+    from failure_analysis_gate import lessons_dir
+    return Path(library) if library else lessons_dir(workspace)
 
 
-def snapshot_lessons(library: Path | str | None = None) -> set[str]:
+def snapshot_lessons(library: Path | str | None = None,
+                     workspace=None) -> set[str]:
     """Lesson stems present BEFORE a rollup's aggregation — the diff base
     for the self_distill adapter (no domain-state rewrite of
     aggregate_lessons; a snapshot-diff is the adapter seam)."""
-    lib = resolve_library(library)
+    lib = resolve_library(library, workspace)
     if not lib.is_dir():
         return set()
     return {p.stem for p in sorted(lib.glob("lesson-*.md"))}
@@ -446,7 +449,7 @@ def emit_unified_rows(ws: Path, claim_id: str, terminal_status: str,
             out["reason"] = f"task: {res.get('reason')}"
         if lessons_before is None:
             lessons_before = set()
-        lib = resolve_library(library)
+        lib = resolve_library(library, ws)
         for p in sorted(lib.glob("lesson-*.md")) if lib.is_dir() else []:
             if p.stem in lessons_before:
                 continue

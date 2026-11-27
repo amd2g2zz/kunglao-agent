@@ -114,6 +114,34 @@ def _worker_outcome(ws, pending) -> str:
     return "completed"
 
 
+def _dispatch_face_span(ws: Path, pending: dict | None,
+                        act_outcome: str, agent_id: str = "") -> None:
+    """The closed dispatch face's end row, paired with the release
+    tail's start row (worker_budget_sinks.pre_check) on the ONE
+    dispatch ledger id. The id rides the launch stash - the settle
+    consumes it (append_transition unlinks the launch doc) - so this
+    face must run BEFORE the step settle; a missing id (legacy stash /
+    read problem) leaves the end row unwritten, never fabricated.
+    CAGE_FACE: any failure is one rate-limited warn and never disturbs
+    the stop."""
+    if not pending:
+        return
+    try:
+        with scripts_on_path():
+            from rlvr import face_spans as _fs1005
+            launch_dispatch_id = _fs1005.stash_dispatch_id(
+                ws, str(pending.get("claim") or ""))
+            if not launch_dispatch_id:
+                return
+            _fs1005.span_end(
+                ws, dispatch_id=launch_dispatch_id,
+                claim=pending.get("claim"), outcome=act_outcome,
+                agent=agent_id or None,
+                attempt_id=pending.get("attempt_id"))
+    except Exception as exc:  # noqa: BLE001 — face, never the stop
+        warn("round_closure_face_span", f"{type(exc).__name__}: {exc}")
+
+
 def process_event(payload: dict) -> int:
     """Resolve the workspace, append the closure row, run the kernel
     closure faces, rc 0. #779 face one: the SubagentStop payload's
@@ -172,17 +200,22 @@ def process_event(payload: dict) -> int:
     return 0
 
 
-def _blind_settlement_face(ws: Path, wire, pending) -> dict:
-    """The issue-802 blind face at the stop boundary: PARK the pending step's
+def _blind_settlement_face(ws: Path, wire, pending,
+                           act_outcome: str = "") -> dict:
+    """The blind face at the stop boundary: PARK the pending step's
     blind input doc (the production writer — the kunglao-settler
     dispatch read face consumes it), then SETTLE every parked claim that
     has a ruling. The step window (since the launch, until now) feeds
-    the artifact scan; the scorer's exclusion wall filters it. An empty
-    artifact window is a LOUD skip — a zero-byte doc is never parked
-    (the settler would have nothing to rule over), and the writer fills
-    the claim's resolved value question when the caller passes none.
-    Fail-open inside its own cage — a parking failure is ONE warn and
-    never the settle; the unblinded judgment is NEVER a fallback."""
+    the artifact scan; the scorer's exclusion wall filters it. The act
+    outcome (this face's own outcome resolution — the word the step
+    settled under) rides the park into the consumer-side sidecar, so
+    the learner feed's censoring route classifies the act exactly as
+    the round-credit close path does. An empty artifact window is a
+    LOUD skip — a zero-byte doc is never parked (the settler would have
+    nothing to rule over), and the writer fills the claim's resolved
+    value question when the caller passes none. Fail-open inside its
+    own cage — a parking failure is ONE warn and never the settle; the
+    unblinded judgment is NEVER a fallback."""
     out: dict = {}
     try:
         from datetime import datetime, timezone
@@ -200,7 +233,8 @@ def _blind_settlement_face(ws: Path, wire, pending) -> dict:
                      "nothing to blind-settle")
             else:
                 try:
-                    res = wire.park_blind_input(ws, claim, artifacts)
+                    res = wire.park_blind_input(ws, claim, artifacts,
+                                                act_outcome=act_outcome)
                     if res.get("parked") or not res.get("reason"):
                         parked = [claim]
                     else:
@@ -246,6 +280,30 @@ def _distill_trigger_face(ws: Path) -> None:
                                          formulation=formulation)
     except Exception as exc:  # noqa: BLE001 — capability, never blocks
         warn("round_closure_distill", f"{type(exc).__name__}: {exc}")
+
+
+def emit_settle_event(ws: Path, receipt) -> bool:
+    """The scheduler-events producer seam for the settle path: the
+    settle receipt is already in hand, so the settle-completed event is
+    ONE derived append into the wake stream (runs/scheduler/
+    events.jsonl) — the event-driven wake path sees the round close
+    without polling. A receipt-less round (nothing pending) is quiet:
+    no synthetic row. Fail-open: a broken stream degrades to False +
+    one canonical warn — never the stop path."""
+    if not isinstance(receipt, dict) \
+            or not str(receipt.get("claim") or "").strip():
+        return False
+    try:
+        with scripts_on_path():
+            import scheduler_events
+        return scheduler_events.append(
+            Path(ws), scheduler_events.KIND_SETTLE_COMPLETED,
+            claim=receipt.get("claim"),
+            outcome=receipt.get("outcome"),
+            wall_s=receipt.get("wall_s"))
+    except Exception as exc:  # noqa: BLE001 — never blocks the stop path
+        warn("round_closure_scheduler_event", f"{type(exc).__name__}: {exc}")
+        return False
 
 
 def _kernel_faces(ws: Path, session_id: str = "",
@@ -302,23 +360,24 @@ def _kernel_faces(ws: Path, session_id: str = "",
     Fail-open double cage: each face is wrapped separately — a kernel
     failure is one rate-limited warn and never disturbs the subagent's
     own stop path."""
-    # #690: the step settlement — SubagentStop IS the step boundary, and
-    # it runs FIRST so every decision face below sees post-settlement
-    # state (settle -> update -> decide). Silent when no step is pending.
-    # issue-802: production defaults to the BLIND face — the unblinded
-    # step-level credit judgment is eval-only (KUNGLAO_EVAL_SETTLE=1 is
-    # the explicit
-    # opt-back-in, rlvr.settlement_wire.eval_settle_enabled). Blind mode
-    # keeps the hash-only mechanical bookkeeping (the act closure), skips
-    # the producer-surface credit legs, PARKS the blind input doc for the
-    # kunglao-settler subagent, and settles any ruling that arrived. The
-    # wire face rides its own cage: a wire failure never disturbs the
-    # stop path and never falls back INTO the unblinded judgment.
-    # issue 805: the closure battery registers too — the launch gate
-    # here is WARN-ONLY (the closure's fail-open double cage is
-    # contractual: a registry trouble is one rate-limited warn and never
-    # disturbs the subagent's stop path; the dispatch battery's gate is
-    # the fail-closed one).
+    # the step settlement — SubagentStop IS the step boundary, and it
+    # runs FIRST so every decision face below sees post-settlement
+    # state (settle -> update -> decide). Silent when no step is
+    # pending. The stop face is BLIND-ONLY: the unblinded step-level
+    # credit judgment has no production reader — it survives as
+    # rlvr.step_grain.settle_step's library face for direct callers
+    # (eval harnesses), and no environment value can steer a production
+    # stop back into it. Blind mode keeps the hash-only mechanical
+    # bookkeeping (the act closure), skips the producer-surface credit
+    # legs, PARKS the blind input doc for the kunglao-settler subagent,
+    # and settles any ruling that arrived. The wire face rides its own
+    # cage: a wire failure never disturbs the stop path and never falls
+    # back INTO the unblinded judgment.
+    # the closure battery registers too — the launch gate here is
+    # WARN-ONLY (the closure's fail-open double cage is contractual: a
+    # registry trouble is one rate-limited warn and never disturbs the
+    # subagent's stop path; the dispatch battery's gate is the
+    # fail-closed one).
     try:
         import battery_registry
         _bat = battery_registry.launch_gate(
@@ -335,18 +394,38 @@ def _kernel_faces(ws: Path, session_id: str = "",
         with scripts_on_path():
             from rlvr import step_grain
             from rlvr import settlement_wire
-            _eval = settlement_wire.eval_settle_enabled()
             pending = step_grain.pending_step(ws)
+            act_outcome = _worker_outcome(ws, pending)
+            # the face-span end row must read the launch stash BEFORE
+            # the settle - append_transition consumes it below
+            _dispatch_face_span(ws, pending, act_outcome, agent_id)
             receipt = step_grain.settle_step(
-                ws, session_id, outcome=_worker_outcome(ws, pending),
-                agent_id=agent_id or None, blind=not _eval)
-            if not _eval:
-                blind_receipt = _blind_settlement_face(
-                    ws, settlement_wire, pending) or {}
+                ws, session_id, outcome=act_outcome,
+                agent_id=agent_id or None, blind=True)
+            blind_receipt = _blind_settlement_face(
+                ws, settlement_wire, pending,
+                act_outcome=act_outcome) or {}
     except Exception as exc:  # noqa: BLE001 — settle face, never blocks
         warn("round_closure_settle", f"{type(exc).__name__}: {exc}")
     if blind_receipt:
         receipt = dict(receipt or {}, blind_settlement=blind_receipt)
+    # the rollout timer's round-close face: cancel the finished
+    # rollout's one-shot deadline and learn its outcome from the run's
+    # actuals (a deadline-fired rollout is censored — cancel only,
+    # never learn). Runs after the step settlement so the outcome reads
+    # post-settlement state; its own fail-open cage like every face here.
+    try:
+        with scripts_on_path():
+            from rlvr import rollout_timer_host
+            rollout_timer_host.round_close_face(ws, receipt)
+    except Exception as exc:  # noqa: BLE001 — face, never blocks the stop
+        warn("round_closure_rollout_timer", f"{type(exc).__name__}: {exc}")
+    # the scheduler-events producer seam: the settle fact is already in
+    # hand — one append into the wake stream so the event-driven wake
+    # path sees the round close. The face is fully caged (a broken
+    # stream degrades to False + one canonical warn); a receipt-less
+    # round is quiet — no synthetic row.
+    emit_settle_event(ws, receipt)
     # #769: the policy-state projection — ONE runs/policy-state.json per
     # round close, projected from the same plan receipts the dispatch
     # gate lands (candidates / admitted / chosen / posterior summary /

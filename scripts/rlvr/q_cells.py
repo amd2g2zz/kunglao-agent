@@ -151,9 +151,9 @@ from rlvr import consolidated_ledger as _cl  # #721: the consolidated files
 SCHEMA_TAG = "q-cells/1"
 OBS_SCHEMA = "q-cell-obs/1"
 # #721: the consolidated experience rel (the ONE observation home).
-# #804 de-compat: the legacy runs/q-cell-log.jsonl rel is retired — the
-# archive is a READ-registry entry in rlvr.consolidated_ledger.LEGACY
-# (the #721 migration source), never a write or scan target.
+# #804 de-compat + issue-1004 R3: the pre-consolidation file is gone
+# from every live face — the family file is the only face (the R4 CLI
+# migrates + deletes the historical file).
 EXPERIENCE_REL = _cl.CONSOLIDATED["experience"]
 SAMPLE_SCHEMA = "q-cell-sample/1"
 REINDEX_SCHEMA = "q-cell-reindex/1"
@@ -972,7 +972,7 @@ def sample_method_family(state_signature, candidates_with_llm_prior,
             "alpha": alpha,
             "beta": beta,
             "theta": round(theta, 6),
-            "weight": round(weights[family], 6),
+            "weight": weights[family],  # decision data must retain positive support
         }
         if ak is not None:
             # additive field — no arm_context, no field (byte identity)
@@ -1038,7 +1038,22 @@ def q_cells_seed_state(ws) -> tuple[random.Random, int]:
     evidence-free cold workspace (distinct rounds produce distinct
     seeds; the #251 per-round-cold-start property, 462 design-review
     MEDIUM-1: the round used to be computed and returned but never
-    hashed, freezing the cold draw); no wall clock anywhere."""
+    hashed, freezing the cold draw); no wall clock anywhere.
+
+    The M3 (unit, round) anchor face: KUNGLAO_EVAL_ROUND_SEED
+    — the eval matrix launcher's frozen per-(unit, round) pairing
+    anchor, read through the registered int switch — mixes into the
+    hashed payload as ONE more axis when present (a positive int).
+    ABSENT (unset, empty, or malformed-to-default) = the payload is
+    byte-identical to the pre-anchor face: production runs never set
+    it, so their streams are provably unchanged. PRESENT = the draw
+    stream moves with the (unit, round) anchor — the matrix's N rounds
+    of one unit decorrelate (variance honesty for pass@k), units of
+    the same round never collide on an empty fold, and the same
+    anchor + same fold + same round pairs the arms' streams. The fold
+    axis STAYS in the hash either way (the anti-degeneracy half of the
+    per-round seed contract: a stalled round must not repeat one draw
+    forever)."""
     from priority_ratio import round_index  # noqa: PLC0415
     rnd = round_index(ws)
     store = default_store(ws)
@@ -1055,10 +1070,33 @@ def q_cells_seed_state(ws) -> tuple[random.Random, int]:
         },
         "round": rnd,
     }
+    anchor = _round_seed_anchor()
+    if anchor is not None:
+        payload["anchor"] = anchor
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True,
                    ensure_ascii=False).encode("utf-8")).hexdigest()
     return random.Random(int(digest[:16], 16)), rnd
+
+
+#: the eval matrix's frozen (unit, round) pairing anchor env face
+#: (M3) — the launcher derives one anchor per (unit, round) and
+#: the child session carries it into the sampler here. Read ONLY
+#: through the registered switch face (an undeclared read fails
+#: closed). Non-positive or unparsable values mean ABSENT (the
+#: registered int face degrades malformed text to its default 0) —
+#: the byte-identical production face, never a crash inside a draw.
+ROUND_SEED_ENV = "KUNGLAO_EVAL_ROUND_SEED"
+
+
+def _round_seed_anchor() -> int | None:
+    """The (unit, round) anchor as a positive int, or None when the
+    face is absent (unset / empty / malformed-to-default / <= 0 — the
+    launcher's derivation is a 16-hex-digit int, so a real anchor can
+    never collide with the absent values)."""
+    import runtime_switches  # noqa: PLC0415 — lazy leaf import
+    value = runtime_switches.get_int(ROUND_SEED_ENV)
+    return value if value > 0 else None
 
 
 # ---------------------------------------------------------------------------
@@ -1220,6 +1258,16 @@ def _usage_cols(tier, tools, view: dict | None) -> tuple:
         triple = {"propensity": propensity,
                   "sampled_family": str(sampled).strip() if sampled else None,
                   "prior_source": str(prior).strip() if prior else None}
+        if view.get("method_source"):
+            triple["method_source"] = view["method_source"]
+        if "probability_source" in view:
+            triple["probability_source"] = view["probability_source"]
+            triple["conditional_sampler_weight"] = _valid_propensity(
+                view.get("conditional_sampler_weight"))
+            triple["sampled_conditional_weight"] = _valid_propensity(
+                view.get("sampled_conditional_weight"))
+            triple["candidates"] = view.get("candidates", {})
+            triple["candidate_sources"] = view.get("candidate_sources", {})
     return tier_out, tools_out, triple
 
 
@@ -1245,6 +1293,10 @@ def _attribution_cols(family: str, view: dict | None,
     lead names a different family than the dispatched one, the row
     records ``lead_override`` with the same recorded reason.
 
+    New reconciliation views label conditional weights separately and
+    leave external behavior probabilities unknown. Legacy adapters retain
+    their explicitly named propensity fields.
+
     A coherent row (draw == family, no differing lead) returns {} — its
     row stays byte-identical to the pre-change shape."""
     if not isinstance(view, dict):
@@ -1261,10 +1313,12 @@ def _attribution_cols(family: str, view: dict | None,
         # explicit even when absent: the override is recorded with its
         # reason slot, so the missing decision line stays visible.
         out["override_reason"] = reason_txt
-        prop = _valid_propensity(view.get("propensity"))
+        prop = (_valid_propensity(view.get("propensity"))
+                if "probability_source" not in view else None)
         if prop is not None:
             out["override_propensity"] = prop
-        sprop = _valid_propensity(view.get("sampled_propensity"))
+        sprop = (_valid_propensity(view.get("sampled_propensity"))
+                 if "probability_source" not in view else None)
         if sprop is not None:
             out["sampled_propensity"] = sprop
     lead = view.get("round_lead")
@@ -1474,8 +1528,7 @@ def append_censored(ws, env: str, reason: str, *, source: str,
     entry). ``claim`` / ``rollout_id`` / ``direction`` ride only when
     supplied (the additive-column discipline: a bare censored row is
     byte-stable). The row NEVER feeds the fold or any posterior — that
-    is the censoring semantics, enforced by the trajectory prefix wall
-    plus rlvr.censoring.posterior_observations for the #954 seam."""
+    is the censoring semantics, enforced by the trajectory prefix wall."""
     from rlvr import interruption as _itv  # noqa: PLC0415 — lazy, cycle-free
     env_out = str(env or "").strip()
     if env_out not in _itv.ENV_CLASSES:
@@ -1701,7 +1754,8 @@ def observe_settlement(ws, dispatch_id: str, credit,
                        *, phi_delta: float | None = None,
                        credit_kind: str = "solve",
                        reward: float | None = None,
-                       confidence_band: str | None = None) -> dict:
+                       confidence_band: str | None = None,
+                       reason: str | None = None) -> dict:
     """THE settlement feed's match-and-bank face (issue 462 W5): bank one
     settled round credit into the q cell the dispatch opened.
 
@@ -1788,7 +1842,11 @@ def observe_settlement(ws, dispatch_id: str, credit,
                                  # when not supplied — legacy rows
                                  # byte-identical).
                                  reward=reward,
-                                 confidence_band=confidence_band)
+                                 confidence_band=confidence_band,
+                                 # the owning settlement face's marker
+                                 # (emitted only when set — the default
+                                 # row stays byte-identical)
+                                 reason=reason)
         return {"appended": out["appended"], "matched": True,
                 "reason": None if out["appended"] else "write-failed",
                 "dispatch_id": did,
@@ -2105,7 +2163,8 @@ def observe_step_credit(ws, dispatch_id: str, credit, *,
 
 
 def observe_step_calibration(ws, dispatch_id: str, credit, *,
-                             failure_delta: float = 0.0) -> dict:
+                             failure_delta: float = 0.0,
+                             reason: str | None = None) -> dict:
     """#712: bank the claim-terminal RESIDUAL — ONE signed mass-delta row
     that corrects the cumulative Beta into the step-less endpoint:
     ``credit`` = Δsuccess = ladder_credit − Σ(step_credit) (negative =
@@ -2126,7 +2185,7 @@ def observe_step_calibration(ws, dispatch_id: str, credit, *,
                     "reason": "unmatched", "dispatch_id": did,
                     "credit_kind": kind, "beta_updated": False}
         return _bank_matched(ws, did, match, credit, kind=kind,
-                             failure_delta=failure_delta)
+                             failure_delta=failure_delta, reason=reason)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the producer
         warn("q_cells.observe_step_calibration",
              f"{type(exc).__name__}: {exc}")
@@ -2232,6 +2291,17 @@ def _task_open_signature(ws) -> str:
     return ssig.signature_hash(ssig.snapshot(ws))
 
 
+DISPATCH_DECISION_REL = "runs/.dispatch-decisions"
+
+
+def dispatch_observation_pending(ws, dispatch_id: str) -> bool:
+    """A host hook is still waiting for the execution acknowledgement."""
+    if not re.fullmatch(r"[0-9a-f]{12}", dispatch_id):
+        return False
+    return next((Path(ws) / DISPATCH_DECISION_REL).glob(
+        f"{dispatch_id}-*.json"), None) is not None
+
+
 def record_dispatch_observation(ws, prompt: str, *,
                                 envelope_meta=None,
                                 claim: str | None = None,
@@ -2239,14 +2309,15 @@ def record_dispatch_observation(ws, prompt: str, *,
                                 fingerprint: str | None = None,
                                 dispatch_id: str | None = None,
                                 tier=None, tools=None,
-                                sampler_view: dict | None = None) -> dict:
+                                sampler_view: dict | None = None,
+                                signature: str | None = None) -> dict:
     """Record the (signature_hash, method_family) observation at the
     dispatch ALLOW tail — s_r = state-sig/1 AT dispatch (#429 §2).
 
     The signature is computed HERE (the hook must stay state_signature-
-    free per the #396 freeze). Undeclared families are the honest gap:
-    no row, never a fabricated bucket (the #432 gate is the enforcement
-    face that makes declaration mandatory). Fail-open throughout.
+    free per the #396 freeze). The accepted decision can carry either
+    a declaration or an adopted method. Legacy callers without a
+    decision still use the envelope. Fail-open throughout.
 
     #695: the row also carries the recipe triple ({recipe_id,
     recipe_propensity, recipe_source: sampled|declared|none} — see
@@ -2261,11 +2332,14 @@ def record_dispatch_observation(ws, prompt: str, *,
     override reason — the row never pairs a foreign propensity with the
     arm_key."""
     try:
-        family = declared_family(envelope_meta, prompt or "")
+        family = (sampler_view.get("actual_method_family")
+                  if isinstance(sampler_view, dict)
+                  and "actual_method_family" in sampler_view
+                  else declared_family(envelope_meta, prompt or ""))
         if not family:
             return {"appended": False, "reason": "undeclared",
                     "family": None, "signature_hash": None}
-        sig = _task_open_signature(ws)
+        sig = signature or _task_open_signature(ws)
         # #539 WS1: derive the 4-dim arm key from the v2 envelope fields
         # (v1 back-fill defaults keep legacy shapes identical). #705 MARL:
         # an envelope-declared agent_type appends the 5th dim so the

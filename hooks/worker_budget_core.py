@@ -189,10 +189,10 @@ def check_plan_drift(paths):
 
 
 def _stalled_remedy_exemption(ws, claim_id, payload, prompt_text):
-    """#249: the rc=1 STALLED face's remedy exemption — the mirror of the
-    #237 D2 pass-through, single-sourced the same way: the identity
-    predicate lives in hooks/lib_kunglao (load_hooks_lib), and the STALLED
-    STATE comes from the detector module itself
+    """The remedy exemption of the rc=1 STALLED and rc=2 SPINNING faces,
+    single-sourced the same way as the verifier-remediation pass-through:
+    the identity predicate lives in hooks/lib_kunglao (load_hooks_lib),
+    and the remedy STATE comes from the detector module itself
     (scripts/convergence_health.stalled_state) — this face never
     re-implements the verdict, it only intersects the dispatch identity
     with it.
@@ -217,9 +217,10 @@ def _stalled_remedy_exemption(ws, claim_id, payload, prompt_text):
     except Exception:  # noqa: BLE001 — unreadable state: fail-closed
         return False, "detector state unresolvable (fail-closed)"
     if not state:
-        # rc=1 from the subprocess but no STALLED on re-derive (a ledger
-        # change between the two reads) — do not exempt on drift.
-        return False, "not STALLED on re-derive (fail-closed)"
+        # rc=1/rc=2 from the subprocess but neither STALLED nor SPINNING on
+        # re-derive (a ledger change between the two reads) — do not
+        # exempt on drift.
+        return False, "not STALLED/SPINNING on re-derive (fail-closed)"
     depth = state.get("remedy_depth") or 0
     try:
         ok = lib.is_stalled_remedy_dispatch(
@@ -257,11 +258,11 @@ def check_convergence_health(paths, claim_id=None, payload=None,
     """v1.9.29: STALLED/SPINNING gate wired into PreToolUse. FAIL_OPEN on any
     subprocess/workspace resolution failure.
 
-    #249: at the rc=1 STALLED face the prescribed-remedy dispatch is
-    EXEMPT (mirror of #237 D2): a remedy-declared dispatch of a stuck
-    claim, or of a freshly minted fan-out sub-claim, passes — the gate
-    must not deadlock its own remedy. SPINNING (rc=2) is NEVER exempt and
-    rc=4 keeps the fail-open crash semantics unchanged. Callers that pass
+    At the rc=1 STALLED and rc=2 SPINNING faces the prescribed-remedy
+    dispatch is EXEMPT: a remedy-declared dispatch of a stuck claim, or of
+    a freshly minted fan-out sub-claim, passes — the gate must not
+    deadlock its own remedy. Every other dispatch stays rejected at both
+    faces, and rc=4 keeps the fail-open crash semantics. Callers that pass
     no dispatch context (legacy 1-arg calls, tests) keep the exact prior
     block behavior — the exemption is off without a claim id.
     """
@@ -272,15 +273,14 @@ def check_convergence_health(paths, claim_id=None, payload=None,
                  str(ws)])
     if r is None:
         return True, ''
-    if r.returncode == 1:
+    if r.returncode in (1, 2):
+        face = 'STALLED' if r.returncode == 1 else 'SPINNING'
         allowed, note = _stalled_remedy_exemption(ws, claim_id, payload,
                                                   prompt_text)
         if allowed:
-            return True, (f"convergence STALLED - prescribed remedy "
+            return True, (f"convergence {face} - prescribed remedy "
                           f"dispatch admitted ({note}; issue-249 exemption)")
-        return False, "convergence STALLED - diagnose before dispatching"
-    if r.returncode == 2:
-        return False, "convergence SPINNING - STOP dispatching"
+        return False, f"convergence {face} - diagnose before dispatching"
     if r.returncode == 4:
         # #3: the check crashed — rc=4 is NOT a stall. FAIL OPEN (the same
         # owner-sanctioned broken-gate posture as the _run_py/resolve

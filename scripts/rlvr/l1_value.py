@@ -79,6 +79,7 @@ if __package__ in (None, ""):
 
 from kunglao_log import iter_jsonl, warn
 
+from rlvr import learning_seal as _seal
 from rlvr import state as ssig  # the canonical signature face
 
 
@@ -320,6 +321,7 @@ def record_observation(ws, state_signature, action_kind, ret, *,
         **({"steps": int(steps)} if steps is not None else {}),
         **({"components": dict(components)} if components else {}),
     }
+    row = _seal.sign_row(row)  # armed -> additive seal; unarmed unchanged
     appended = _append_row(Path(ws) / OBS_REL, row)
     return {"appended": appended,
             "reason": None if appended else "write-failed",
@@ -416,7 +418,11 @@ def fold(store: L1Store, gamma=None) -> ValueFold:
     observation (the do-nothing outcome cannot displace the prior).
     Rows without a numeric return are the honest gap: skipped."""
     schedule = _resolve_schedule(gamma)
-    rows = [r for r in store.observations()
+    # the learner read face: armed, ONLY seal-valid rows fold (a forged
+    # return row never moves a cell); unarmed the rows pass through
+    # untouched (the notice lives on the write face).
+    rows = [r for r in _seal.trusted_rows(store.observations(),
+                                          op="rlvr.l1_value.fold")
             if isinstance(r, dict) and _return_of(r) is not None]
     n = len(rows)
     gammas = [0.0] * n

@@ -36,7 +36,7 @@ from rlvr import incremental_reward as ir  # noqa: E402
 from rlvr import ledger as rl  # noqa: E402
 
 RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
-LEDGER_REL = Path("runs") / "rollout-ledger.jsonl"
+LEDGER_REL = Path("runs") / "settlement.jsonl"
 
 
 def _ws(tmp_path: Path) -> Path:

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -138,14 +139,11 @@ def _mk_ws(tmp_path: Path) -> Path:
 
 
 def _pin_claude_json(ws: Path, monkeypatch) -> None:
-    """Hermetic MCP probe: never read the developer's real ~/.claude.json."""
-    fake = ws.parent / "fake-claude.json"
-    if not fake.exists():
-        fake.write_text(json.dumps({
-            "mcpServers": {name: {} for name in (
-                "ghidra", "sequential-thinking", "x64dbg", "gitnexus")},
-        }), encoding="utf-8")
-    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(fake))
+    """Declare fixture MCP registrations at the supported workspace scope."""
+    (ws / ".mcp.json").write_text(json.dumps({
+        "mcpServers": {name: {} for name in (
+            "ghidra", "sequential-thinking", "x64dbg", "gitnexus")},
+    }), encoding="utf-8")
 
 
 def _run_toolchain(ws: Path, extra: list[str]) -> subprocess.CompletedProcess:
@@ -209,3 +207,31 @@ def test_android_debug_flag_stays_hard_without_task_spec(
     assert df["status"] == "FAIL", f"no task_spec must stay HARD: {df}"
     assert df["tier"] == "HARD", df
     assert r.returncode == 1, "HARD debug_flag FAIL must still exit 1"
+
+
+def test_debug_flag_fixture_avoids_unrelated_local_decompiler_scan(
+        tmp_path, fake_bin, monkeypatch):
+    """The CLI still reports decompiler supply without scanning this host."""
+    _write_adb(fake_bin, debuggable="0")
+    marker = tmp_path / "mdfind-called"
+    mdfind = fake_bin / "mdfind"
+    mdfind.write_text(f"#!/bin/sh\n: > '{marker}'\n", encoding="utf-8")
+    mdfind.chmod(0o755)
+    monkeypatch.setenv("PATH", str(fake_bin))
+    ws = _mk_ws(tmp_path)
+    _pin_claude_json(ws, monkeypatch)
+    plugin = tmp_path / "plugin"
+    shutil.copytree(SCRIPTS, plugin / "scripts")
+    (plugin / ".claude-plugin").mkdir()
+    (plugin / ".claude-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("GHIDRA_HOME", "KUNGLAO_VM_HOST", "PYTHONPATH")}
+    result = subprocess.run(
+        [sys.executable, str(plugin / "scripts" / "toolchain.py"),
+         str(ws), "--type", "android", "--json"],
+        capture_output=True, text=True, timeout=60, env=env, errors="replace")
+    checks = {item["name"]: item for item in json.loads(result.stdout)["checks"]}
+    assert checks["debug_flag"]["status"] == "FAIL"
+    assert not marker.exists(), "fixture must not invoke host decompiler discovery"
+    assert checks["decompiler"]["supply"] == "analyzeHeadless"
+    assert "unverified" in checks["decompiler"]["detail"].lower()

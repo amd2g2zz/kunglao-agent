@@ -45,6 +45,7 @@ session:
 | `kunglao health <workspace>` | convergence health (M5) | driven inside `/kunglao-agent:analysis` |
 | `kunglao resume <workspace> [--json]` | crash/reboot recovery brief (read-only) | `/kunglao-agent:resume` |
 | `kunglao check-stale <workspace> [--resolve]` | stale-workspace gate (rc 0/5) — run before analysis/resume on a possibly-stale workspace | guards `/kunglao-agent:analysis` |
+| `kunglao seal provision [--key-path P]` | learning-key provisioning (rc 0 armed / 1 unarmed) — operator face, never prints key material | arms the step-credit host |
 | `kunglao upgrade <workspace> [--dry-run]` | workspace framework-scaffold migration | `/kunglao-agent:upgrade` |
 | `kunglao analysis <workspace>` | analysis entry gate (rc 0 clear / 5 stale / 6 heartbeat verify failed) | `/kunglao-agent:analysis` |
 

@@ -145,6 +145,7 @@ when a fact lacks it while its claim has dispatch anchors
 | `verified` | date of last L1 pass (`pending` when none yet) |
 | `trace_id` | #879 mission chain id `tr-<mission>-<seq>` (optional; worker echo, same channel as `claim_id`) |
 | `creator` | #379/#648 round-credit provenance: the dispatch claim id that wrote this fact — `creator: C-<NNN>` (the claim the dispatch executed; the live #634 settlement feed keys its `dispatch_id` on exactly this id). Optional in the schema; written by the worker AT CREATION whenever the dispatch carries a claim id. A fact that lands without it while its claim has dispatch anchors (`runs/.dispatch-anchor-<key>.jsonl`, key = claim id without dashes) draws a `MISSING_CREATOR` lint WARNING — the trace_id fallback attributes to the mission, never to the dispatch |
+| `created_by_dispatch` | Harness stamp: the dispatch that created this fact (the dispatch-ledger id), written at fact-write time by the harness — never worker-typed. Settlement keys the fact's production credit on it; a fact without it keeps the named `creator-stamp-missing` fallback |
 
 ### `evidence_class` — the evidence-grade class (claim gate input)
 

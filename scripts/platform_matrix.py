@@ -34,6 +34,9 @@ Stdlib only; workspace-relative like its engine sibling.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from pathlib import Path
+
 import importlib
 import json
 import os
@@ -113,6 +116,21 @@ def fd_unlock(fd: int, *, os_name: str | None = None) -> str:
         msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
         return "msvcrt-locking"
     return "unlocked-noop"
+
+
+@contextmanager
+def exclusive_file_lock(path: Path):
+    """Hold byte zero across processes; unsupported platforms cannot mutate."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as guard:
+        guard.seek(0)
+        if fd_lock(guard.fileno()) == "unlocked-noop":
+            raise OSError(f"process lock unavailable for {path.name}")
+        try:
+            yield
+        finally:
+            guard.seek(0)
+            fd_unlock(guard.fileno())
 
 
 def chmod_checked(target, mode: int, *, os_name: str | None = None) -> bool:

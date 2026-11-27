@@ -48,6 +48,7 @@ from worker_budget_gates import (
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
 )  # noqa: E402,F401
 
+import hashlib
 import json
 import re
 import sys
@@ -218,9 +219,12 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'heartbeat NOT registered / STALE - dispatching without monitoring '
             'is the #1 recurring failure. Fix BEFORE dispatching: run '
             'uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on, '
-            'then register the cron (CronCreate */5 * * * * with the heartbeat '
-            'loop prompt, or /loop 5m) so monitoring ticks before the worker '
-            'starts.'
+            'then register the wake GATE first: heartbeat_wake_gate.py <ws> '
+            '--print-registration emits the OS-cron line to install (carries '
+            '--wake-gate: QUIET injects nothing, WAKE injects the /loop prompt '
+            'once), and keep the durable /loop watchdog (CronCreate */5 * * * * '
+            'with the heartbeat loop prompt, or /loop 5m) so monitoring ticks '
+            'before the worker starts.'
         ),
     },
     'drift': {
@@ -240,9 +244,13 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'convergence loop unhealthy (STALLED / SPINNING). Fix: run '
             'uv run --project <skill> <skill>/scripts/convergence_health.py <ws> for the '
             'diagnostic - STALLED: re-prime the loop (workers/heartbeat alive? '
-            'claim actually in progress?); SPINNING: STOP dispatching and '
-            'reconcile what is being re-done (usually a missing '
-            'verify/promote step) - collapse the spin, then resume.'
+            'claim actually in progress?); SPINNING: reconcile what is being '
+            're-done (usually a missing verify/promote step), then dispatch '
+            'the remedy the diagnostic prints - at STALLED and SPINNING '
+            'alike only a dispatch carrying its remedy marker for a stuck '
+            'claim (or a sub-claim minted from it) is admitted, every other '
+            'dispatch is rejected; with no stuck claim there is no remedy '
+            'target - collapse the spin, then resume.'
         ),
     },
     'batteryreg': {
@@ -388,11 +396,14 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     },
     'methodfamily': {
         'additionalContext': (
-            '#432 method-family vocabulary gate: the dispatch did not '
-            'declare a countable APPROACH. Fix: add "method_family": '
-            '"<token>" to the kunglao_dispatch v1 envelope (or a '
-            '`method-family: <token>` line on v0 prompts). The token names '
-            'the approach — the Q(state signature, method family) key — '
+            '#432 method-family vocabulary gate: the declared APPROACH is '
+            'not countable — either the declared token is outside the '
+            'registered vocabulary (or the other(...) escape is '
+            'malformed), or the task_spec constraint layer forbids the '
+            'approach (the reject message names which). Fix: declare '
+            '"method_family": "<token>" on the kunglao_dispatch v1 '
+            'envelope with a registered token. The token names the '
+            'approach — the Q(state signature, method family) key — '
             'NEVER the tool chain. Registered tokens live in '
             '<skill>/scripts/method_families.yaml (mined vocabulary; see '
             'method_families.derivation.md). No registered approach fits? '
@@ -520,6 +531,9 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
         return (False,
                 'heartbeat NOT registered. BEFORE dispatching, run:\n'
                 '  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
+                '  register the wake GATE: heartbeat_wake_gate.py <ws> '
+                '--print-registration -> install that OS-cron line '
+                '(--wake-gate: QUIET injects nothing, WAKE injects the /loop prompt)\n'
                 '  CronCreate */5 * * * * <heartbeat_loop_prompt.py output>\n'
                 '#754: register it DURABLE (<ws>/.claude/scheduled_tasks.json via '
                 '/kunglao-agent:init or loop_scheduler.py) - session-only crons '
@@ -687,11 +701,112 @@ def _declared_trace_id(prompt: str) -> str | None:
 
 
 
+def _tool_call_key(payload: dict) -> str | None:
+    """Stable file key for the same host call across hook processes."""
+    tool_id = payload.get("tool_use_id")
+    if not isinstance(tool_id, str) or not tool_id:
+        return None
+    return hashlib.sha256(tool_id.encode()).hexdigest()
+
+
+def _accepted_tool_input(tool_input: dict, view: dict) -> dict:
+    """Put the adopted method on the worker's actual input."""
+    if view.get("method_source") != "sampled-adoption":
+        return tool_input
+    prompt = tool_input["prompt"]
+    start = load_hooks_lib().DISPATCH_JSON_START_RE.search(prompt)
+    if not start:
+        raise ValueError("adopted method requires a dispatch envelope")
+    doc, size = json.JSONDecoder().raw_decode(prompt[start.start():])
+    doc["kunglao_dispatch"]["method_family"] = view["actual_method_family"]
+    return {**tool_input, "prompt": (prompt[:start.start()] +
+            json.dumps(doc, ensure_ascii=False) +
+            prompt[start.start() + size:])}
+
+
+def _input_digest(tool_input: dict) -> str:
+    canonical = json.dumps(tool_input, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _stage_method_decision(payload: dict, paths: dict, *, claim, agent,
+                           dispatch_id, tier, tools, view) -> bool:
+    """Stage host hook calls until PostToolUse proves that they ran."""
+    call_key = _tool_call_key(payload)
+    if call_key is None or not paths.get("workspace"):
+        return False  # direct consumers already own their execution boundary
+    if not view or not view.get("actual_method_family") or not dispatch_id:
+        return True
+    try:
+        from _common import atomic_write_text
+        from rlvr import learning_seal, q_cells
+
+        tool_input = payload["tool_input"]
+        accepted = _accepted_tool_input(tool_input, view)
+        receipt = learning_seal.sign_row({
+            "tool_call_key": call_key,
+            "input_sha256": _input_digest(accepted),
+            "claim": claim, "agent": agent, "dispatch_id": dispatch_id,
+            "tier": tier, "tools": tools, "sampler_view": view,
+            "signature": q_cells._task_open_signature(paths["workspace"]),
+        })
+        path = (Path(paths["workspace"]) / q_cells.DISPATCH_DECISION_REL
+                / f"{dispatch_id}-{call_key}.json")
+        atomic_write_text(path, json.dumps(receipt, ensure_ascii=False), unique=True)
+        if accepted is not tool_input:
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "PreToolUse", "updatedInput": accepted,
+            }}, ensure_ascii=False))
+    except Exception as exc:  # noqa: BLE001 — missing receipt leaves credit unknown
+        warn("method_family.stage", f"{type(exc).__name__}: {exc}")
+    return True
+
+
+def _record_executed_method(payload: dict, paths: dict) -> None:
+    """Publish only after the host reports running the accepted input."""
+    call_key = _tool_call_key(payload)
+    ws = paths.get("workspace")
+    if call_key is None or not ws:
+        return
+    try:
+        from rlvr import consolidated_ledger, learning_seal, q_cells, settlement_wire
+
+        matches = list((Path(ws) / q_cells.DISPATCH_DECISION_REL).glob(
+            f"*-{call_key}.json"))
+        if len(matches) != 1:
+            return
+        path = matches[0]
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        tool_input = payload.get("tool_input", {})
+        if not learning_seal.trusted_rows([receipt], op="dispatch.decision"):
+            return
+        if (receipt.get("tool_call_key") != call_key
+                or _input_digest(tool_input) != receipt["input_sha256"]):
+            return
+        with consolidated_ledger.family_lock(ws, "settlement"):
+            if not any(r.get("dispatch_id") == receipt["dispatch_id"]
+                       for r in q_cells.dispatch_rows(ws)):
+                recorded = _qcell_record_dispatch(
+                    paths, tool_input["prompt"], receipt["claim"], receipt["agent"],
+                    receipt["dispatch_id"], tier=receipt["tier"], tools=receipt["tools"],
+                    sampler_view=receipt["sampler_view"], signature=receipt["signature"])
+                if not recorded:
+                    return
+        if settlement_wire.bank_confirmed_dispatch(
+                ws, receipt["claim"], receipt["dispatch_id"]):
+            path.unlink()
+    except FileNotFoundError:
+        return
+    except Exception as exc:  # noqa: BLE001 — telemetry, never worker enforcement
+        warn("method_family.executed", f"{type(exc).__name__}: {exc}")
+
+
 def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
                            agent_name: str,
                            dispatch_id: str | None = None,
                            tier=None, tools=None,
-                           sampler_view: dict | None = None) -> None:
+                           sampler_view: dict | None = None,
+                           signature: str | None = None) -> bool:
     """#429 §4: record the (signature_hash, method_family) observation
     at the dispatch ALLOW tail — the Q-cell data spine for the TS
     envelope sampler (scripts/rlvr/q_cells.py).
@@ -700,10 +815,8 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
     anything else, and the #432 vocabulary gate stays the sole
     ENFORCEMENT face. This hook imports rlvr.q_cells (never
     state_signature directly — the #396 freeze pins the decision faces
-    import-clean); the signature is computed inside the module. An
-    undeclared family records nothing: the honest gap, never a
-    fabricated bucket, until the #432 gate makes declaration
-    mandatory."""
+    import-clean); the signature is computed inside the module. A
+    missing accepted method leaves no observation."""
     try:
         from rlvr import q_cells as _qc429
         meta = None
@@ -711,12 +824,15 @@ def _qcell_record_dispatch(paths: dict, prompt: str, cid: str | None,
             meta = load_hooks_lib().parse_dispatch_json(prompt)[3]
         except Exception:  # noqa: BLE001 — envelope parse best-effort
             meta = None
-        _qc429.record_dispatch_observation(
+        result = _qc429.record_dispatch_observation(
             paths.get('workspace'), prompt, envelope_meta=meta,
             claim=cid, agent=agent_name, dispatch_id=dispatch_id,
-            tier=tier, tools=tools, sampler_view=sampler_view)
+            tier=tier, tools=tools, sampler_view=sampler_view,
+            **({"signature": signature} if signature else {}))
+        return bool(result["appended"])
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn('qcell_record', f'{type(exc).__name__}: {exc}')
+        return False
 
 
 def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
@@ -724,7 +840,8 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                         prompt: str = '',
                         method_family: str | None = None,
                         dispatch_id: str | None = None,
-                        sampler_view: dict | None = None) -> None:
+                        sampler_view: dict | None = None,
+                        record_observation: bool = True) -> None:
     """#461: apply the dispatch linkage at the approval point — renew the
     activation TTL (auto --renew), complete the active set, flip phase to
     DISPATCH (via hook_activation.dispatch_linkage), and append the
@@ -743,7 +860,7 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     if not ws:
         return
     ws_path = Path(ws)
-    fam = f' method_family={method_family}' if method_family else ''
+    fam = f' method_family={method_family}' if method_family and record_observation else ''
     try:
         if _ha_link is not None:
             _ha_link.dispatch_linkage(ws_path)
@@ -761,9 +878,9 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
     # #429 §4: the round-layer observation (s_r = state-sig/1 at dispatch,
     # method_family declared on the envelope) — the sampler's data spine.
     # Fail-open inside; rejected dispatches above never reach this line.
-    _qcell_record_dispatch(paths, prompt, cid, agent_name, dispatch_id,
-                           tier=tier, tools=tools,
-                           sampler_view=sampler_view)
+    if record_observation:
+        _qcell_record_dispatch(paths, prompt, cid, agent_name, dispatch_id,
+                               tier=tier, tools=tools, sampler_view=sampler_view)
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
@@ -793,32 +910,69 @@ def _is_verifier_remediation_dispatch(ws, claim_id: str, payload: dict,
         return False
 
 
+def _strategic_declared_face(ws) -> dict | None:
+    """issue-1005 S5: the LAST strategic-action declaration row's
+    declared face — the PREFERRED declared-face source for the
+    reconciliation view (the dispatch seam's own record of the
+    strategic route; appended history, last row wins). None on absence
+    or outage: the envelope family face stays the fallback and the view
+    keeps its pre-change shape. Fail-open: telemetry never blocks the
+    gate (one rate-limited warn)."""
+    try:
+        from rlvr import strategic_action as _sa  # noqa: PLC0415 — lazy
+        row = _sa.latest_declaration(ws)
+        if row is None:
+            return None
+        return {"declared_route": row.get("route"),
+                "declared_propensity": row.get("propensity"),
+                "declared_propensity_interpretation":
+                    "historical_smoothed_frequency" if row.get("declared") is True else None,
+                "declared_source": _sa.SCHEMA}
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+        warn('strategic_declaration.face', f'{type(exc).__name__}: {exc}')
+        return None
+
+
 def _sample_reconciliation(ws, declared: str | None) -> dict:
     """#691: what the RL sampler would choose for THIS dispatch — the
     gate's own draw (rlvr.strategy_store.reconcile_declaration: the same
     face ``method_lead`` renders, recomputed at dispatch time so nothing
     the envelope says can move it) plus the declared family's propensity
-    under it. Fail-open to the all-None gap view: a sampler failure is
-    ONE rate-limited warn (error class only) and the dispatch proceeds —
-    telemetry never turns an ALLOW into anything else."""
+    under it. issue-1005 S5: the strategic-action declaration row is the
+    PREFERRED declared face for the strategic route — when the workspace
+    holds a row, the view carries ``declared_route`` /
+    ``declared_propensity`` / ``declared_source`` beside the
+    method-family reconciliation; with no row the view stays
+    byte-identical to the pre-change shape (the envelope family face is
+    the fallback). Fail-open to the all-None gap view: a sampler failure
+    is ONE rate-limited warn (error class only) and the dispatch
+    proceeds — telemetry never turns an ALLOW into anything else."""
     gap = {"sampled_family": None, "propensity": None,
            "prior_source": None, "deviates": False,
            "sampled_propensity": None, "round_lead": None}
-    if not ws or not declared:
+    if not ws:
         return gap
+    face = _strategic_declared_face(ws)
     try:
         from rlvr import strategy_store as _ss691  # noqa: PLC0415 — lazy
-        return _ss691.reconcile_declaration(ws, declared)
+        view = _ss691.reconcile_declaration(ws, declared)
     except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
         warn('method_family.sample_view', f'{type(exc).__name__}: {exc}')
-        return gap
+        view = {**gap, "sample_error": type(exc).__name__}
+    if view.get("sample_error") and _klog is not None:
+        try:
+            _klog.emit(Path(ws), 'hook:worker_budget', 'gate_sample_failed',
+                       detail=view["sample_error"])
+        except Exception as exc:  # noqa: BLE001 — telemetry, never the gate
+            warn('method_family.sample_event', f'{type(exc).__name__}: {exc}')
+    return {**view, **face} if face else view
 
 
 def _override_reason(prompt: str) -> str | None:
     """The recorded-decision reason face: an ``agent-reasoning:`` line is
-    the dispatch's own logged override rationale — shared by the
-    deviation record and the sampled-binds check (a deviation without
-    this line is SILENT, and silence is not a decision)."""
+    the dispatch's own logged override rationale — the reason rides the
+    ``sample_deviation`` record (a deviation without the line is
+    recorded without a reason, never refused)."""
     m = re.search(r'agent-reasoning:[ \t]*([^\n]+)', prompt or '',
                   re.IGNORECASE)
     if not m:
@@ -862,62 +1016,19 @@ def _emit_sample_deviation(ws, cid, declared, view: dict,
           file=sys.stderr, flush=True)
 
 
-def _gate_sample(ws) -> dict:
-    """#773 W2 — the gate's own sampler draw, decision-grade (the same
-    face reconcile_declaration renders, returned for the gate to
-    enforce). All-None gap on every miss; fail-open to the gap."""
-    gap = {"family": None, "propensity": None, "prior_source": None}
-    try:
-        from rlvr import strategy_store as _ss773  # noqa: PLC0415 — lazy
-        return _ss773.gate_sample(ws)
-    except Exception as exc:  # noqa: BLE001 — a sampler hiccup is the gap
-        warn('method_family.gate_sample', f'{type(exc).__name__}: {exc}')
-        try:
-            if ws and _klog is not None:
-                _klog.emit(Path(ws), 'hook:worker_budget',
-                           'gate_sample_failed',
-                           detail=f'{type(exc).__name__}: {exc}')
-        except Exception as exc2:  # noqa: BLE001 — loud, never blocking
-            print(f'worker_budget_sinks: gate_sample_failed emit failed '
-                  f'({exc2!r})', file=sys.stderr, flush=True)
-        return gap
-
-
 def _method_family_gate(paths: dict, prompt: str, cid: str | None,
                         row_agent: str, tier: int,
                         tools: list) -> tuple[int | None, str | None,
                                               dict | None]:
-    """#432: the method-family vocabulary gate — the single validation
-    chokepoint for the dispatch's method_family declaration (v1 envelope
-    field or v0 prose marker; ONE contract, two declaration faces).
-    This workspace carries an admitted discovery arm's overlay row AND
-    its expansion receipt => that token validates; the repo registry
-    bytes are never touched and a missing/corrupt receipt chain stays
-    REJECT.
+    """Resolve one method decision and enforce current dispatch eligibility.
 
-    Fail-closed on missing/unregistered tokens and on a registry the
-    validator cannot read (2026-09-28 owner ruling posture); the
-    other(<one-line>) escape passes and is quarantined for triage.
-    Bookkeeping (usage/quarantine rows) is fail-open — telemetry never
-    turns an ALLOW into anything else. Returns (rc, token, view):
-    rc=2 means REJECT already emitted; token feeds the lifecycle row so
-    the unified log is replay-re-indexable; view is the #691 sampler
-    reconciliation view (None on every reject path) — since the #804
-    usage merge it rides the dispatch observation row, not a side
-    ledger. Callers pass cid=None to skip (the leg fires only on a
-    recognized dispatch shape — a plain Agent prompt is not a kunglao
-    dispatch and keeps the pre-#432 behavior).
+    A supported draw can supply an omitted declaration. The draw and
+    actual method ride the same observation. An explicit declaration may
+    deviate from the draw, subject to the vocabulary and task constraints.
 
-    #691: the validated declaration is ALSO reconciled against the
-    gate's own sampler draw (see _sample_reconciliation) — the
-    reconciliation triple (propensity + sampled_family + prior_source)
-    rides the dispatch observation row since the #804 usage merge, and
-    a deviation emits the recorded-decision ``sample_deviation`` event.
-    The reconciliation NEVER rejects for a DECLARED family (fail-open
-    + warn: deviation = recorded decision, 2026-10-14 amendment) — the
-    one #773 W2 exception is the UNDECLARED case: with sampler material
-    the gate rejects once so the sampled family becomes the exit
-    (silence is not an override; owner directive 2026-10-18)."""
+    Return (reject code or None, accepted method or None, decision view).
+    A cold sampler and absent declaration leave the method unspecified.
+    """
     if cid is None:
         return (None, None, None)
     if _mf432 is None:
@@ -931,74 +1042,27 @@ def _method_family_gate(paths: dict, prompt: str, cid: str | None,
     mf_meta = None
     try:
         mf_meta = load_hooks_lib().parse_dispatch_json(prompt)[3]
-    except Exception:  # noqa: BLE001 — envelope meta is best-effort;
-        # the v0 prose marker below still declares the field.
+    except Exception:  # noqa: BLE001 — envelope parse is best-effort
         mf_meta = None
-    mf_value = _mf432.declared_value(mf_meta, prompt)
-    # #773 W2: the sampler is the EXIT for the UNDECLARED case — silence
-    # is not an override. The gate draws once and REJECTs with the
-    # sampled family in the guidance (deterministic compliance in one
-    # retry); declaring another family remains the recorded-decision
-    # override (sample_deviation). This supersedes the 2026-10-14
-    # "never rejects" amendment FOR THE UNDECLARED CASE ONLY (owner
-    # directive 2026-10-18 + the live forensics: declared=false on every
-    # strategy-log row meant the sampler never exited). Cold sampler ->
-    # the legacy face (the honest gap), never a fabricated family.
+    declared = _mf432.declared_value(mf_meta, prompt)
+    view = _sample_reconciliation(paths.get('workspace'), declared)
+    mf_value = view.get('actual_method_family') or declared
     if not mf_value:
-        sampled = _gate_sample(paths.get('workspace'))
-        if sampled.get('family'):
-            return (_reject(
-                'methodfamily',
-                "dispatch declares no method family — the gate's own "
-                f"sampler draw is '{sampled['family']}' (propensity "
-                f"{sampled.get('propensity')}, prior "
-                f"{sampled.get('prior_source')}): declaring it makes the "
-                "sampled exit durable in the usage row.",
-                paths), None, None)
+        return (None, None, None)
     # the ws threads the overlay admission path: a discovered arm
     # validates only when THIS workspace carries its expansion receipt
     mf_ok, mf_msg = _mf432.validate_method_family(
         mf_value, ws=paths.get('workspace'))
     if not mf_ok:
         return (_reject('methodfamily', mf_msg, paths), None, None)
-    # #691: the declaration reconciliation view (fail-open gap on any
-    # miss) rides the usage row — the recorded sample-vs-declared pair
-    # the issue measured absent from runs/method-family-log.jsonl.
-    view = _sample_reconciliation(paths.get('workspace'), mf_value)
-    # Sampled-binds-to-dispatch (owner directive, the logs-panel card):
-    # the sampler's draw is the dispatch CONTRACT. The logs panel
-    # measured the failure shape in production — 17/17 deviation rows
-    # joined to dispatches that ran the DECLARED family, never the
-    # sampled one, and 6/16 carried propensity 0.0 (a probability-0 draw
-    # is invalid for IPS; the propensity-coherence family). So a
-    # deviation is an EXPLICIT RECORDED decision with a COHERENT
-    # propensity: silent deviation -> REJECT with the sampled family as
-    # the exit (deterministic compliance in one retry, the undeclared
-    # exit's shape); reasoned deviation with propensity <= 0 -> REJECT
-    # (the declared family was never in the policy's support). This
-    # narrows the older "recorded, never rejected" amendment: the record
-    # RIDES the pass (reason + propensity on the row), it no longer
-    # substitutes for a decision. The off-registry other(...) escape
-    # keeps its quarantine face (triage, not a bind-contract
-    # declaration). A rejected dispatch writes no usage row — the
-    # gate-rejections ledger is the audit face.
-    if (view.get('deviates')
-            and _mf432.parse_other_detail(mf_value) is None):
-        prop = view.get('propensity')
-        coherent = (isinstance(prop, (int, float))
-                    and not isinstance(prop, bool)
-                    and float(prop) > 0.0)
-        if not _override_reason(prompt) or not coherent:
-            return (_reject(
-                'methodfamily',
-                f"declared family '{mf_value}' deviates from the sampler's "
-                f"draw '{view.get('sampled_family')}' (propensity "
-                f"{view.get('propensity')}) without a coherent recorded "
-                "decision — sampling binds the dispatch (#794 R2): declare "
-                "the sampled family, or record the override with an "
-                "`agent-reasoning:` line AND declare a family the current "
-                "policy actually supports (propensity > 0).",
-                paths), None, None)
+    from rlvr.strategy_store import method_constraint_violation  # noqa: PLC0415
+    restriction = method_constraint_violation(paths.get('workspace'), mf_value)
+    if restriction:
+        return (_reject('methodfamily', restriction + '; sampler propensity cannot authorize it', paths), None, None)
+    # A deviation from the draw is a recorded decision, never a gate:
+    # the reconciliation view rides the usage row below and the
+    # sample_deviation event carries the dispatch's own reason when it
+    # declared one; other(...) keeps its validation and quarantine route.
     # #804 usage merge (R3): the side usage-ledger write is CLOSED — the
     # #691 reconciliation view rides the dispatch observation row (the
     # ALLOW tail's lifecycle record), never a parallel ledger.
@@ -1225,12 +1289,12 @@ def pre_check(payload: dict, paths: dict) -> int:
         # exists to demand.
         ('drift', (True, '') if verifier_remediation
          else check_plan_drift(paths)),
-        # #249: the dispatch context rides along so the STALLED rc=1 face
-        # can admit the gate's own prescribed remedy (mirror of the D2
-        # drift skip above — same dispatch, both faces must agree). The
-        # exemption is INSIDE the rc=1 face: SPINNING/crash faces are
-        # untouched, and every other gate below still applies to a remedy
-        # dispatch.
+        # The dispatch context rides along so the STALLED rc=1 and
+        # SPINNING rc=2 faces can admit the gate's own prescribed remedy
+        # (mirror of the verifier-remediation skip of the drift gate
+        # above — same dispatch, both faces must agree). The exemption is
+        # INSIDE the rc=1 / rc=2 faces: the crash face is untouched, and
+        # every other gate below still applies to a remedy dispatch.
         ('health', check_convergence_health(paths, cid, payload, prompt)),
         # v1.9.39 (#475): env-state freshness gate — a dispatch whose tier/
         # tools need a drifted environment capability is REJECTED; missing/
@@ -1370,9 +1434,12 @@ def pre_check(payload: dict, paths: dict) -> int:
     except Exception as exc:  # noqa: BLE001 — telemetry face, never the verdict
         print(f'[kunglao-agent] dispatch-id mint WARN (fail-open): '
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
+    deferred_observation = _stage_method_decision(
+        payload, paths, claim=cid, agent=row_agent, dispatch_id=_did800,
+        tier=tier, tools=tools, view=mf_view)
     _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt,
                         method_family=mf_value, dispatch_id=_did800,
-                        sampler_view=mf_view)
+                        sampler_view=mf_view, record_observation=not deferred_observation)
     # #800: the approval-point side effects are ONE claims_store
     # transaction — intent journal first, then the steps (anchor nonce,
     # launch stash, ONE atomic register rewrite carrying the #624 flip +
@@ -1384,7 +1451,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     # decided at this line.
     _claims_dispatch_txn(paths, cid=cid, prompt=prompt, agent=agent_name,
                          tier=tier, method_family=mf_value, budget=_budget,
-                         actor=row_agent or worker_id)
+                         actor=row_agent or worker_id, dispatch_id=_did800)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',
@@ -1392,6 +1459,18 @@ def pre_check(payload: dict, paths: dict) -> int:
         'tier': tier,
         'tools': tools,
     })
+    # The release tail's dispatch-face span - ONE start row per
+    # released face, keyed on the ONE dispatch ledger id (the id the
+    # claims txn just wrote into the launch stash; a txn that did not
+    # land leaves no phantom row). The closure pair lands at
+    # round_closure. CAGE_FACE: a span failure never disturbs the
+    # released dispatch.
+    try:
+        from rlvr import face_spans as _fs1005
+        _fs1005.span_start(paths.get('workspace'), dispatch_id=_did800,
+                           claim=cid, agent=row_agent)
+    except Exception as exc:  # noqa: BLE001 — telemetry, never the verdict
+        warn('face_span.dispatch_start', f'{type(exc).__name__}: {exc}')
     return 0
 
 
@@ -1754,6 +1833,14 @@ def _record_dispatch_failure(paths: dict, worker_id: str,
 
 
 def post_check(payload: dict, paths: dict) -> int:
+    if paths.get("workspace") and payload.get("tool_name") == "Agent":
+        try:
+            from rlvr import deliverable_checker
+
+            deliverable_checker.capture(paths["workspace"], payload)
+        except (OSError, ValueError, RuntimeError) as exc:
+            warn("deliverable_checker", f"{type(exc).__name__}: {exc}")
+    _record_executed_method(payload, paths)
     worker_id = payload.get('tool_input', {}).get('name') or ''
     tool_result = str(payload.get('tool_result', ''))
     # #880: BEFORE remove_worker — the [active_workers] entry carries the

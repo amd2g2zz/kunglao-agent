@@ -217,7 +217,7 @@ def decide_next(hb: str, health: dict, help_reqs: list[str], stuck: list[str],
     if hb == "STALE":
         return "re-register heartbeat: python hook_activation.py <ws> --heartbeat-on"
     if health["verdict"] == "SPINNING":
-        return health["detail"] or "STOP dispatching — spinning (see convergence_health)"
+        return health["detail"] or "dispatch only the remedy from convergence_health — spinning"
     if health["verdict"] == "STALLED":
         return health["detail"] or "diagnose before dispatching — stalled (see convergence_health)"
     if help_reqs:

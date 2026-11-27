@@ -64,6 +64,7 @@ for p in (SCRIPTS, ROOT / "tests"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 from rlvr import l1_planner as lp  # noqa: E402
 from rlvr import l1_value as lv  # noqa: E402
 from rlvr import q_cells as qc  # noqa: E402
@@ -74,7 +75,7 @@ T0 = datetime(2026, 10, 16, 8, 0, 0, tzinfo=timezone.utc)
 FAM = "static-symbolic"
 
 CITED = {"id": "F718-cited", "status": "PROVEN", "verify_status": "passes",
-         "cited_by_deliverable": True, "answers_question": False,
+         "cited_by_deliverable": True, "verified_deliverable_use": True, "answers_question": False,
          "oracle_backed_refutation": False}
 
 
@@ -112,9 +113,7 @@ def _transition(ws: Path, claim: str, *, r_incr: float,
            "phi_delta": round(phi_delta, 6), "claim_ref": claim,
            "action_key": FAM, "r_incr": r_incr, "r_settle": None,
            "done": False}
-    p = ws / "runs" / "transitions.jsonl"
-    with p.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row) + "\n")
+    _cl.append(ws, "experience", {**row, "schema": "transition/1"})
 
 
 def _index_row(ws: Path, fact_id: str, status: str, claim: str) -> None:
@@ -512,20 +511,27 @@ def test_action_vocabulary_is_the_ruling_list():
 
 
 def test_knowledge_query_reads_the_cross_task_store(tmp_path, monkeypatch):
-    """The cross-task face (T5): a strategy_store row carrying THIS
-    claim's identity from another workspace is knowledge (mid-strength),
-    and the ws's own rows are never read (the store's leave-one-out
-    read)."""
+    """The cross-task face (T5): a FOREIGN-stamped store row carrying
+    THIS claim's identity is knowledge (mid-strength), and the ws's own
+    rows are never read (leave-one-out over the workspace's own store).
+    The foreign row is staged INSIDE the workspace's store with another
+    workspace's id (cross-project learning is off — a production store
+    carries only own rows, so the face reads empty there; the staged
+    shape is the eval-arm donor)."""
     from rlvr import strategy_store as st
 
-    monkeypatch.setenv(st.STORE_ENV, str(tmp_path / "store"))
-    other = tmp_path / "other-ws"
-    other.mkdir()
-    out = st.append_store_row(other, method_family="static-symbolic",
-                              status="ROUND_CREDIT", credit=1.0,
-                              dispatch_id="C-733", claim="C-733")
-    assert out["appended"] is True
+    monkeypatch.delenv(st.STORE_ENV, raising=False)
     ws = _ws(tmp_path, [{"id": "C-733", "status": "OPEN"}])
+    assert st.append_row(ws, {
+        "schema": st.STORE_SCHEMA, "ts": "2026-10-07T00:00:00Z",
+        "workspace_id": "ws-donor",
+        "arm_key": "static-symbolic|facts_snapshot|none|1",
+        "method_family": "static-symbolic", "feature_key": "none",
+        "fingerprint": None, "status": "ROUND_CREDIT", "credit": 1.0,
+        "censored": False, "facts_citing": 0, "propensity": None,
+        "phi_delta": None,
+        "provenance": {"dispatch_id": "C-733"}, "claim": "C-733",
+    })["appended"] is True
     kc = lp.knowledge_query(ws, "C-733")
     assert kc["solved"] and kc["source"] == "cross_task"
     assert kc["strength"] == pytest.approx(lp.CROSS_TASK_STRENGTH)

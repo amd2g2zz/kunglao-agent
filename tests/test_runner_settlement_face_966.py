@@ -78,9 +78,10 @@ def _ws(tmp: Path) -> Path:
 
 
 def _store_rows(tmp: Path) -> list[dict]:
-    """The cross-task store's rows (tolerant JSONL read — the file may
-    not exist when the face settled nothing)."""
-    p = tmp / "store" / strategy_store.STORE_REL
+    """The workspace store's rows (tolerant JSONL read — the file may
+    not exist when the face settled nothing). The knowledge family file
+    is workspace-local (the store root inside the workspace)."""
+    p = tmp / "ws" / "runs" / "posterior" / "knowledge-store.jsonl"
     if not p.is_file():
         return []
     return [r for r in (json.loads(line) for line in

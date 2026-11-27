@@ -128,30 +128,34 @@ def test_bank_writes_the_cross_task_store_row(tmp_path):
     from rlvr import strategy_store
     ws = _case_ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     src.run(ws)
-    rows = [r for r in strategy_store.load_rows(ws=None)
+    rows = [r for r in strategy_store.load_rows(ws)
             if str((r.get("provenance") or {}).get("dispatch_id")) == _did(ws, "C-9")]
     assert len(rows) == 1, "the settled dispatch must key exactly one row"
     row = rows[0]
     assert row["method_family"] == "static-symbolic"
     assert row["arm_key"] == "static-symbolic|facts_snapshot|none|0"
     assert row["status"] == "ROUND_CREDIT"
-    assert row["workspace_id"] == ws.name
+    assert row["workspace_id"] == strategy_store.workspace_id_of(ws)
     # the replay adds no second row (the first-settlement clock)
     src.run(ws)
-    again = [r for r in strategy_store.load_rows(ws=None)
+    again = [r for r in strategy_store.load_rows(ws)
              if str((r.get("provenance") or {}).get("dispatch_id")) == _did(ws, "C-9")]
     assert len(again) == 1
 
 
 def test_unmatched_dispatch_writes_no_store_row(tmp_path):
     """No pending dispatch row -> no banked credit -> no store row: the
-    honest gap, never a fabricated bucket."""
+    honest gap, never a fabricated bucket. (issue-1004 R2c: the
+    credit-series row the bridge writes in this scenario is EXCLUDED
+    from ``load_rows`` — the breaker's face, not store knowledge — so
+    the pin holds at its original strength: the store read returns
+    exactly nothing.)"""
     import settle_round_credit as src
     from rlvr import strategy_store
     ws = _ws(tmp_path, [{"id": "C-9", "status": "REFUTED"}])
     out = src.run(ws)
     assert out["settled"] == 1  # the ledger row still settles
-    assert strategy_store.load_rows(ws=None) == []
+    assert strategy_store.load_rows(ws) == []
 
 
 def test_case_settlement_leg_updates_linked_case_posteriors(tmp_path):
@@ -250,7 +254,7 @@ def test_dry_run_counts_pending_tiers_and_writes_nothing(tmp_path):
          "ts": "t"}], rollout_id="task/C-9")
     rl.settle(ws, "task/C-9", {"reward": 1.0, "band": "SETTLED_GREEN",
                                "rule_id": "r/1", "evidence_refs": []})
-    before = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+    before = (ws / "runs" / "settlement.jsonl").read_bytes()
     out = src.run(ws, dry_run=True)
     assert out["would_amend_tiers"] == 1
-    assert (ws / "runs" / "rollout-ledger.jsonl").read_bytes() == before
+    assert (ws / "runs" / "settlement.jsonl").read_bytes() == before

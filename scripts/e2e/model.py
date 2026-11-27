@@ -503,6 +503,7 @@ class DispatchRequest:
     # act's settle can refuse a stash a re-dispatch has overwritten —
     # runtime-only (never serialized; the envelope stays clean).
     launch_id: str = ""
+    dispatch_id: str = ""  # runtime-only join to the accepted Q-cell observation
 
     def to_dict(self) -> dict:
         emitted_ts = self.emitted_ts or utc_now()

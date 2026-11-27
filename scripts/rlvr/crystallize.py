@@ -59,7 +59,7 @@ def _negative_duplicate(ws, claim: str, step_id: str, family: str) -> bool:
     """The replay wall: one negative per (class, family, claim, step)."""
     from rlvr import marl as _marl
     cls = _marl.signature_class(ws)
-    for row in _marl.read_negatives():
+    for row in _marl.read_negatives(ws):
         if (str(row.get("signature_class") or "") == cls
                 and str(row.get("method_family") or "") == family
                 and str(row.get("claim_ref") or "") == claim
@@ -68,13 +68,18 @@ def _negative_duplicate(ws, claim: str, step_id: str, family: str) -> bool:
     return False
 
 
-def _broadcast_duplicate(claim: str, family: str) -> bool:
+def _broadcast_duplicate(ws, claim: str, family: str) -> bool:
     """ONE broadcast per (claim, family) — the discriminant is the
     claim's method, so a later certified step on the same claim is a
     duplicate, never fresh prior mass (a per-step key would let an
-    N-step claim warm a sibling workspace N times over)."""
+    N-step claim warm a sibling workspace N times over). POPULATION
+    (issue-1004 R2c review fix): the store read is the BANK face only
+    (``load_rows`` excludes the breaker's credit-kind-marked ws credit
+    series), so a bridged round credit can never suppress the solution
+    broadcast — exactly what the pre-move file held. The read is the
+    WORKSPACE's own store (cross-project off)."""
     from rlvr import strategy_store as _ss
-    for row in _ss.load_rows():
+    for row in _ss.load_rows(ws):
         if (str(row.get("claim") or "") == claim
                 and str(row.get("method_family") or "") == family):
             return True
@@ -133,7 +138,7 @@ def crystallize_settlement(ws, *, claim: str, step_id: str,
             certified = False
         if not certified:
             return dict(out, reason="not-certified")
-        if _broadcast_duplicate(str(claim), family):
+        if _broadcast_duplicate(ws, str(claim), family):
             return dict(out, reason="duplicate")
         rec = _marl.broadcast_solution(
             ws, method_family=family, credit=float(step_credit),
@@ -146,28 +151,30 @@ def crystallize_settlement(ws, *, claim: str, step_id: str,
         return dict(out, reason=f"error:{type(exc).__name__}")
 
 
+def knowledge_lines(path):
+    """Missing sources are empty. Other I/O errors must reach reconciliation."""
+    try:
+        return path.read_bytes().splitlines(keepends=True)
+    except FileNotFoundError:
+        return []
+
+
 def _rewrite_without(path: Path, drop) -> int:
     """Atomically rewrite one JSONL store without the dropped rows.
-    Unparseable lines survive untouched (never delete unknown junk);
-    surviving canonical rows keep their exact bytes — the file-level
-    shape normalizes (blank separators drop, the final newline lands).
+    Surviving lines keep their exact bytes, including blank separators;
+    the file ends with a newline, so a later append never glues onto the
+    last survivor.
     Returns the removed count; a zero-removal rewrite never touches the
     file. The write rides the canonical atomic face (writer-unique tmp,
     failed writes unlink their tmp, parents created)."""
-    try:
-        import json
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return 0
-    kept: list[str] = []
+    import json
+    lines = knowledge_lines(path)
+    kept: list[bytes] = []
     removed = 0
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
+    for line in lines:
         try:
-            row = json.loads(stripped)
-        except ValueError:
+            row = json.loads(line)
+        except (ValueError, UnicodeError):
             kept.append(line)   # unparseable — survive untouched
             continue
         if isinstance(row, dict) and drop(row):
@@ -183,33 +190,60 @@ def _rewrite_without(path: Path, drop) -> int:
                      f"{type(exc).__name__}: {exc}")
                 return 0
             return removed
+        data = b"".join(kept)
+        if not data.endswith(b"\n"):
+            # the next append must start on its own line
+            data += b"\n"
         try:
-            from _common import atomic_write_text  # noqa: PLC0415 — lazy
-            atomic_write_text(path, "\n".join(kept) + "\n", unique=True)
+            from _common import atomic_write_bytes  # noqa: PLC0415 — lazy
+            atomic_write_bytes(path, data, unique=True)
         except OSError as exc:
             warn("crystallize.rewrite", f"{type(exc).__name__}: {exc}")
             return 0
     return removed
 
 
+def knowledge_paths(ws):
+    """Live and pre-move sources in which an attributed row can survive."""
+    from rlvr import consolidated_ledger as _cl
+    import consolidate_ledgers
+
+    rels = consolidate_ledgers.LEGACY_SOURCES.get("knowledge", {})
+    paths = [_cl.family_path(ws, "knowledge")]
+    paths.extend(_cl.legacy_path(ws, "knowledge", rel) for rel in rels)
+    return tuple(dict.fromkeys(paths))
+
+
+def derived_claim(row):
+    """Return the originating claim field for a supported derived row."""
+    from rlvr import marl, strategy_store
+    if row.get("schema") == marl.NEG_SCHEMA:
+        claim = row.get("claim_ref")
+    elif row.get("schema") == strategy_store.STORE_SCHEMA and not row.get("credit_kind"):
+        claim = row.get("claim")
+    else:
+        return None
+    return claim if isinstance(claim, str) else None
+
+
 def revoke_claim(ws, claim: str) -> dict:
-    """Drop every derived row attributed to the claim from BOTH derived
-    stores (negatives by ``claim_ref``, broadcasts by ``claim``). The
-    discriminant dies with the settlement it was derived from; the
-    evidence of record (steps, transitions, amendment rows) is
-    untouched. An empty claim is refused at the boundary (it would
-    match every unattributed row). Returns per-store removal counts."""
-    from rlvr import marl as _marl
-    from rlvr import strategy_store as _ss
+    """Remove only derived knowledge bound to this workspace and claim."""
+    from rlvr import consolidated_ledger as _cl
+    from rlvr import strategy_store as _ids  # noqa: PLC0415 — the id face
     cid = str(claim or "").strip()
     if not cid:
         return {"negatives_removed": 0, "broadcasts_removed": 0}
-    removed_neg = _rewrite_without(
-        _marl.neg_store_path(),
-        lambda r: str(r.get("claim_ref") or "") == cid)
-    removed_bcast = _rewrite_without(
-        _ss.store_path(),
-        lambda r: str(r.get("claim") or "") == cid)
+    mine = _ids.workspace_id_of(ws)
+
+    def owned(row, schema):
+        return (row.get("schema") == schema and row.get("workspace_id") == mine
+                and derived_claim(row) == cid)
+
+    removed_neg = removed_bcast = 0
+    with _cl.family_lock(ws, "knowledge"):
+        for path in knowledge_paths(ws):
+            removed_neg += _rewrite_without(path, lambda row: owned(row, "marl-negative/1"))
+            removed_bcast += _rewrite_without(path, lambda row: owned(row, _ids.STORE_SCHEMA))
     if removed_neg or removed_bcast:
         warn("crystallize.revoke",
              f"claim {cid}: {removed_neg} negative(s), "

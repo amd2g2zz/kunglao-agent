@@ -171,20 +171,21 @@ def item_credit(meta: dict) -> float:
     return round(anchor * _provenance_weight(meta), 6)
 
 
-def step_credit(items) -> float:
+def step_credit(items, *, ws=None) -> float:
     """The step-boundary score: the mean credit of the evidence items
     the step touched, each discounted by its item's LEARNED source
     reliability (``weighted_step_credit`` — unlabeled items ride the
     neutral weight, so the pre-discount score is preserved). Empty
     window -> the unverified provisional floor (the step happened;
     claim-terminal calibration corrects it — a step with no evidence is
-    never banked as 0, which would keep the signal degenerate)."""
-    return weighted_step_credit(items)
+    never banked as 0, which would keep the signal degenerate). ``ws``
+    scopes the reliability store read (workspace-local)."""
+    return weighted_step_credit(items, ws=ws)
 
 
 def weighted_step_credit(items, *, context_class=None,
                          rng: random.Random | None = None,
-                         source_view=None) -> float:
+                         source_view=None, ws=None) -> float:
     """The step score with the LEARNED source-reliability discount: the
     mean over items of ``item_credit(meta) × theta``, where theta is a
     Thompson draw from the learned source-reliability Beta
@@ -204,10 +205,10 @@ def weighted_step_credit(items, *, context_class=None,
         weight = 1.0
         if _sr.has_source_labels(meta):
             if view is None:
-                view = _sr.fold()
+                view = _sr.fold(ws=ws)
             weight = _sr.reliability_weight(meta,
                                             context_class=context_class,
-                                            rng=rng, view=view)
+                                            rng=rng, view=view, ws=ws)
         total += item_credit(meta) * weight
     return round(total / len(rows), 6)
 

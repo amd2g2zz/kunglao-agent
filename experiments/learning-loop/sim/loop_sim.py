@@ -22,30 +22,26 @@ reward_signal.step_reward / episode_reward, timeout_triage
 .classify_timeout, episode_settle (settle_mission / derived_views),
 pool_indexer.value_table, pool_scheduler (task_value / pick_next /
 reprice_scope / retire_reasons / inflow_from_failure /
-order_task_dirs), ledger.record, review_windows (the attribution
-bridge), and memory_bridge (the differential write-through + recall
-sensors + gate). This module owns only the mock worker's choices
-(which tool, how many tokens, which conclusion) — every mission's cost
-booking is the settle line's OWN honest arithmetic: episode_settle's
-per-mission spend window (_spend_window, the P7c fix) books each
-episode the cost events SINCE the previous settle mark, and stamps the
-A1 reward from that block. The mock's one cost-event row per mission
-(`_ledger_row`, amount = tokens/1e4) lands exactly one-to-one in its
-mission's window, so the episodes carry the REAL per-mission spend —
-the old compensation re-booking (a workaround for the pre-P7c
-cumulative fold) is gone, not patched around.
+order_task_dirs), and ledger.record. This module owns only the mock
+worker's choices (which tool, how many tokens, which conclusion) —
+every mission's cost booking is the settle line's OWN honest
+arithmetic: episode_settle's per-mission spend window (_spend_window,
+the P7c fix) books each episode the cost events SINCE the previous
+settle mark, and stamps the A1 reward from that block. The mock's one
+cost-event row per mission (`_ledger_row`, amount = tokens/1e4) lands
+exactly one-to-one in its mission's window, so the episodes carry the
+REAL per-mission spend — the old compensation re-booking (a workaround
+for the pre-P7c cumulative fold) is gone, not patched around.
 
-  _stamp_family_memory — THE P4 WRITE-THROUGH, LIVE: the settled
-    episode's family identity rides the REAL memory_bridge differential
-    write-through — the context features (bare + ``family:`` prefixed)
-    name the family the scheduler joins on, the episode's own
-    ``family`` field carries the TRUE identity the bridge's mastery
-    face validates against, and memory_bridge's own differential
-    decides what a memory row is and whether the family is mastered
-    (EARNED: completed + positive reward + identity match — the loop
-    never grants it). ``scramble`` misfiles the CONTEXT features under
-    the ring's next family (the E1c control): the memory face is FED
-    but fed the WRONG family, and post-identity-validation a misfiled
+  _stamp_family_memory — THE FAMILY-IDENTITY STAMP: the settled
+    episode's context features (bare + ``family:`` prefixed) name the
+    family the scheduler joins on; the episode's own ``family`` field
+    carries the TRUE identity. Mastery is EARNED in this module's own
+    face (completed + positive reward + identity match — the loop
+    never grants it; the retired memory_bridge differential that used
+    to enforce it is gone with the module). ``scramble`` misfiles the
+    CONTEXT features under the ring's next family (the E1c control):
+    the memory face is FED but fed the WRONG family, and a misfiled
     episode masters nothing.
 
 run_learning_loop(ws, *, delta, ablate_pool_memory, laps,
@@ -59,7 +55,6 @@ scrambling is attributable to the pool's memory CONTENT, nothing else.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 # the lazy `from rlvr import ...` faces and the production scaffold
@@ -293,30 +288,45 @@ def _scrambled(family: str) -> str:
     return names[(names.index(family) + 1) % len(names)]
 
 
-def _stamp_family_memory(ws, claim, family, memory, *, scramble=False):
-    """THE P4 WRITE-THROUGH, LIVE: the settled episode's family identity
-    rides the REAL memory_bridge differential write-through — mastery is
-    EARNED there (a completed mission with a positive A1 reward whose
-    OWN family matches the stamping family; a failed, reward-negative,
-    or misfiled mission never masters). Returns the scheduler's memory
-    view, read back from memory_bridge.family_view.
+def _earned_mastery(doc: dict, family: str) -> bool:
+    """The sim-local earned-mastery rule (the retired memory_bridge
+    differential's exact semantics, kept so the E1c identity control
+    still measures the same thing): a verified completion with a
+    positive terminal reward whose OWN family matches the STAMPING
+    family. Shape alone (completed + reward > 0) masters nothing; a
+    misfiled stamp (carrier != the episode's own ``family``) masters
+    the carrier nothing."""
+    if (doc.get("outcome") or {}).get("status") != "completed":
+        return False
+    reward = doc.get("reward")
+    r = reward.get("r") if isinstance(reward, dict) else reward
+    if not isinstance(r, (int, float)) or isinstance(r, bool) \
+            or float(r) <= 0.0:
+        return False
+    own = str(doc.get("family") or "").strip()
+    return bool(own) and own == family
 
-    NO COST BOOKING HERE ANY MORE: the pre-P7c settle face booked the
-    workspace's CUMULATIVE cost events into every episode, and this face
-    re-booked the per-mission block as a workaround. P7c's spend window
-    fixed the settle line itself — each episode now carries its own
-    window's spend and the A1 reward stamped from it — so the stamp face
-    is back to its ONE job: family identity. It writes the context
-    features the scheduler's join reads (bare + ``family:`` prefixed)
-    and the episode's own ``family`` field the bridge's mastery face
-    validates against. ``scramble`` misfiles ONLY the context features
-    (the E1c control); the true identity rides the ``family`` field a
-    misfiling cannot rewrite — post-identity-validation a misfiled
-    episode masters nothing.
+
+def _stamp_family_memory(ws, claim, family, memory, *, scramble=False):
+    """THE FAMILY-IDENTITY STAMP: the settled episode's context features
+    (bare + ``family:`` prefixed) are written so the scheduler's family
+    join can read them, and the sim's own earned-mastery face decides
+    whether the STAMPED family reads mastered. Returns the scheduler's
+    memory view ({family -> {mastered}}), carried forward from the
+    caller's view (mastery is sticky, the retired bridge's families
+    file was never re-read mid-run).
+
+    NO COST BOOKING HERE: the settle face books each episode its own
+    window's spend (P7c). The stamp face is family identity only —
+    it writes the context features the scheduler's join reads (bare +
+    ``family:`` prefixed) and the episode's own ``family`` field the
+    mastery face validates against. ``scramble`` misfiles ONLY the
+    context features (the E1c control); the true identity rides the
+    ``family`` field a misfiling cannot rewrite — post-identity-
+    validation a misfiled episode masters nothing.
     """
     from rlvr import episode_pool
     from rlvr import episode_schema
-    from rlvr import memory_bridge
     carrier = _scrambled(family) if scramble else family
     path = episode_pool.episode_path(ws, claim)
     doc, body = episode_schema.read_episode_file(path)
@@ -325,9 +335,11 @@ def _stamp_family_memory(ws, claim, family, memory, *, scramble=False):
          carrier, f"family:{carrier}"})
     doc["family"] = family
     episode_schema.write_episode_file(path, doc, body=body)
-    memory_bridge.stamp_family_memory(ws, doc)
-    return {str(k).removeprefix("family:"):
-            v for k, v in memory_bridge.family_view(ws).items()}
+    view = {str(k).removeprefix("family:"): dict(v)
+            for k, v in (memory or {}).items()}
+    view[carrier] = {"mastered": bool(view.get(carrier, {}).get("mastered"))
+                     or _earned_mastery(doc, carrier)}
+    return view
 
 
 # ------------------------------------------------------------- the loop
@@ -346,12 +358,14 @@ def _register(ws, mission):
 
 
 def _ledger_row(ws, mission):
+    from rlvr import consolidated_ledger
     from rlvr import ledger
     ledger.record(ws, "task", mission["claim"], [],
                   rollout_id=f"rollout-{mission['claim']}",
                   ts=mission["claim"].lower())
-    with (ws / "cost_events.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"amount": mission["tokens"] / 10_000.0}) + "\n")
+    consolidated_ledger.append(ws, "settlement", {
+        "schema": "cost-event/1", "ts": mission["claim"].lower(),
+        "amount": mission["tokens"] / 10_000.0, "source": "loop-sim"})
 
 
 def _settle_and_stamp(ws, mission, memory, *, scramble=False):

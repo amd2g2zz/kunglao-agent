@@ -246,6 +246,9 @@ def record_receipt(ws, trigger_doc: dict, hypotheses: list[dict],
         "admitted": [str(h) for h in admitted],
     }
     path = directory / f"E-{index}.json"
+    from rlvr.priors import record_support_mode  # noqa: PLC0415
+
+    record_support_mode(ws)  # fail before publishing if the marker cannot persist
     path.write_text(json.dumps(doc, ensure_ascii=False, sort_keys=True,
                                indent=2) + "\n", encoding="utf-8")
     return doc

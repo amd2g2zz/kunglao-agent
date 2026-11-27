@@ -226,7 +226,11 @@ def test_bridge_without_usage_family_records_the_honest_gap(tmp_path):
 
 
 def _posterior_store_rows(ws: Path) -> list[dict]:
-    store = Path(ws) / "runs" / "posterior-store.jsonl"
+    """The store rows post-R2c: the knowledge family file under the
+    guarded root (the cross-task file the breaker and the fingerprint
+    read — workspace-scoped to this test via the conftest env)."""
+    import rlvr.consolidated_ledger as _cl
+    store = _cl.family_path(ws, "knowledge")
     if not store.is_file():
         return []
     return [json.loads(ln) for ln in

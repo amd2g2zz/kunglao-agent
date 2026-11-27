@@ -294,30 +294,30 @@ def seed_situational_pqs(ws: Path, claims: list[dict],
     report: [{pq_id, h_standing_bits, source}].
     """
     ws = Path(ws)
-    ledger = PosteriorLedger.load(ws)
-    report: list[dict] = []
-    for c in claims or []:
-        if str(c.get("boundary_type") or "") != "epistemic":
-            continue
-        pq_id = str(c.get("answers_question") or "").strip()
-        if not pq_id or pq_id in ledger.pqs:
-            continue
-        cands = _task_spec_candidates(task_spec, pq_id)
-        source = "task_spec_candidates"
-        if cands is None:
-            cands = {str(k): float(v)
-                     for k, v in (c.get("candidates") or {}).items()}
-            source = "derived"
-        if not cands:
-            continue
-        pq = PQCategorical(pq_id, cands)
-        ledger.pqs[pq_id] = pq
-        h = round(pq.entropy(), 6)
-        c["h_standing_bits"] = h
-        report.append({"pq_id": pq_id, "h_standing_bits": h,
-                       "source": source})
-    if report:
-        ledger.save(ws)
+    with PosteriorLedger.for_update(ws) as ledger:
+        report: list[dict] = []
+        for c in claims or []:
+            if str(c.get("boundary_type") or "") != "epistemic":
+                continue
+            pq_id = str(c.get("answers_question") or "").strip()
+            if not pq_id or pq_id in ledger.pqs:
+                continue
+            cands = _task_spec_candidates(task_spec, pq_id)
+            source = "task_spec_candidates"
+            if cands is None:
+                cands = {str(k): float(v)
+                         for k, v in (c.get("candidates") or {}).items()}
+                source = "derived"
+            if not cands:
+                continue
+            pq = PQCategorical(pq_id, cands)
+            ledger.pqs[pq_id] = pq
+            h = round(pq.entropy(), 6)
+            c["h_standing_bits"] = h
+            report.append({"pq_id": pq_id, "h_standing_bits": h,
+                           "source": source})
+        if report:
+            ledger.save(ws)
     return report
 
 

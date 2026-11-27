@@ -177,7 +177,7 @@ def test_rc_pins_healthy_stalled_spinning_no_data(tmp_path):
     _write_ledger(ws, [_snap(i, 2, ["C-1"]) for i in range(6)])
     assert _run(ws).returncode == 1
 
-    # SPINNING: facts grow while open_count holds
+    # SPINNING: open_count flat for the 8-round SPINNING_FLATLINE
     ws = tmp_path / "sp"
     ws.mkdir()
     _write_ledger(ws, [_snap(i, 2, ["C-1"], facts_total=10 + i) for i in range(8)])

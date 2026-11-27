@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """tests/test_dispatch_executor_773.py — the RL executor wiring.
 
-W2: the dispatch gate's sampler is the EXIT — an undeclared dispatch
-draws one reject-with-guidance carrying the sampled family; cold
-sampler keeps the honest default row. W3: plan() consumes live — the
-admission receipt lands at the dispatch ALLOW tail
-(runs/plan-receipts.jsonl, schema plan-receipt/1).
+W2: the dispatch gate's sampler draw is recorded evidence — an
+undeclared dispatch ADOPTS the draw as its declaration when the
+sampler has material; a cold sampler keeps the honest default row (no
+family fabricated). W3: plan() consumes live — the admission receipt
+lands at the dispatch ALLOW tail (runs/plan-receipts.jsonl, schema
+plan-receipt/1).
 
 All fixtures are SYNTHETIC (privacy rule).
 """
@@ -31,7 +32,7 @@ import rlvr.strategy_store as _ss_preinit  # noqa: E402,F401
 # Pin the WORKTREE rlvr.strategy_store into sys.modules BEFORE
 # dispatch_gate's import graph runs — its load_hooks_lib face can insert
 # the deployed skill root into sys.path, and a stale rlvr from that root
-# would answer gate_sample with the cold gap (the exact wrong verdict
+# would answer reconciliation with the cold gap (the exact wrong verdict
 # this suite exists to catch).
 
 
@@ -76,34 +77,32 @@ DECLARED = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", '
 UNDECLARED = "dispatch C-001 per the ranked plan"
 
 
-def test_gate_sample_cold_returns_gap(tmp_path, ss):
+def test_reconciliation_cold_returns_gap(tmp_path, ss):
     ws = _bare_ws(tmp_path)
-    gap = ss.gate_sample(ws)
-    assert gap == {"family": None, "propensity": None,
-                   "prior_source": None}
+    gap = ss.reconcile_declaration(ws, None)
+    assert gap["sampled_family"] is gap["propensity"] is gap["prior_source"] is None
+    assert not gap.get("actual_method_family")
 
 
-def test_undeclared_reject_carries_the_sampled_family(
+def test_undeclared_adopts_the_sampled_family(
         sinks, tmp_path, capsys, monkeypatch):
-    """The wiring pin (#773 W2): an undeclared dispatch's methodfamily
-    reject carries the gate's own sampled family in the guidance — the
-    retry declares it and the #691 reconciliation view rides the
-    dispatch observation row (the #804 usage merge). (The draw's
-    warm-fill belongs to the strategy_store suite; here the sampler is
-    pinned, the guidance is proven.)"""
+    """The wiring pin: an undeclared dispatch adopts the gate's own
+    sampled family as its declaration (the gate RETURNS the token, and
+    the ALLOW tail's lifecycle record lands it) — record-only, no
+    reject, no fabricated family: the draw IS the record."""
     ws = _bare_ws(tmp_path)
     import rlvr.strategy_store
-    monkeypatch.setattr(rlvr.strategy_store, "gate_sample",
-                        lambda ws: {"family": "static-decompile",
-                                    "propensity": 0.62,
-                                    "prior_source": "store"})
+    monkeypatch.setattr(
+        rlvr.strategy_store.PosteriorStrategyStore, "method_sample",
+        lambda self, fingerprint: {"family": "static-decompile",
+                                   "prior_source": "store",
+                                   "candidates": {"static-decompile": {"weight": 1}}})
     paths = {"workspace": str(ws)}
     rc, value, _view = sinks._method_family_gate(
         paths, UNDECLARED, "C-001", "kunglao-worker", 1, [])
-    assert rc == 2 and value is None
+    assert rc is None and value == "static-decompile"
     out = capsys.readouterr().out
-    assert "static-decompile" in out and "propensity" in out
-    assert "sampler draw" in out
+    assert "methodfamily" not in out
 
 
 def test_declared_dispatch_records_the_sample_view(
@@ -127,28 +126,32 @@ def test_declared_dispatch_records_the_sample_view(
     assert not (ws / "runs" / "method-family-log.jsonl").exists()
 
 
-def test_cold_sampler_rejects_without_a_fabricated_family(
+def test_cold_sampler_passes_without_a_fabricated_family(
         sinks, tmp_path, capsys):
     ws = _bare_ws(tmp_path)
     paths = {"workspace": str(ws)}
     rc, value, _view = sinks._method_family_gate(
         paths, UNDECLARED, "C-001", "kunglao-worker", 1, [])
-    assert rc == 2
+    assert rc is None and value is None, (
+        "a cold sampler must never fabricate a family — the honest gap "
+        "passes uncounted")
     out = capsys.readouterr().out
     assert "sampler draw" not in out, ("a cold sampler must never "
                                        "fabricate a family")
 
 
 def test_strategy_row_unchanged_without_sampled(dg, tmp_path):
-    """The #496 marker row keeps its legacy shape: the DECLARED prompt
+    """The #496 marker row keeps its shape: the DECLARED prompt
     carries no [strategy X] marker, so the row stays the honest
     default/declared:false (the method-family axis lives in the
-    usage row, not here)."""
+    usage row, not here). The row lands in the telemetry family
+    file (issue-1004 R2b)."""
     ws = _bare_ws(tmp_path)
     dg._log_strategy_dispatch(ws, "C-001", "dispatch C-001, no marker")
     rows = [json.loads(l) for l in
-            (ws / "runs" / "strategy-log.jsonl")
+            (ws / "runs" / "telemetry.jsonl")
             .read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert rows[-1]["schema"] == dg.STRATEGY_LOG_SCHEMA
     assert rows[-1]["strategy"] == "default" and rows[-1]["declared"] is False
 
 

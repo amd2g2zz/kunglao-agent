@@ -24,12 +24,12 @@ settled-bad ones effectively never retried). ``reliability_weight`` is
 the per-item credit face (theta when labeled, 1.0 when not: "weighted
 ... if available"); the composition itself lives in ``rlvr.step_credit``.
 
-Store: append-only ``source-reliability.jsonl`` under the SHARED store
-root (strategy_store.store_root(), env override KUNGLAO_POSTERIOR_STORE)
-— tool trust is cross-engagement knowledge, so a later engagement
-inherits it. Reads tolerate a missing or dirty store; writes are
-loud-result dicts through the shared append primitive and never raise
-into the producer.
+Store: append-only ``source-reliability.jsonl`` under the WORKSPACE's
+own store root (strategy_store.store_root(ws) — cross-project learning
+is off, the env override applies under the same inside-workspace rule
+as the posterior store). Reads tolerate a missing or dirty store;
+writes are loud-result dicts through the shared append primitive and
+never raise into the producer.
 """
 from __future__ import annotations
 
@@ -60,13 +60,14 @@ REFUTED = "refuted"
 _EVENT_ADDS = {CONFIRMED: (1.0, 0.0), REFUTED: (0.0, 1.0)}
 
 
-def store_path() -> Path:
-    """The SHARED reliability store — one file under the same guarded
-    root as the posterior store (env KUNGLAO_POSTERIOR_STORE override).
-    Shared, not per-workspace: what one engagement learns about a
-    tool's reliability is what the next engagement should inherit."""
+def store_path(ws) -> Path:
+    """The reliability store — one file under the WORKSPACE's own store
+    root (cross-project learning is off: what one workspace learns
+    about a tool's reliability stays in that workspace; the env
+    override applies under the same inside-workspace rule as the
+    posterior store)."""
     from rlvr import strategy_store as _ss  # noqa: PLC0415 — lazy
-    return _ss.store_root() / STORE_REL
+    return _ss.store_root(ws) / STORE_REL
 
 
 # --------------------------------------------------------------- labels
@@ -126,12 +127,13 @@ def has_source_labels(evidence) -> bool:
 
 # ------------------------------------------------- the write faces (events)
 
-def record_outcome(evidence, outcome, *, context_class=None, by=None,
+def record_outcome(ws, evidence, outcome, *, context_class=None, by=None,
                    ts=None) -> dict:
     """Append ONE invalidation event (the only teacher): ``outcome``
     "confirmed" (alpha += 1) or "refuted" (beta += 1) for the evidence
     item's source class. ``by`` records the later evidence's eid (audit
-    only — a refuter is never auto-credited). Loud result dict; invalid
+    only — a refuter is never auto-credited). The event lands in the
+    workspace's own store (cross-project off). Loud result dict; invalid
     labels or outcome are refused, nothing raises into the producer."""
     outcome = str(outcome or "").strip()
     if outcome not in _EVENT_ADDS:
@@ -158,35 +160,37 @@ def record_outcome(evidence, outcome, *, context_class=None, by=None,
         "beta_add": beta_add,
         "by": str(by) if by else None,
     }
-    appended = _qc._append_row(store_path(), row)
+    appended = _qc._append_row(store_path(ws), row)
     return {"recorded": bool(appended),
             "reason": None if appended else "write-failed",
             "row": row}
 
 
-def record_refutation(evidence, *, refuted_by=None, context_class=None,
+def record_refutation(ws, evidence, *, refuted_by=None, context_class=None,
                       ts=None) -> dict:
     """Evidence REFUTED by later evidence -> its source class's beta
     += 1 (the source produced evidence that was overturned)."""
-    return record_outcome(evidence, REFUTED, context_class=context_class,
+    return record_outcome(ws, evidence, REFUTED,
+                          context_class=context_class,
                           by=refuted_by, ts=ts)
 
 
-def record_confirmation(evidence, *, confirmed_by=None, context_class=None,
-                        ts=None) -> dict:
+def record_confirmation(ws, evidence, *, confirmed_by=None,
+                        context_class=None, ts=None) -> dict:
     """Evidence CONFIRMED by later evidence -> its source class's alpha
     += 1 (the source's evidence held up)."""
-    return record_outcome(evidence, CONFIRMED, context_class=context_class,
+    return record_outcome(ws, evidence, CONFIRMED,
+                          context_class=context_class,
                           by=confirmed_by, ts=ts)
 
 
 # ------------------------------------------------- the read faces (fold)
 
-def _read_events() -> list[dict]:
+def _read_events(ws) -> list[dict]:
     """Tolerant read: schema-filtered rows in file order. Missing store
     -> []; corrupt lines skip."""
     try:
-        text = store_path().read_text(encoding="utf-8", errors="replace")
+        text = store_path(ws).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
     return [r for r in iter_jsonl(text.splitlines())
@@ -255,11 +259,13 @@ class ReliabilityView:
         return rng.betavariate(post["alpha"], post["beta"])
 
 
-def fold(events: list[dict] | None = None) -> ReliabilityView:
+def fold(events: list[dict] | None = None, *, ws=None) -> ReliabilityView:
     """Fold the event store (or an explicit event list — the replay
     face) into the reliability view. Only schema'd rows with a known
-    event vocabulary contribute; raw rows stay untouched."""
-    rows = _read_events() if events is None else [
+    event vocabulary contribute; raw rows stay untouched. Reading the
+    store requires the workspace (the store is workspace-local); an
+    explicit event list needs none."""
+    rows = _read_events(ws) if events is None else [
         r for r in events
         if isinstance(r, dict) and str(r.get("schema") or "") == SCHEMA]
     cells: dict[tuple[str, str], list] = {}
@@ -285,16 +291,18 @@ def fold(events: list[dict] | None = None) -> ReliabilityView:
 
 def reliability_weight(evidence, *, context_class=None,
                        rng: random.Random | None = None,
-                       view: ReliabilityView | None = None) -> float:
+                       view: ReliabilityView | None = None,
+                       ws=None) -> float:
     """The credit face for one evidence item: a Thompson draw of its
     source's reliability when the item carries labels; 1.0 when they
     are absent ("weighted ... if available"). ``view`` lets a caller
     reuse one fold across many items; the composition itself
-    (step_credit * theta) lives in rlvr.step_credit."""
+    (step_credit * theta) lives in rlvr.step_credit. ``ws`` scopes the
+    store read (workspace-local) when no view is supplied."""
     if _resolve(evidence, None) is None:
         return 1.0
     if view is None:
-        view = fold()
+        view = fold(ws=ws)
     return view.theta(evidence, context_class=context_class, rng=rng)
 
 

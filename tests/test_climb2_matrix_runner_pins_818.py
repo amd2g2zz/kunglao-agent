@@ -75,9 +75,6 @@ class TestArmValidation:
             _arm("x", face="loop", store="none"),         # loop needs store
             _arm("x", face="loop", store="none",
                  env={"A": 1}),                           # env not str->str
-            _arm("x", face="loop", store="warm",
-                 sampling={"mode": "multi-sample", "samples": 2,
-                           "budget_each": 1.0}),          # loop + sampling
             "not-a-mapping",
         ]
         for bad in faults:
@@ -228,9 +225,15 @@ class TestLaunchShape:
                                    "KEEP": "yes"})
         assert "KUNGLAO_RECALL" not in env
         assert env["KEEP"] == "yes"
-        assert env[emr.STORE_ENV] == str(emr.store_dir_of(plan))
+        # the store is workspace-local (cross-project off): the matrix
+        # stages SEED/EXPORT dirs, never an outside-workspace store root
+        assert emr.STORE_ENV not in env
+        assert env[emr.SEED_STORE_ENV] == str(emr.store_dir_of(plan))
+        assert env[emr.EXPORT_STORE_ENV] == str(emr.store_dir_of(plan))
         bare = emr.child_env(self._plan(), {})
         assert emr.STORE_ENV not in bare
+        assert emr.SEED_STORE_ENV not in bare
+        assert emr.EXPORT_STORE_ENV not in bare
         # the arm's declared env wins last
         flagged = emr.child_env(self._plan(), {})
         assert flagged["KUNGLAO_FLAG"] == "1"
@@ -269,8 +272,8 @@ class TestLaunchShape:
             warm, None)
         empty = tmp_path / "empty-store"
         empty.mkdir()
-        assert "posterior-store.jsonl" in emr.warm_source_fault(warm, empty)
-        (empty / emr.STORE_FILE).write_text("", encoding="utf-8")
+        assert "knowledge-store.jsonl" in emr.warm_source_fault(warm, empty)
+        (empty / emr.FAMILY_STORE_FILE).write_text("", encoding="utf-8")
         assert emr.warm_source_fault(warm, empty) is None
 
     def test_materialize_cold_and_warm(self, tmp_path) -> None:
@@ -280,31 +283,31 @@ class TestLaunchShape:
         assert out.is_dir() and list(out.iterdir()) == []
         src = tmp_path / "warm-src"
         src.mkdir()
-        (src / emr.STORE_FILE).write_text('{"row": 1}\n', encoding="utf-8")
+        (src / emr.FAMILY_STORE_FILE).write_text('{"row": 1}\n', encoding="utf-8")
         warm = self._plan(run_dir=tmp_path / "cell-warm", store_kind="warm")
         out = emr.materialize_store(warm, src)
-        assert (out / emr.STORE_FILE).read_text("utf-8") == '{"row": 1}\n'
+        assert (out / emr.FAMILY_STORE_FILE).read_text("utf-8") == '{"row": 1}\n'
         # a warm arm with a bad source refuses and cleans up
         broken = self._plan(run_dir=tmp_path / "cell-broken",
                             store_kind="warm")
         with pytest.raises(emr.ConfigError):
             emr.materialize_store(broken, None)
         assert not broken.run_dir.exists() or \
-            not (emr.store_dir_of(broken) / emr.STORE_FILE).exists()
+            not (emr.store_dir_of(broken) / emr.FAMILY_STORE_FILE).exists()
         shutil.rmtree(tmp_path / "cell-warm", ignore_errors=True)
 
     def test_per_arm_materializes_once(self, tmp_path) -> None:
         src = tmp_path / "warm-src"
         src.mkdir()
-        (src / emr.STORE_FILE).write_text("v1\n", encoding="utf-8")
+        (src / emr.FAMILY_STORE_FILE).write_text("v1\n", encoding="utf-8")
         plan = self._plan(run_dir=tmp_path / "arm/u1", store_kind="warm",
                           store_mode="per-arm")
         first = emr.materialize_store(plan, src)
-        (src / emr.STORE_FILE).write_text("v2\n", encoding="utf-8")
+        (src / emr.FAMILY_STORE_FILE).write_text("v2\n", encoding="utf-8")
         second = emr.materialize_store(plan, src)
         assert first == second
         # the within-sequence copy is NOT re-landed: accumulated state stays
-        assert (second / emr.STORE_FILE).read_text("utf-8") == "v1\n"
+        assert (second / emr.FAMILY_STORE_FILE).read_text("utf-8") == "v1\n"
 
     def test_run_row_and_progress_faces(self, tmp_path) -> None:
         plan = self._plan()

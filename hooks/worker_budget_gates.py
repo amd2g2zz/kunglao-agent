@@ -2357,9 +2357,9 @@ def _window_consumption(ws: Path, since: float, claim_id: str | None,
     ``tc_rows=None`` (the battery path: no lawful supplier in the hook
     call chain) keeps tc-sourced calls at 0 — the documented
     unattributed-unavailable posture, exactly like the unattributable
-    cost_events source — and the wall dimension stays the primary kill.
-    runs/cost_events.jsonl carries no worker identity
-    ({"ts","amount","source"}) — it is UNATTRIBUTABLE and is EXCLUDED
+    legacy cost source — and the wall dimension stays the primary kill.
+    The historical cost rows carry no worker identity
+    ({"ts","amount","source"}) — they are UNATTRIBUTABLE and are EXCLUDED
     from per-worker accounting: workspace-wide spend is never silently
     charged to every worker. The envelope's usd dimension fires only
     when a worker-attributed spend source exists (today: none); the

@@ -14,20 +14,22 @@ Three verdicts:
   STALLED  → open_count flat for 5+ rounds, OR a DISPATCHED claim stuck 3+
              rounds (#2: a never-dispatched claim is frontier queue, not
              stuck — stamping it stuck deadlocked the dispatch gate)
-  SPINNING → flat 8+ rounds, OR facts grew 5+ while open_count held (churn)
+  SPINNING → open_count flat for 8+ rounds over open work. Fact growth
+             while open_count holds is reported under `churn` as
+             information only: discovery adds facts before claims close.
 
 Recovery protocol is printed alongside the verdict — this is NOT a "flag and
-walk away" tool. STALLED/SPINNING come with a concrete next action. #249:
-the STALLED action is INVOKABLE — the verdict JSON carries a `remedy`
-reference (the issue-234 target-ladder decomposition operator + the
-remedy-declared dispatch marker the gate exemption admits), so the
-prescribed remedy can never be prose-only again.
+walk away" tool. STALLED/SPINNING come with a concrete next action, and the
+action is INVOKABLE — the verdict JSON carries a `remedy` reference (the
+target-ladder decomposition operator + the remedy-declared dispatch marker
+the gate exemption admits), so the prescribed remedy is never prose-only.
 
 Exit codes (machine-readable for hooks):
   0 = HEALTHY   (keep dispatching)
   1 = STALLED   (diagnose before dispatching — the prescribed remedy
-      dispatch is EXEMPT at the gate's rc=1 face, issue-249)
-  2 = SPINNING  (stop dispatching)
+      dispatch is EXEMPT at the gate's rc=1 face)
+  2 = SPINNING  (diagnose before dispatching — the prescribed remedy
+      dispatch is EXEMPT at the gate's rc=2 face, as at rc=1)
   3 = NO_DATA   (no ledger yet — run convergence_check.py per turn)
   4 = CRASHED   (#3: unexpected error — the check itself is broken; hooks
       must FAIL OPEN on 4, a crashed gate must never masquerade as STALLED)
@@ -83,9 +85,9 @@ EXIT_SPINNING = 2
 EXIT_NO_DATA = 3
 EXIT_CRASHED = 4  # #3: unexpected error in the check itself — hooks fail open
 
-# The STALLED remedy reference — the invokable decomposition operator
-# (the issue-234 target-ladder fan-out) plus the remedy-declared dispatch
-# marker the gate's rc=1 exemption admits. The MARKER literal is enforced
+# The STALLED/SPINNING remedy reference — the invokable decomposition
+# operator (the target-ladder fan-out) plus the remedy-declared dispatch
+# marker the gate's remedy exemption admits. The MARKER literal is enforced
 # by hooks/lib_kunglao.STALLED_REMEDY_MARKER (the single source the
 # exemption face consumes); this copy exists because scripts/ must not
 # import the hooks twin — the cross-face sync is pinned by
@@ -93,6 +95,14 @@ EXIT_CRASHED = 4  # #3: unexpected error in the check itself — hooks fail open
 STALLED_REMEDY_MARKER = "remedy: decompose"
 STALLED_REMEDY_MINT_CMD = ("python scripts/target_ladder.py <workspace> "
                            "--mint <stuck-claim>")
+# Verdicts whose JSON carries the remedy block and whose state the gate's
+# exemption face reads.
+REMEDY_VERDICTS = ("STALLED", "SPINNING")
+# The statement printed in place of the remedy sentence when the remedy
+# block names no claim: there is no remedy target to admit.
+NO_STUCK_REMEDY_NOTE = ("No claim is stuck, so no remedy dispatch is "
+                        "admitted at the gate until a dispatched claim "
+                        "stays open.")
 
 # #341: the value-divergence input. rotation_induction appends one
 # operator_action row (action=runtime_value_rotation) per fired join; the
@@ -270,6 +280,30 @@ def _queued_count(ledger: list) -> int | None:
     return len(set(ledger[-1].get("open_ids") or []) - set(tail_dispatched))
 
 
+def _remedy_clause(stuck_ids: list) -> str:
+    """The invokable-remedy sentence shared by the STALLED and SPINNING
+    action text: the dispatch marker the gate admits and the mint command
+    that registers the split's sub-claims. With no stuck claim there is no
+    remedy target, and the sentence says so."""
+    if not stuck_ids:
+        return NO_STUCK_REMEDY_NOTE
+    return (f"Invokable remedy: a dispatch carrying "
+            f"`{STALLED_REMEDY_MARKER}` for a stuck claim is admitted at the gate; "
+            f"{STALLED_REMEDY_MINT_CMD} registers the split's sub-claims — "
+            f"minting breaks the flatline mechanically.")
+
+
+def _spinning_targets(stuck_ids: list, snapshot: dict) -> str:
+    """The claim phrase the SPINNING prose opens its intervention list
+    with: the stuck set, or — when no dispatched claim is stuck — the
+    leading open claims. Display only: the remedy block names the stuck
+    set alone."""
+    if stuck_ids:
+        return f"For each stuck claim ({', '.join(stuck_ids)})"
+    head = ", ".join((snapshot.get("open_ids") or [])[:3]) or "none named"
+    return f"No claim is stuck; for each open claim ({head})"
+
+
 def _rotation_face(rot: list) -> dict:
     """The additive rotation_events result face: {} when none — prior
     output shapes untouched (the queued_claims absence pattern)."""
@@ -318,26 +352,26 @@ def assess(ledger: list, ws=None) -> dict:
         # block ALL dispatches (including unrelated research agents).
         if last_open == 0:
             verdict, exit_code = "HEALTHY", EXIT_HEALTHY
-        elif flatline >= SPINNING_FLATLINE or churn["is_churning"]:
+        elif flatline >= SPINNING_FLATLINE:
             verdict, exit_code = "SPINNING", EXIT_SPINNING
         elif flatline >= STALLED_FLATLINE or stuck:
             verdict, exit_code = "STALLED", EXIT_STALLED
         else:
             verdict, exit_code = "HEALTHY", EXIT_HEALTHY
 
+        stuck_ids = [s["claim"] for s in stuck]
         if verdict == "SPINNING":
-            stuck_ids = [s["claim"] for s in stuck] or (ledger[-1].get("open_ids") or [])[:3]
             flat_desc = f"{last_open}→{first_open}" if first_open == last_open else f"{first_open}→{last_open}"
             action = (
-                f"STOP dispatching. The loop has flatlined {flatline} rounds with "
+                f"The loop has flatlined {flatline} rounds with "
                 f"{churn['facts_delta']} new facts but open_count {flat_desc}. "
-                f"For each stuck claim ({', '.join(stuck_ids) or 'none named'}), pick ONE: "
+                f"{_spinning_targets(stuck_ids, ledger[-1])}, pick ONE: "
                 f"escalate tier (T1→T2→T3) / reformulate the claim / decompose into smaller / "
                 f"DEFER with rationale / escalate to user with a specific question. "
-                f"Re-dispatching the same claim >3x without a status change is FORBIDDEN."
+                f"Re-dispatching the same claim >3x without a status change is FORBIDDEN. "
+                f"{_remedy_clause(stuck_ids)}"
                 + _rotation_note(rot_events))
         elif verdict == "STALLED":
-            stuck_ids = [s["claim"] for s in stuck]
             queued_note = ""
             if queued:
                 queued_note = (f" Queued claims (never dispatched): {queued} — "
@@ -348,10 +382,7 @@ def assess(ledger: list, ws=None) -> dict:
                 f"{queued_note} Re-read each stuck claim's definition + "
                 f"gathered facts, then ask: 'what evidence would actually close this?' "
                 f"If the tier is exhausted, reformulate or decompose. Do NOT re-dispatch unchanged. "
-                f"Invokable remedy (issue-249): a dispatch carrying "
-                f"`{STALLED_REMEDY_MARKER}` for a stuck claim is admitted at the gate; "
-                f"{STALLED_REMEDY_MINT_CMD} registers the split's sub-claims — "
-                f"minting breaks the flatline mechanically."
+                f"{_remedy_clause(stuck_ids)}"
                 + _rotation_note(rot_events))
         else:
             action = (
@@ -373,11 +404,10 @@ def assess(ledger: list, ws=None) -> dict:
             "last_snapshot": ledger[-1],
         }
 
-        # The verdict JSON carries the invokable remedy reference (the
-        # issue-249 acceptance): the recovery protocol is never prose-only
-        # again. STALLED-only: SPINNING keeps its harder-stop semantics
-        # (out of scope per the issue); HEALTHY/NO_DATA shapes untouched.
-        if verdict == "STALLED":
+        # The verdict JSON carries the invokable remedy reference on both
+        # remedy verdicts: the recovery protocol is never prose-only.
+        # HEALTHY/NO_DATA shapes are untouched.
+        if verdict in REMEDY_VERDICTS:
             r = {**r, "remedy": {
                 "operator": "decompose",
                 "claims": stuck_ids,
@@ -459,28 +489,32 @@ def _remedy_depth(ledger: list, stuck_ids: list) -> int:
 
 
 def stalled_state(workspace):
-    """Issue-249: the machine-readable STALLED state the remedy-exemption
-    face (hooks/worker_budget_core.check_convergence_health rc=1) consumes.
+    """The machine-readable remedy state the gate's exemption faces
+    (hooks/worker_budget_core.check_convergence_health, rc=1 STALLED and
+    rc=2 SPINNING) consume.
 
     Same detector, same ledger, same thresholds — the exemption face must
     never re-implement the verdict, so this is the single state source it
     delegates to. Pure read: no telemetry (ws deliberately NOT passed to
-    assess), no writes. None when the ledger is absent or the verdict is
-    not STALLED — the caller treats None as fail-closed (no exemption).
+    assess), no writes. `verdict` names which remedy verdict holds and
+    `stuck_ids` is the detector's stuck set — the dispatched claims open
+    for STALLED_STUCK_CLAIM consecutive snapshots, empty when none. None
+    when the ledger is absent or the verdict is neither STALLED nor
+    SPINNING — the caller treats None as fail-closed (no exemption).
     """
     ledger = _read_ledger(Path(workspace))
     if not ledger:
         return None
     r = assess(ledger)
-    if r.get("verdict") != "STALLED":
+    if r.get("verdict") not in REMEDY_VERDICTS:
         return None
     stuck_ids = [s["claim"] for s in (r.get("stuck_claims") or [])]
     return {
-        "verdict": "STALLED",
+        "verdict": r["verdict"],
         "stuck_ids": stuck_ids,
         "flatlined_open_ids": list(
             (r.get("last_snapshot") or {}).get("open_ids") or []),
-        "remedy": r.get("remedy"),
+        "remedy": r["remedy"],
         # round-2 escalation: >= REMEDY_MAX_DEPTH closes the follow-through
         # channel at the gate face (repeated cycles -> the human face)
         "remedy_depth": _remedy_depth(ledger, stuck_ids),
@@ -539,7 +573,10 @@ def _human(r: dict) -> str:
             lines.append(f"  {s['claim']:>8}  open {s['open_for_rounds']} rounds")
     if r.get("queued_claims") is not None:
         lines.append(f"queued (never dispatched): {r['queued_claims']}")
-    if r.get("remedy"):
+    if r.get("remedy") and not r["remedy"]["claims"]:
+        lines.append(f"remedy: {r['remedy']['operator']} — "
+                     f"{NO_STUCK_REMEDY_NOTE}")
+    elif r.get("remedy"):
         lines.append(f"remedy: {r['remedy']['operator']} — mint via "
                      f"{r['remedy']['mint_cmd']}; a dispatch carrying "
                      f"`{r['remedy']['dispatch_marker']}` for a stuck claim "

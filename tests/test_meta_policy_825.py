@@ -15,8 +15,9 @@ The unified RL model's second card (#806 axis, after the #824 contract):
      dispatch interface (envelope block meta-policy/1) wired into
      build_dispatch_context fail-open;
   4. exactly three learnable knob groups (value-table weights /
-     utility-score weights / retrieval threshold+count) and the two
-     component-ablation switches;
+     utility-score weights / retrieval threshold+count); the former
+     component-ablation switches are retired — every component runs
+     unconditionally on the dispatch path it feeds;
   5. the utility chain retrieved -> cited -> improved, measured on the
      episode.
 
@@ -54,16 +55,6 @@ _META_ENV = ("KUNGLAO_META_RETRIEVE_MAX", "KUNGLAO_META_MIN_UTILITY",
              "KUNGLAO_META_W_REWARD", "KUNGLAO_META_W_COST",
              "KUNGLAO_META_W_PRIOR", "KUNGLAO_META_N_SHRINK",
              "KUNGLAO_META_W_CITATION", "KUNGLAO_META_W_RETRIEVAL")
-_LEARNING_ENV = ("KUNGLAO_META_RETRIEVAL", "KUNGLAO_META_VALUE_TABLE",
-                 "KUNGLAO_META_ATTRIBUTION", "KUNGLAO_META_PLAYBOOK")
-
-
-@pytest.fixture(autouse=True)
-def _declared_learning_faces(monkeypatch):
-    """Learning switches default OFF; these pins assert the declared-ON
-    behavior of each component, so every test declares them on."""
-    for name in _LEARNING_ENV:
-        monkeypatch.setenv(name, "1")
 
 
 def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
@@ -448,17 +439,12 @@ class TestEnvelopeInterface:
 
 class TestKnobs:
     def test_documented_defaults(self, monkeypatch):
-        for name in _META_ENV + _LEARNING_ENV:
+        for name in _META_ENV:
             monkeypatch.delenv(name, raising=False)
         k = mp.knobs()
         assert k["retrieve_max"] == 3
         assert k["min_utility"] == pytest.approx(0.0)
         assert k["w_reward"] == pytest.approx(1.0)
-        # learning switches default OFF unless an arm declares them
-        assert k["retrieval"] is False
-        assert k["value_table"] is False
-        assert k["attribution"] is False
-        assert k["playbook"] is False
 
     def test_env_overrides(self, monkeypatch):
         for name in _META_ENV:
@@ -470,36 +456,6 @@ class TestKnobs:
         assert k["retrieve_max"] == 7
         assert k["min_utility"] == pytest.approx(0.25)
         assert k["w_prior"] == pytest.approx(0.5)
-
-
-# --------------------------------------------- 6. component ablations
-
-class TestAblations:
-    def test_retrieval_off_removes_component(self, tmp_path, monkeypatch):
-        for name in _META_ENV:
-            monkeypatch.delenv(name, raising=False)
-        ws = _mk_ws(tmp_path)
-        _seed(ws, _episode("C-9", ["fam-x"], "persist"))
-        monkeypatch.setenv("KUNGLAO_META_RETRIEVAL", "0")
-        ctx = mr.assemble(ws, ["fam-x"], phase="episode_start")
-        assert ctx["cases"] == [] and ctx["playbook"] == []
-        assert ctx["budget"]["retrieval"] is False
-        doc, _body = es.read_episode_file(pool.episode_path(ws, "C-9"))
-        assert doc["utility"]["retrievals"] == 0, \
-            "ablated retrieval must not bump pool counters"
-
-    def test_value_table_off_removes_contextual_term(self, tmp_path,
-                                                     monkeypatch):
-        for name in _META_ENV:
-            monkeypatch.delenv(name, raising=False)
-        ws = _mk_ws(tmp_path)
-        _seed(ws, _episode("C-A", ["fam-x", "ca"], "persist"))
-        _seed(ws, _episode("C-B", ["fam-x", "cb"], "switch"))
-        monkeypatch.setenv("KUNGLAO_META_VALUE_TABLE", "0")
-        a = mp.select_commit(ws, ["fam-x", "ca"])
-        b = mp.select_commit(ws, ["fam-x", "cb"])
-        assert a["action"] == b["action"]
-        assert a["source"] == "prior_ablated"
 
 
 # --------------------------------------------- 7. the bandit demotion pin

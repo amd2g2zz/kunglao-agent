@@ -28,8 +28,10 @@ principled structure):
   (b) utility-score weights  W_CITATION / W_RETRIEVAL
   (c) retrieval threshold/count (the context budget)  RETRIEVE_MAX /
       MIN_UTILITY
-plus the two component-ablation switches (RETRIEVAL / VALUE_TABLE =
-0). Env-overridable, documented defaults, nothing fitted at runtime.
+Env-overridable, documented defaults, nothing fitted at runtime. The
+former component-ablation switches (KUNGLAO_META_RETRIEVAL /
+VALUE_TABLE / ATTRIBUTION / PLAYBOOK) are retired: every component now
+runs unconditionally on the dispatch path it feeds.
 
 `envelope_block` builds the meta-policy block of the dispatch envelope
 (schema `meta-policy/1`: commit + context + budget) — the SINGLE
@@ -76,8 +78,8 @@ def _env_int(name: str) -> int:
 
 
 def knobs() -> dict:
-    """The three learnable knob groups + the ablation switches, read
-    through the runtime-switch registry (the single default source)."""
+    """The three learnable knob groups, read through the runtime-switch
+    registry (the single default source)."""
     return {
         # (a) value-table weights
         "w_reward": _env_float("KUNGLAO_META_W_REWARD"),
@@ -90,12 +92,6 @@ def knobs() -> dict:
         # (c) retrieval threshold / count (the context budget)
         "retrieve_max": _env_int("KUNGLAO_META_RETRIEVE_MAX"),
         "min_utility": _env_float("KUNGLAO_META_MIN_UTILITY"),
-        # component-ablation switches (declared per arm; learning default off)
-        "retrieval": runtime_switches.get_bool("KUNGLAO_META_RETRIEVAL"),
-        "value_table": runtime_switches.get_bool("KUNGLAO_META_VALUE_TABLE"),
-        # the four-knob component-ablation set (the P3 switches)
-        "attribution": runtime_switches.get_bool("KUNGLAO_META_ATTRIBUTION"),
-        "playbook": runtime_switches.get_bool("KUNGLAO_META_PLAYBOOK"),
     }
 
 
@@ -153,42 +149,37 @@ def select_commit(ws, features: list[str], *, family: str | None = None,
 
     scores = {a: 0.0 for a in actions}
     source = "prior"
-    if k["value_table"]:
-        table = pool_indexer.value_table(ws)
-        stats: dict[str, dict] = {a: {"wn": 0.0, "sr": 0.0, "sc": 0.0}
-                                  for a in actions}
-        for (cell_features, action), cell in table.items():
-            if action not in stats:
-                continue
-            weight = _overlap_weight(cell_features, features)
-            if weight <= 0.0:
-                continue
-            row = stats[action]
-            row["wn"] += weight * float(cell["n"])
-            row["sr"] += weight * float(cell["n"]) \
-                * float(cell["mean_reward"])
-            row["sc"] += weight * float(cell["n"]) \
-                * float(cell["mean_cost"])
-        covered = False
-        for action in actions:
-            row = stats[action]
-            n_eff = row["wn"]
-            if n_eff <= 0.0:
-                # zero coverage: the prior IS the score at conf = 0
-                scores[action] = k["w_prior"] * prior.get(action, 0.0)
-                continue
-            covered = True
-            conf = n_eff / (n_eff + max(k["n_shrink"], 1e-9))
-            empirical = (k["w_reward"] * (row["sr"] / n_eff)
-                         - k["w_cost"] * (row["sc"] / n_eff))
-            scores[action] = (conf * empirical
-                              + (1.0 - conf) * k["w_prior"]
-                              * prior.get(action, 0.0))
-        source = "value_table" if covered else "prior"
-    else:
-        source = "prior_ablated"
-        for action in actions:
+    table = pool_indexer.value_table(ws)
+    stats: dict[str, dict] = {a: {"wn": 0.0, "sr": 0.0, "sc": 0.0}
+                              for a in actions}
+    for (cell_features, action), cell in table.items():
+        if action not in stats:
+            continue
+        weight = _overlap_weight(cell_features, features)
+        if weight <= 0.0:
+            continue
+        row = stats[action]
+        row["wn"] += weight * float(cell["n"])
+        row["sr"] += weight * float(cell["n"]) \
+            * float(cell["mean_reward"])
+        row["sc"] += weight * float(cell["n"]) \
+            * float(cell["mean_cost"])
+    covered = False
+    for action in actions:
+        row = stats[action]
+        n_eff = row["wn"]
+        if n_eff <= 0.0:
+            # zero coverage: the prior IS the score at conf = 0
             scores[action] = k["w_prior"] * prior.get(action, 0.0)
+            continue
+        covered = True
+        conf = n_eff / (n_eff + max(k["n_shrink"], 1e-9))
+        empirical = (k["w_reward"] * (row["sr"] / n_eff)
+                     - k["w_cost"] * (row["sc"] / n_eff))
+        scores[action] = (conf * empirical
+                          + (1.0 - conf) * k["w_prior"]
+                          * prior.get(action, 0.0))
+    source = "value_table" if covered else "prior"
 
     order = {a: i for i, a in enumerate(es.COMMIT_ACTIONS)}
     best = min(actions, key=lambda a: (-scores[a], order.get(a, 99)))

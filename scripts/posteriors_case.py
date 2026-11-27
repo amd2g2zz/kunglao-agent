@@ -29,6 +29,8 @@
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import math
 import random
 from pathlib import Path
@@ -230,26 +232,52 @@ class PosteriorLedger:
                 led.warnings.append(f"pq {pid!r} skipped: {exc}")
         return led
 
+    @classmethod
+    @contextmanager
+    def for_update(cls, ws):
+        """Read a complete snapshot under the process lock or refuse the mutation."""
+        from platform_matrix import exclusive_file_lock
+        with exclusive_file_lock((Path(ws) / LEDGER_REL).with_suffix(".lock")):
+            ledger = cls.load(ws)
+            if ledger.degraded or ledger.warnings:
+                raise ValueError("posterior update refused: " + "; ".join(ledger.warnings))
+            yield ledger
+
     def save(self, ws) -> Path:
-        """原子写（同目录 tmp + os.replace）；runs/ 缺失则建。"""
+        """原子写（同目录 tmp + os.replace）；runs/ 缺失则建。账本文档
+        在写时盖学习通道的 seal（additive ``seal`` 键）：armed 读脸只认
+        seal-valid 账本，规范写者（PosteriorLedger.save）是唯一能让账本
+        通过 armed 读脸的形状。unarmed 文档与旧形字节一致。"""
+        from rlvr.learning_seal import sign_row  # noqa: PLC0415 — lazy
+        doc = sign_row(self.to_doc())
         path = Path(ws) / LEDGER_REL
         return atomic_write_text(
             path,
-            yaml.safe_dump(self.to_doc(), allow_unicode=True, sort_keys=True))
+            yaml.safe_dump(doc, allow_unicode=True, sort_keys=True))
 
     @classmethod
     def load(cls, ws) -> "PosteriorLedger":
         path = Path(ws) / LEDGER_REL
-        if not path.exists():
-            return cls()
         try:
             doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return cls()
         except (OSError, yaml.YAMLError) as exc:
             return cls(degraded=True,
                        warnings=[f"unreadable {LEDGER_REL}: {exc}"])
         if not isinstance(doc, dict):
             return cls(degraded=True,
                        warnings=[f"{LEDGER_REL}: top level is not a mapping"])
+        from kunglao_log import warn as _warn  # noqa: PLC0415 — lazy
+        from rlvr import learning_seal as _seal  # noqa: PLC0415 — lazy
+        if _seal.armed():
+            ok, why = _seal.verify_row(doc)
+            if not ok:
+                reason = (f"{LEDGER_REL}: learning seal invalid ({why}) "
+                          f"— the ledger is refused (armed channel: only "
+                          f"the canonical writer's seal passes)")
+                _warn("posteriors_case.load", reason)
+                return cls(degraded=True, warnings=[reason])
         try:
             return cls.from_doc(doc)
         except PosteriorSchemaError:

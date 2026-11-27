@@ -30,10 +30,12 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 import time
 from pathlib import Path
 
-from kunglao_log import warn, warn_once_stateful
+from kunglao_log import (info, reset_once_state, warn,
+                         warn_once_stateful, warn_workspace)
 from template_version import read_skill_version
 
 #: versioned schema stamp — rides every seal block (the #736 stamp face)
@@ -47,6 +49,18 @@ KEY_PATH = Path(os.path.expanduser("~/.claude/kunglao-learning.key"))
 _KEY_MIN = 32
 
 _NOTICE: dict[str, bool] = {"shown": False}
+
+#: the ARMED startup face's once-per-process gate (the armed counterpart
+#: of the unarmed notice gate above).
+_FACE: dict[str, bool] = {"shown": False}
+
+#: the observed armed/unarmed posture memo: an observed flip re-opens
+#: both once-faces (a state transition, never a stale silence).
+_POSTURE: dict[str, bool | None] = {"armed": None}
+
+#: the consolidated-ledger families the channel seals at write — the
+#: ARMED face's row count reads exactly these rows.
+_SEALED_FAMILIES = ("experience", "settlement")
 
 #: R2a: the run-head build anchor — captured at the FIRST armed seal
 #: operation in this process and never re-anchored; a mid-run build
@@ -100,6 +114,109 @@ def armed() -> bool:
     return _key() is not None
 
 
+def provision(keypath=None) -> dict:
+    """The operator face: generate the learning key and arm the channel.
+
+    Keygen mirrors the review-gate key-init (32 random bytes as hex
+    text), the file lands at ``keyfile()`` (or a declared path) created
+    DIRECTLY at mode 0600 (``os.open`` applies the mode at creation, so
+    no crash window ever leaves a wider key on disk), and the channel
+    arms iff the module's own key path now resolves a sufficient key.
+    IDEMPOTENT, never destructive: an existing sufficient key is a no-op
+    (re-provisioning would silently invalidate every seal minted under
+    the old key) whose MODE is hardened to 0600 when a wider file is
+    found; an existing key below the minimum is refused with the
+    by-hand repair path — never auto-overwritten. A hardening chmod that
+    fails reports ``armed: false`` with the loud note — the status never
+    claims an armed channel whose key mode could not be guaranteed. A
+    declared path inside a git work tree is called out in the note (the
+    fixed key path lives outside the repo; an in-repo key must never
+    enter history). The returned status dict names the path and a short
+    sha256 id only: the key material NEVER reaches the status, the
+    logs, or stdout."""
+    path = keyfile() if keypath is None else Path(keypath)
+    if path.exists():
+        try:
+            data = path.read_bytes().strip()
+        except OSError as exc:
+            return {"path": str(path), "created": False,
+                    "armed": armed(), "key_id": None,
+                    "note": f"existing key unreadable "
+                            f"({type(exc).__name__}: {exc})"}
+        if len(data) >= _KEY_MIN:
+            note = "already provisioned — left untouched"
+            mode = path.stat().st_mode & 0o777
+            if mode & 0o077:  # group/other bits set: harden to 0600
+                try:
+                    os.chmod(path, 0o600)
+                    note = "already provisioned — mode hardened to 0600"
+                except OSError as exc:
+                    return {"path": str(path), "created": False,
+                            "armed": False, "key_id": hashlib.sha256(
+                                data).hexdigest()[:12],
+                            "note": f"key mode {oct(mode)} could NOT be "
+                                    f"hardened to 0600 "
+                                    f"({type(exc).__name__}: {exc}) — "
+                                    f"harden it by hand before arming"}
+            return {"path": str(path), "created": False, "armed": armed(),
+                    "key_id": hashlib.sha256(data).hexdigest()[:12],
+                    "note": note}
+        return {"path": str(path), "created": False, "armed": False,
+                "key_id": None,
+                "note": f"existing key below {_KEY_MIN} bytes — remove "
+                        f"it by hand to re-provision (never "
+                        f"auto-overwritten)"}
+    key = secrets.token_bytes(32).hex().encode("ascii")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # the mode rides the CREATION call: a crash or an interleaved
+        # reader can never observe a wider key file
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            os.write(fd, key)
+        finally:
+            os.close(fd)
+    except FileExistsError:
+        # a concurrent provision won the race — NEVER touch the winner's
+        # key; the loser reports the now-armed status without a write.
+        warn("rlvr.learning_seal.provision",
+             "key already exists (concurrent provision?) — the winner's "
+             "key is untouched; reporting the armed status")
+        return {"path": str(path), "created": False, "armed": armed(),
+                "key_id": None,
+                "note": "key already exists (concurrent provision?)"}
+    except OSError as exc:
+        try:
+            path.unlink(missing_ok=True)  # never leave a partial key
+        except OSError as unlink_exc:
+            warn("rlvr.learning_seal.provision",
+                 f"partial key cleanup failed ({type(unlink_exc).__name__}: "
+                 f"{unlink_exc}) — remove {path} by hand")
+        return {"path": str(path), "created": False, "armed": armed(),
+                "key_id": None,
+                "note": f"write failed ({type(exc).__name__}: {exc})"}
+    note = None
+    if keypath is not None and _inside_git_work_tree(path):
+        note = ("declared path is inside a git work tree — the key must "
+                "never be committed (ignore it or move it outside the "
+                "repo; the fixed key path lives outside)")
+    return {"path": str(path), "created": True, "armed": armed(),
+            "key_id": hashlib.sha256(key).hexdigest()[:12], "note": note}
+
+
+def _inside_git_work_tree(path: Path) -> bool:
+    """True when the path sits under a directory holding a ``.git``
+    entry (a declared key path inside a repo is git-addable — the
+    provisioning note must say so). Best-effort, never raises."""
+    try:
+        for cand in (path.parent, *path.parent.parents):
+            if (cand / ".git").exists():
+                return True
+    except OSError:
+        return False
+    return False
+
+
 def _unarmed_state() -> str:
     """The unarmed face's CONFIG-STATE fingerprint (#944): the key file's
     absence and its shortness are DIFFERENT states — a state change
@@ -127,6 +244,59 @@ def _notice_once() -> None:
         f"(>= {_KEY_MIN} bytes) to arm the #799 learning seal; rows "
         f"and stashes ride legacy until then",
         state_key=_unarmed_state())
+
+
+def sealed_row_count(ws=None) -> int:
+    """The ARMED face's count: seal-stamped rows across the workspace's
+    learning ledger families (the rows the channel itself minted).
+    Any failure — no workspace, or ANY family read breaking — reads as
+    the honest ZERO (never a partial count: a count that silently skips
+    a family is neither the zero nor the total). Best-effort telemetry,
+    never a crash on the seal path."""
+    if ws is None:
+        ws = warn_workspace()
+    if ws is None:
+        return 0
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — leaf
+    n = 0
+    for family in _SEALED_FAMILIES:
+        try:
+            rows = _cl.read(Path(ws), family)
+        except Exception as exc:  # noqa: BLE001 — best-effort telemetry
+            warn("learning_seal",
+                 f"sealed-row count unreadable for {family!r} "
+                 f"({type(exc).__name__}: {exc}) — count reads 0")
+            return 0
+        n += sum(1 for r in rows
+                 if isinstance(r, dict) and isinstance(r.get("seal"), dict))
+    return n
+
+
+def _armed_face_once() -> None:
+    """The ARMED startup face: where the UNSEALED warn used to live, the
+    armed channel now announces itself — one INFO line per process
+    carrying the workspace's sealed-row count — and the once-marker's
+    entry for this op is cleared so a LATER disarm is a NEW state
+    transition that re-warns (a state-keyed posture, never a rate
+    limit). The key material never appears anywhere in the face."""
+    if _FACE["shown"]:
+        return
+    _FACE["shown"] = True
+    info("learning_seal", f"ARMED ({sealed_row_count()} sealed rows)")
+    reset_once_state("learning_seal")
+
+
+def _posture_tick() -> None:
+    """The posture memo: an observed armed/unarmed flip re-opens both
+    once-faces, so a mid-process key removal (or re-provision)
+    announces itself again — the faces are state-transition-keyed,
+    never silenced by process history."""
+    now = armed()
+    was = _POSTURE["armed"]
+    _POSTURE["armed"] = now
+    if was is not None and was is not now:
+        _NOTICE["shown"] = False
+        _FACE["shown"] = False
 
 
 def record_sha(row: dict) -> str:
@@ -159,10 +329,12 @@ def sign_row(row: dict) -> dict:
     the run-head anchor) the mint REFUSES — a loud event, never a
     warn-and-continue: the row rides unsealed and armed learners refuse
     it, so nothing banks (#799 R2a)."""
+    _posture_tick()
     key = _key()
     if key is None:
         _notice_once()
         return row
+    _armed_face_once()
     anchored = run_head_version()
     live = _live_version()
     if live != anchored:
@@ -224,11 +396,15 @@ def trusted_rows(rows, *, op: str) -> list[dict]:
     rate-limited tracer cannot collapse distinct refusals); unarmed,
     the rows pass through silently (the notice lives on the WRITE face).
     The input
-    list is never mutated; the underlying store files are never
-    written."""
+    list is never mutated; the learning STORES are never written (the
+    posture faces may persist the workspace's once-marker — config
+    state, not store bytes; a strictly read-only caller takes that one
+    small workspace write on the read path)."""
+    _posture_tick()
     if not armed():
         _notice_once()
         return list(rows)
+    _armed_face_once()
     kept: list[dict] = []
     for row in rows:
         if not isinstance(row, dict):

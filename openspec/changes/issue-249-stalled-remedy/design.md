@@ -85,18 +85,22 @@ face; channel A remains open but is bounded by the rest of the battery
 (plan gate on re-dispatch, zerooutput thrash breaker, priority), so
 repeated cycles escalate toward the human face instead of mint-looping.
 
-## Decision 2 — the exemption lives INSIDE the rc=1 face
+## Decision 2 — the exemption lives INSIDE the rc=1 / rc=2 faces
 
 `check_convergence_health(paths, claim_id=None, payload=None,
 prompt_text="")` consults the exemption only when the subprocess returned
-rc=1. Consequences:
+rc=1 or rc=2. `stalled_state` returns the state for both verdicts and
+names which one holds; its `stuck_ids` is the detector's stuck set at
+both (the remedy block's `claims` is the same set), so a never-dispatched
+open claim never becomes a remedy target. Consequences:
 
-- SPINNING (rc=2) is structurally unreachable for the exemption; rc=4
-  fail-open semantics are untouched.
+- rc=1 (STALLED) and rc=2 (SPINNING) share the exemption path: the
+  message names the face, the predicate, channels, depth cap and admit
+  telemetry are identical. rc=4 fail-open semantics are untouched.
 - The subprocess still runs exactly once; the state re-derive is the
   in-process pure read (`stalled_state` — no telemetry, no subprocess).
-  If the re-derive disagrees with rc=1 (ledger changed between the two
-  reads) the exemption stays OFF (fail-closed).
+  If the re-derive is neither STALLED nor SPINNING (ledger changed
+  between the two reads) the exemption stays OFF (fail-closed).
 - Legacy 1-arg callers (all existing tests, any external consumer) pass
   no claim id -> the exemption cannot fire -> exact prior behavior.
 - The other gates in the pre_check battery (workers/cap/tools/tier/

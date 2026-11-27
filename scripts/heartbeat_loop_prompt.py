@@ -27,6 +27,15 @@ Usage:
     python scripts/heartbeat_loop_prompt.py <workspace> [--interval 5m]
     python scripts/heartbeat_loop_prompt.py <workspace> --verify
 
+Registration (#1086): the OS scheduler registers the GATE WRAPPER —
+scripts/heartbeat_wake_gate.py <workspace> --wake-gate (its
+--print-registration face emits the crontab/schtasks line). A QUIET verdict
+injects nothing; a WAKE verdict injects THIS body once. Registering this
+body directly as the cron payload (CronCreate */5 with the stdout) is the
+bypass #1086 closed: that made a model turn fire every interval whether or
+not there was work, and the gate never ran. The durable /loop entry stays
+registered as the armed watchdog (#685 D5) — it is no longer the scheduler.
+
 --verify (#461, HARD): the caller-side cron-registration acceptance check.
 Reads the loop marker in <ws>/runs/.heartbeat.json (loop_registered);
 missing file / absent / false marker -> exit 1 + stderr guidance (how to
@@ -144,13 +153,13 @@ def build_prompt(ws: str, interval: str = "5m", *,
     return f"""/loop {interval} kunglao-agent heartbeat (self-registration + watchdog, event-wakeup topology):
 
 {startup}[Watchdog tick — the heartbeat fires ONLY on missed events]
-0. {runner} {tk} {ws} --origin cron   # one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check + watchdog decision
+0. {runner} {tk} {ws} --origin cron --wake-gate   # one-command tick IN GATE MODE (#1086): rc 0 QUIET -> end the turn NOW, nothing is owed; rc 3 WAKE -> act below
                                  # --origin cron (#616): this prompt body executing IS the proof the durable loop ran — the sidecar row is
                                  # tagged cron-born. In-session manual runs (re-arm chain) carry origin=manual, so the reset gate can tell
                                  # "the cron has fired" from "a human ticked" instead of refusing the only in-session recovery.
                                  # NOTE (#415): a durable cron registered MID-SESSION only fires after the NEXT Claude Code session start —
                                  # a quiet gap right after registration is deploy-day shape, not a dead cron (--reset-continuity re-arms).
-   - report.watchdog.fired == false -> this wake is a NO-OP: end the turn NOW. Events already wake the session
+   - rc 0 QUIET / report.watchdog.fired == false -> this wake is a NO-OP: end the turn NOW. Events already wake the session
      (dispatch returns in-turn, worker completions between-turns, the Stop WORKGUARD judges turn-exit);
      re-reading manuals or dispatching from a quiet wake is the noise this watchdog replaced.
    - report.watchdog.fired == true  -> act ONLY on report.watchdog.reasons (missed events):
@@ -244,9 +253,13 @@ def verify_loop(ws: str) -> int:
             "CRON NOT REGISTERED (HARD): runs/.heartbeat.json exists "
             "but loop_registered is not true — the /loop heartbeat cron was "
             "never created (or never fired). Monitoring is NOT running and "
-            "proceeding silently is forbidden. Fix NOW: re-run "
-            "heartbeat_loop_prompt.py <ws> and pass its output to "
-            "CronCreate */5 * * * * (or /loop 5m <prompt>); the loop's "
+            "proceeding silently is forbidden. Fix NOW (#1086): register the "
+            "wake GATE — run heartbeat_wake_gate.py <ws> --print-registration "
+            "and install the emitted OS-cron line (--wake-gate: QUIET "
+            "injects nothing, WAKE injects the /loop prompt once); then keep "
+            "the durable /loop watchdog by re-running "
+            "heartbeat_loop_prompt.py <ws> and passing its output to "
+            "CronCreate */5 * * * * (or /loop 5m <prompt>) — the loop's "
             "first action marks loop_registered=true. Re-run this --verify "
             "after TWO consecutive ticks (<= 2x interval); still "
             "failing then means the CronCreate itself failed — re-create it.",
@@ -266,7 +279,10 @@ def verify_loop(ws: str) -> int:
             f"LOOP NOT TICKING (HARD): loop_registered=true but {detail} — "
             "the cron is registered yet not firing continuously (deleted after "
             "first fire, session ended, or never created). The marker is "
-            "history, not liveness. Fix: re-register the /loop cron DURABLE "
+            "history, not liveness. Fix (#1086): the OS-cron wake GATE is the "
+            "scheduler — heartbeat_wake_gate.py <ws> --print-registration "
+            "emits the line to install (QUIET injects nothing, WAKE injects "
+            "the /loop prompt). Re-register the /loop watchdog DURABLE too "
             "(heartbeat_loop_prompt.py <ws> -> <ws>/.claude/"
             "scheduled_tasks.json via loop_scheduler upsert or re-run init), "
             "then re-run this --verify after TWO consecutive ticks.",

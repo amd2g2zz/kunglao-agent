@@ -14,8 +14,9 @@ import json
 import sys
 from pathlib import Path
 
+from rlvr import consolidated_ledger as _cl
+
 DEGENERATE_WINDOW = 5
-STORE_REL = Path("runs") / "posterior-store.jsonl"
 
 
 def check_degeneracy(credits: list[float],
@@ -31,25 +32,41 @@ def check_degeneracy(credits: list[float],
 
 
 def recent_credits(ws: Path, n: int = DEGENERATE_WINDOW) -> list[float]:
-    """The most recent settled credits from the ws posterior store
-    (chronologic, oldest first), for the degeneracy check."""
-    store = Path(ws) / "runs" / "posterior-store.jsonl"
-    if not store.is_file():
-        return []
-    vals: list[float] = []
-    for line in store.read_text(encoding="utf-8",
-                                errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except ValueError:
-            continue
-        c = rec.get("credit")
-        if isinstance(c, (int, float)):
-            vals.append(float(c))
-    return vals[-n:]
+    """The most recent settled credits from THIS workspace's credit
+    series (chronologic, oldest first), for the degeneracy check.
+
+    The series rides the knowledge family file (issue-1004 R2c) — the
+    only face since the issue-1004 R3 schema cutover. Two filters keep
+    the series exactly what the pre-move ws-local file held — the
+    credit-series face's rows (``append_workspace_credit_row``, whose
+    ``credit_kind`` column is the face's marker) of THIS workspace:
+
+    - ``workspace_id`` — the family file is CROSS-task: a foreign
+      workspace's credits must never enter this workspace's breaker
+      series (its dead signal must not freeze this workspace's
+      learning), the same isolation discipline as the store's
+      leave-one-out warm faces;
+    - ``credit_kind`` — the cross-task settlement rows (the scalar
+      bank's ``append_store_row`` face) ride the same file since the
+      move; they are the warm-pool evidence, never the breaker's dense
+      credit series.
+
+    The survivors then ride ``learning_seal.trusted_rows``: armed, a
+    forged credit row naming this workspace is refused (the family
+    file widened the forgery blast radius — the wall moves with it);
+    unarmed, rows pass (the notice lives on the write face)."""
+    from rlvr import learning_seal as _seal  # noqa: PLC0415 — lazy
+    from rlvr import strategy_store as _ss  # noqa: PLC0415 — the id face
+    mine = _ss.workspace_id_of(ws)
+    rows = [rec for rec in
+            _cl.read(ws, "knowledge", schema_prefix="posterior-store")
+            if isinstance(rec, dict)
+            and str(rec.get("workspace_id") or "") == mine
+            and rec.get("credit_kind")
+            and isinstance(rec.get("credit"), (int, float))
+            and not isinstance(rec.get("credit"), bool)]
+    rows = _seal.trusted_rows(rows, op="signal_guard.recent_credits")
+    return [float(r["credit"]) for r in rows][-n:]
 
 
 def freeze_if_degenerate(ws: Path, credits: list[float],

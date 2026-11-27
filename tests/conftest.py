@@ -9,9 +9,40 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
+
+# ---------- session HOME isolation (anti-forgery) ----------
+# The learning channel arms on a FIXED host path (~/.claude/...), and
+# workspace init provisions that host path. The suite runs the REAL
+# production CLIs as subprocesses, so the run's HOME is pointed at a
+# session-local directory BEFORE any test module (or spawned hook
+# child) imports anything, and EVERY test gets a FRESH home: a test
+# whose subprocess provisions the key (a real init CLI run) arms only
+# its own throwaway home, and the next test starts CI-like empty
+# again. No test — in-process or spawned — can ever read, create, or
+# arm the host's real key. A test that needs a specific home overrides
+# HOME itself (isolated_home / explicit env).
+_SESSION_HOME = Path(tempfile.mkdtemp(prefix="kunglao-tests-home-"))
+_SESSION_HOME.mkdir(exist_ok=True)
+os.environ["HOME"] = str(_SESSION_HOME)
+os.environ["USERPROFILE"] = str(_SESSION_HOME)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_test_home(tmp_path, monkeypatch, request):
+    # OUTSIDE tmp_path on purpose: zero-side-effect pins assert that a
+    # CLI run lands nothing in its cwd/tmp_path, and the per-test home
+    # must not count as a side effect.
+    home = Path(tempfile.mkdtemp(prefix="kunglao-test-home-"))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    request.addfinalizer(lambda: shutil.rmtree(home, ignore_errors=True))
+    yield
 
 # 863-h Family L: shared fixture factories. Plain functions live in
 # tests/_factories.py; tests/ is on sys.path under pytest's prepend
@@ -39,36 +70,48 @@ def _fresh_canonical_warn_state(monkeypatch):
     yield
 
 
-# ---------- posterior-store isolation (#545) ----------
-# The WS2 store (scripts/rlvr/patterns/posterior-store.jsonl) is RUNTIME
-# data — no test may ever append to the repo's guarded prior-store root.
-# Every test gets KUNGLAO_POSTERIOR_STORE pointed at a tmp path; tests
-# that exercise the store override it explicitly.
+# ---------- posterior-store isolation (issue-1005) ----------
+# Learning stores resolve INSIDE the workspace now (cross-project off):
+# each test's tmp workspace carries its own store, so no test can touch
+# the repo or the host home. The env override is cleared (an outside-
+# workspace override is refused by the resolver — a leaked env var must
+# never redirect a test's store).
 @pytest.fixture(autouse=True)
 def _isolated_posterior_store(tmp_path, monkeypatch):
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE",
-                       str(tmp_path / "posterior-store-isolated"))
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
     yield
 
 
-# ---------- failure-analysis defaults isolation (issue 647 item 6) ----------
-# The rollup's terminal path seeds analyses/failure-*.yaml skeletons, so
-# aggregate_lessons now runs in EVERY rollup-firing test — and its default
-# destinations (the global lessons library + ~/.claude/learnings-queue.json)
-# are real-home paths no test may append to. Tests that exercise the
-# aggregation override these explicitly; the defaults are redirected here.
+# ---------- learning-seal key isolation ----------
+# The learning channel arms on a FIXED host path (~/.claude/...), and
+# workspace init now provisions that host path. No test may ever read,
+# create, or arm the host's real key: every test runs against a tmp
+# key path (unarmed unless the test provisions it explicitly). The
+# path keeps the CANONICAL key NAME so a test that derives its own
+# armed path from ``KEY_PATH.name`` (the armed production-stop tests)
+# still lands where a HOME-keyed child looks. The autouse ordering
+# puts this BEFORE same-scope test fixtures, so a test that wants an
+# armed channel overrides the path itself.
 @pytest.fixture(autouse=True)
-def _isolated_failure_analysis_defaults(tmp_path, monkeypatch):
+def _isolated_learning_seal_key(tmp_path, monkeypatch):
     try:
-        import failure_analysis_gate as _fag
+        from rlvr import learning_seal as _seal
     except ImportError:  # pragma: no cover — collection never depends on it
         yield
         return
-    monkeypatch.setattr(_fag, "LESSONS_DIR_DEFAULT",
-                        tmp_path / "lessons-isolated", raising=False)
-    monkeypatch.setattr(_fag, "REFLECT_QUEUE_DEFAULT",
-                        tmp_path / "reflect-queue-isolated.json",
+    monkeypatch.setattr(_seal, "KEY_PATH",
+                        tmp_path / ".claude" / ("kunglao-learning" + ".key"),
                         raising=False)
+    yield
+
+
+# ---------- failure-analysis defaults isolation ----------
+# The lessons library and the /reflect queue are WORKSPACE-LOCAL now
+# (cross-project off): defaults resolve inside each test's tmp
+# workspace, so no test can append to the host home. Nothing to
+# redirect — the fixture remains as a no-op guard.
+@pytest.fixture(autouse=True)
+def _isolated_failure_analysis_defaults(tmp_path, monkeypatch):
     yield
 
 

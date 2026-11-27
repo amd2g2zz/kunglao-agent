@@ -23,10 +23,12 @@ unblinded ``settle_step`` judgment is what ran. issue-802 closes the gap:
      PASSED record (the store refuses otherwise, fail-closed); an
      oracle-fail maps to settle_refuted. The provenance rows carry the
      settler identity (actor ``settler:<id>``);
-  4. THE EVAL GATE — the unblinded settle_step judgment is eval-only:
-     the production stop face defaults to the blind mode (no unblinded
-     step credit banked) and KUNGLAO_EVAL_SETTLE=1 opts back into the
-     legacy behavior explicitly;
+  4. BLIND-ONLY STOP FACE — the production stop face has NO unblinded
+     mode: the env dual path (and its gate face) is removed — no eval
+     reader remained. The stop face parks + settles through the blind
+     wire whatever the ambient environment says, and the unblinded
+     judgment survives only as step_grain.settle_step's library face
+     for direct callers;
   5. THE LIVENESS FINGERPRINT — every blind settlement event lands a
      settlement-wire/1 row (runs/settlement.jsonl) carrying the
      non-empty settler identity: production settlements show
@@ -134,11 +136,14 @@ def _verification(ws: Path, word: str = "verified") -> Path:
 
 
 def _rollout_rows(ws: Path) -> list[dict]:
-    p = ws / "runs" / "rollout-ledger.jsonl"
+    """The rollout-ledger/1 rows of the settlement family file (the
+    family file is multi-schema: wire rows share the file)."""
+    p = ws / "runs" / "settlement.jsonl"
     if not p.is_file():
         return []
     return [json.loads(ln) for ln in
-            p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+            p.read_text(encoding="utf-8").splitlines() if ln.strip()
+            and json.loads(ln).get("schema") == "rollout-ledger/1"]
 
 
 def _wire_rows(ws: Path) -> list[dict]:
@@ -380,13 +385,13 @@ def test_oracle_fail_maps_settle_refuted(tmp_path):
     assert mint["to"] == "REFUTED"
 
 
-# ---------------------------------------------------- 4. the eval gate
+# ---------------------------------------------------- 4. the blind-only stop face
 
-def test_eval_gate_defaults_blind_and_env_opts_in(monkeypatch):
-    monkeypatch.delenv("KUNGLAO_EVAL_SETTLE", raising=False)
-    assert wire.eval_settle_enabled() is False
-    monkeypatch.setenv("KUNGLAO_EVAL_SETTLE", "1")
-    assert wire.eval_settle_enabled() is True
+def test_the_env_dual_path_is_gone():
+    """The gate face and its env constant no longer exist on the wire —
+    the dual path is removed, not defaulted (introspection pin)."""
+    assert not hasattr(wire, "eval_settle_enabled")
+    assert not hasattr(wire, "EVAL_SETTLE_ENV")
 
 
 def test_settle_step_blind_mode_skips_unblinded_judgment(tmp_path):
@@ -424,7 +429,10 @@ def test_round_closure_blind_mode_parks_and_skips_unblinded_credit(
         sys.path.remove(str(ROOT / "hooks"))
 
 
-def test_round_closure_eval_mode_keeps_legacy_face(tmp_path, monkeypatch):
+def test_round_closure_stays_blind_even_with_the_env_set(
+        tmp_path, monkeypatch):
+    # the removed switch is inert: an ambient env value can never steer
+    # the stop face back into the unblinded judgment
     monkeypatch.setenv("KUNGLAO_EVAL_SETTLE", "1")
     ws = _ws(tmp_path)
     _seed_claim_dispatch(ws)
@@ -433,11 +441,10 @@ def test_round_closure_eval_mode_keeps_legacy_face(tmp_path, monkeypatch):
         import round_closure as rc
         receipt = rc._kernel_faces(ws, session_id="sess-w",
                                    agent_id="w9") or {}
-        # the explicit eval gate: the legacy unblinded face ran (the
-        # issue-712 judgment legs live — the marker reads eval, not blind),
-        # and nothing was parked
-        assert receipt.get("blind") is False
-        assert "blind_settlement" not in receipt
-        assert not (ws / "runs" / "settlement-input-C-9.json").exists()
+        # the unblinded judgment legs did not run...
+        assert receipt.get("step_credit") is None
+        # ...and the blind writer parked the input doc for the settler
+        assert (ws / "runs" / "settlement-input-C-9.json").is_file()
+        assert receipt["blind_settlement"]["parked_claims"] == ["C-9"]
     finally:
         sys.path.remove(str(ROOT / "hooks"))

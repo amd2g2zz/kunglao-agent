@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+from rlvr import consolidated_ledger as _cl  # noqa: E402
 from rlvr import ledger as rl  # noqa: E402
 import state_signature as ssig  # noqa: E402
 import verification_ladder as vl  # noqa: E402
@@ -69,14 +70,11 @@ def _signal(ws: Path, kind: str, ts: str, **fields) -> None:
 
 def _situation(ws: Path, ts: str, trigger: str, state: dict,
                tick: int = 1) -> None:
-    p = ws / "runs" / "situation-stream.jsonl"
-    p.parent.mkdir(parents=True, exist_ok=True)
     row = {"schema": ssig.SITUATION_SCHEMA, "ts": ts, "trigger": trigger,
            "tick": tick, "state": state,
            "signature": ssig.signature_str(state),
            "signature_hash": ssig.signature_hash(state)}
-    with p.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    _cl.append(ws, "telemetry", row)
 
 
 def _snap(facts: int = 0, verified: int = 0, chain: tuple | None = None,

@@ -200,15 +200,22 @@ def test_intervention_row_is_hash_only(tmp_path) -> None:
                                  actor="owner", subject="C-005",
                                  note="pulled the plug", ts=TS)
     assert row is not None
-    text = (ws / "runs" / "interventions.jsonl").read_text("utf-8")
+    text = (ws / "runs" / "telemetry.jsonl").read_text("utf-8")
     assert "C-005" not in text and "pulled the plug" not in text
     assert len(row["subject_sha"]) == 64 and len(row["note_sha"]) == 64
 
 
-def test_intervention_fail_open(tmp_path) -> None:
-    ws = tmp_path / "bare"
-    (ws / "runs").mkdir(parents=True)
-    (ws / "runs" / "interventions.jsonl").mkdir()
+def test_intervention_fail_open(tmp_path, monkeypatch) -> None:
+    """Fail-open: a refused family append is ONE warn inside the core,
+    never a raise (deterministic: the append face is patched to refuse,
+    not filesystem permissions — root CI bypasses permission bits)."""
+    ws = _ws(tmp_path)
+
+    def refuse(target_ws, family, row):
+        assert family == "telemetry"
+        return False
+    from rlvr import consolidated_ledger as _cl
+    monkeypatch.setattr(_cl, "append", refuse)
     assert sl.record_intervention(ws, trigger="t", actor="a",
                                   subject="s", note="n") is None
 

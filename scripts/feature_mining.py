@@ -3,10 +3,15 @@
 """feature_mining.py — #460 Part A: historical-run feature-table mining.
 
 Read-only, deterministic mining of (signature features → method/outcome)
-tuples that ALREADY EXIST in e2e run artifacts, into
-``runs/feature-table.jsonl`` rows (schema ``feature-table/1``) — the
-data floor under Part B's feature-conditioned prior (predict-before-try,
-the SATzilla move; NO prior math lives here).
+tuples that ALREADY EXIST in e2e run artifacts, into ``feature-table/1``
+rows (schema ``feature-table/1``) — the data floor under Part B's
+feature-conditioned prior (predict-before-try, the SATzilla move; NO
+prior math lives here). Since issue-1004 R2c the DEFAULT output is the
+knowledge family file (``knowledge-store.jsonl`` under the guarded
+cross-task root, idempotent dedupe-append); the operator ``--out``
+override keeps the deterministic single-file rebuild at any explicit
+path (the family file is the only live face since the issue-1004 R3
+schema cutover).
 
 Sources joined per run (run-state.json is the anchor — see
 openspec/changes/issue-460-feature-mining/design.md):
@@ -17,8 +22,9 @@ openspec/changes/issue-460-feature-mining/design.md):
   <ws>/evidence/{die,apkid,difficulty}.json probe outputs (usable rules reused
                                             from difficulty_calibration)
   <ws>/runs/logs/e2e-audit.jsonl            dispatch attempt/result rows
-  <ws>/runs/rollout-ledger.jsonl            task/<claim> settlements (via
-                                            rlvr.ledger.settled — the U4 fold)
+  <ws>/runs/                                task/<claim> settlements (via
+                                            rlvr.ledger.settled — the U4
+                                            fold, the settlement family)
   <task_dir>/task.yaml                      workspace_scaffold (language/entry)
 
 Contract highlights (spec scenarios are the tests):
@@ -73,7 +79,6 @@ def _warn(reason: str) -> None:
     print(f"[feature_mining] WARN (fail-open): {reason}", file=sys.stderr)
 
 SCHEMA = "feature-table/1"
-OUT_DEFAULT = Path("runs") / "feature-table.jsonl"
 AUDIT_REL = Path("runs") / "logs" / "e2e-audit.jsonl"
 HASH_LEN = 12
 
@@ -591,12 +596,78 @@ def mine_run(root: Path, run_dir: Path) -> dict | None:
     return row
 
 
-def mine(roots: list[Path], out: Path) -> dict:
+def default_out(workspace=None) -> Path:
+    """The DEFAULT mining output: the knowledge family file under the
+    WORKSPACE's own store root (cross-project learning is off — a
+    learning table lands inside its workspace, never a shared root).
+    The consolidated append (flock, stamp contract) is the write
+    wall; a re-run appends nothing (idempotent dedupe-append — the
+    append-only contract, never a rewrite of a multi-schema file).
+    A workspace-less call cannot resolve a store and fails loud."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+    if workspace is None:
+        raise ValueError(
+            "feature_mining.default_out requires a workspace — "
+            "cross-project learning is off, the table cannot resolve "
+            "outside one")
+    return _cl.family_path(workspace, "knowledge")
+
+
+def _family_append(out: Path, rows: list[dict],
+                   workspace=None) -> None:
+    """The family write face: append the mined rows the family file
+    does not already carry (canonical-JSON identity — the migrate
+    dedupe rule), in the miner's canonical order. Other schemas' rows
+    are never touched; a re-run appends nothing. A refused append is
+    the miner's loud stderr warn — the CLI reports, it never silently
+    loses a row."""
+    from rlvr import consolidated_ledger as _cl  # noqa: PLC0415 — lazy
+
+    existing: set[str] = set()
+    if Path(out).is_file():
+        for line in Path(out).read_text(
+                encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue  # corrupt lines dedupe nothing — never re-added
+            if isinstance(row, dict):
+                # canonical identity (the migrate dedupe rule): key
+                # ORDER is file-face noise, values are the truth
+                existing.add(json.dumps(row, ensure_ascii=False,
+                                        sort_keys=True))
+    for row in rows:
+        data = json.dumps(row, ensure_ascii=False, sort_keys=True)
+        if data in existing:
+            continue
+        if not _cl.append(workspace, "knowledge", row):
+            _warn(f"family append refused for run_id={row.get('run_id')!r}"
+                  f" — the row is not in the family file")
+        else:
+            existing.add(data)
+
+
+def mine(roots: list[Path], out: Path, *,
+         family_face: bool = False,
+         workspace=None) -> dict:
     """Mine every root (deduped by resolved path); write the sorted
     feature table; return the summary. Never writes under any root.
     Rows are keyed (family, task_id, run_id, root) — the root term makes
     the bytes independent of argument order; the root itself rides the
-    row only as the side-table key ``_root`` and is never serialized."""
+    row only as the side-table key ``_root`` and is never serialized.
+
+    Write faces (issue-1004 R2c):
+      - ``family_face`` (the CLI default, out == the workspace's
+        knowledge family file): the IDEMPOTENT dedupe-append (rows the
+        family already carries are not re-appended; other schemas' rows
+        untouched).
+      - otherwise (the operator/replay face): the deterministic
+        single-file rebuild — same input set → byte-identical output
+        (the pre-move contract, unchanged).
+    """
     seen: list[Path] = []
     for r in roots:
         resolved = r.resolve()
@@ -619,6 +690,12 @@ def mine(roots: list[Path], out: Path) -> dict:
     rows.sort(key=lambda r: (r["family"], r["task_id"], r["run_id"],
                              str(r["_root"])))
     out = Path(out)
+    if family_face:
+        _family_append(out, [
+            {k: v for k, v in r.items() if k != "_root"} for r in rows],
+            workspace=workspace)
+        return {"roots": len(seen), "runs": scanned, "rows": len(rows),
+                "skipped": skipped}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(
         json.dumps({k: v for k, v in r.items() if k != "_root"},
@@ -626,6 +703,27 @@ def mine(roots: list[Path], out: Path) -> dict:
         for r in rows), encoding="utf-8")
     return {"roots": len(seen), "runs": scanned, "rows": len(rows),
             "skipped": skipped}
+
+
+def _refuse_multi_schema_target(out: Path) -> None:
+    """The rebuild face writes a single-schema table with write_text —
+    it must never point at a multi-schema family carrier, whose other
+    rows a rewrite would silently destroy. An existing file whose
+    first line carries any other schema is refused loud."""
+    if not out.is_file():
+        return
+    first = out.read_text(encoding="utf-8", errors="replace").splitlines()[:1]
+    if not first:
+        return
+    try:
+        schema = str(json.loads(first[0]).get("schema") or "")
+    except json.JSONDecodeError:
+        return
+    if schema and schema != "feature-table/1":
+        raise ValueError(
+            f"{out}: existing file is a {schema!r} carrier, not a "
+            "feature table — the rebuild face refuses to rewrite it; "
+            "pass --workspace to append through the family face")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -636,10 +734,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("roots", nargs="+",
                         help="worktree roots carrying runs/e2e/* "
                              "(explicit; nothing is discovered ambiently)")
-    parser.add_argument("--out", default=str(OUT_DEFAULT),
-                        help=f"output path (default {OUT_DEFAULT})")
+    parser.add_argument("--workspace", default=None,
+                        help="the workspace owning the mined table "
+                             "(required with the default --out; the "
+                             "table lands in its own store)")
+    parser.add_argument("--out", default=None,
+                        help="output path (default: the knowledge family "
+                             "file inside --workspace; an explicit path "
+                             "keeps the deterministic single-file rebuild)")
     args = parser.parse_args(argv)
-    summary = mine([Path(r) for r in args.roots], Path(args.out))
+    if not args.out and not args.workspace:
+        parser.error("--workspace is required unless --out is given "
+                     "(the table must land inside a workspace)")
+    out = Path(args.out) if args.out else default_out(args.workspace)
+    family_target = (
+        args.workspace is not None
+        and out.resolve() == default_out(args.workspace).resolve())
+    if family_target:
+        summary = mine([Path(r) for r in args.roots], out,
+                       family_face=True, workspace=args.workspace)
+    elif args.out:
+        _refuse_multi_schema_target(out)
+        summary = mine([Path(r) for r in args.roots], out)
+    else:
+        summary = mine([Path(r) for r in args.roots], out,
+                       family_face=True, workspace=args.workspace)
     print(json.dumps(summary, ensure_ascii=False))
     return 0
 

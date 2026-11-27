@@ -90,14 +90,18 @@ class TestSchemaLint:
     def test_dirty_rows_skipped_on_read(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        p = ws / "runs" / "settlement.jsonl"
         p.parent.mkdir(parents=True)
         p.write_text('{"rollout_id": "a"}\nnot json at all\n\n'
-                     '{"rollout_id": "b", "kind": "task", "anchor": "a", '
+                     '{"schema": "rollout-ledger/1", "rollout_id": "b", '
+                     '"kind": "task", "anchor": "a", '
                      '"ts": "2026-09-24T00:00:00Z", "signals": [], '
                      '"reward": null, "settlement": null}\n',
                      encoding="utf-8")
         rows = rl.read(ws)
+        # dirty and unstamped rows never surface (the family read is
+        # stamp-filtered — the pre-consolidation rel admitted unstamped
+        # rows via the pre-stamp rule; the cutover closed it)
         assert [r.get("rollout_id") for r in rows] == ["b"]
 
 
@@ -113,7 +117,7 @@ class TestAppendOnly:
                   settlement={"reward": 1.0, "band": "SETTLED_GREEN",
                               "rule_id": "task/oracle-green",
                               "evidence_refs": ["runs/oracle-status.json"]})
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        p = ws / "runs" / "settlement.jsonl"
         after_first = p.read_bytes()
         # a later activity on ANOTHER rollout must only append
         rl.record(ws, kind="task", anchor="C-2",
@@ -126,12 +130,12 @@ class TestAppendOnly:
         ws.mkdir()
         rl.record(ws, kind="self_distill", anchor="lesson-a",
                   signals=[_sig("lesson_written", "rollup", "sig-1")])
-        before = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+        before = (ws / "runs" / "settlement.jsonl").read_bytes()
         rl.settle(ws, "self_distill/lesson-a",
                   settlement={"reward": 0.0, "band": "NEUTRAL",
                               "rule_id": "self_distill/pending",
                               "evidence_refs": ["lesson_written"]})
-        data = (ws / "runs" / "rollout-ledger.jsonl").read_bytes()
+        data = (ws / "runs" / "settlement.jsonl").read_bytes()
         assert data.startswith(before)  # append-only: original row intact
         assert len(rl.read(ws)) == 2    # identity row + settlement amendment
 
@@ -156,9 +160,12 @@ class TestAppendOnly:
         assert len({r["rollout_id"] for r in rows}) == n
 
     def test_lock_file_pattern_used(self):
-        """The lock is a .lock file next to the ledger (the repo's pattern)."""
-        assert rl.LOCK_REL.endswith(".lock")
-        assert "runs" in rl.LOCK_REL
+        """The per-module lock rel is RETIRED: the consolidated
+        settlement family's flock (runs/.settlement.lock) is the one
+        writer guard."""
+        assert not hasattr(rl, "LOCK_REL")
+        assert not hasattr(rl, "_locked_append")
+        assert not hasattr(rl, "_lock_path")
 
 
 # ---------- record(): identity append + dedupe ----------
@@ -286,7 +293,7 @@ class TestPersistence:
         ws.mkdir()
         rl.record(ws, kind="task", anchor="C-1",
                   signals=[_sig("s", "src", 1)])
-        p = ws / "runs" / "rollout-ledger.jsonl"
+        p = ws / "runs" / "settlement.jsonl"
         lines = p.read_text(encoding="utf-8").splitlines()
         assert len(lines) == 1
         row = json.loads(lines[0])

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """rlvr/commit_semantics.py — the tune/switch commits, the dead-path
-gate, the surprise loop, and the component-ablation pricing (issue 826,
-P3 of the #806 axis).
+gate, and the surprise loop (issue 826, P3 of the #806 axis).
 
 THE THREE-WAY COMMITS GET REAL SEMANTICS. P2's meta-policy chooses
 persist/tune/switch at commit boundaries; this module defines WHAT each
@@ -35,25 +34,18 @@ phases; the episode_start select face stays exactly the P2 shape —
 conflict keeps both sides). Fail-open: enrichment problems never raise
 into the dispatch path.
 
-THE ABLATION — `price_ablations` reports the four component switches
-(retrieval / value_table from P2; attribution / playbook from this
-card) each priced in OUTPUT terms: what disappears from the envelope
-when the component is removed.
-
 Zero telemetry points (Standard 11). No storage: every value traces to
 the pool / the P2 faces at call time.
 """
 from __future__ import annotations
 
 import copy
-import os
 from pathlib import Path
 
 from rlvr import attribution as attr
 from rlvr import episode_pool as pool
 from rlvr import episode_schema as es
 from rlvr import meta_policy as mp
-from rlvr import playbook as pb
 
 #: the blind-re-probe cap (the 9x dead-path shape is RED)
 DEAD_PATH_CAP = 9
@@ -273,14 +265,9 @@ def enrich_block(ws, claim, block: dict) -> dict:
 
 
 def _switch_attribution(ws: Path, doc: dict | None, block: dict) -> dict:
-    """The attribution evidence a switch commit must ride. With the
-    attribution component ablated the block reports it unavailable —
-    the executor then owes its OWN reason before the switch is legal."""
-    if not attr.knob_on():
-        return {"available": False,
-                "reason": "attribution ablated "
-                          "(KUNGLAO_META_ATTRIBUTION=0) — the switch owes "
-                          "a manually supplied attribution_ref"}
+    """The attribution evidence a switch commit must ride. With no pool
+    episode for the claim the block reports it unavailable — the
+    executor then owes its OWN reason before the switch is legal."""
     if doc is None:
         return {"available": False,
                 "reason": "no pool episode for this claim — nothing to "
@@ -296,120 +283,3 @@ def _switch_attribution(ws: Path, doc: dict | None, block: dict) -> dict:
             "features": features,
             "exogenous_count": len(rep.get("exogenous") or [])}
 
-
-def price_ablations(ws, *, features: list[str], phase: str,
-                    claim=None) -> dict:
-    """The four component switches, each priced in OUTPUT terms: what
-    disappears from the envelope when the component is removed.
-    Deterministic; writes nothing."""
-    ws = Path(ws)
-    rows: dict[str, dict] = {}
-
-    # playbook — the ride-along groups
-    on_groups = _playbook_price(ws, features, on=True)
-    off_groups = _playbook_price(ws, features, on=False)
-    rows["playbook"] = {
-        "component": "playbook", "on": on_groups, "off": off_groups,
-        "price": (f"{on_groups['groups'] - off_groups['groups']} playbook "
-                  f"group(s) leave the context")}
-
-    # retrieval — the cases
-    on_cases = _retrieval_price(ws, features, phase, on=True)
-    off_cases = _retrieval_price(ws, features, phase, on=False)
-    rows["retrieval"] = {
-        "component": "retrieval", "on": on_cases, "off": off_cases,
-        "price": (f"{len(on_cases['cases']) - len(off_cases['cases'])} "
-                  f"case(s) leave the context")}
-
-    # value_table — the contextual term of the selection
-    on_sel = mp.select_commit(ws, features)
-    off_sel = _selection_with("KUNGLAO_META_VALUE_TABLE", "0", ws, features)
-    rows["value_table"] = {
-        "component": "value_table",
-        "on": {"source": on_sel["source"]},
-        "off": {"source": off_sel["source"]},
-        "price": ("context stops changing the commit "
-                  f"({on_sel['source']} -> {off_sel['source']})")}
-
-    # attribution — the evidence on a switch commit
-    block = {"schema": ENVELOPE_SCHEMA, "claim": str(claim),
-             "phase": "commit_boundary",
-             "commit": {"action": "switch", "scores": {}, "source": "price"},
-             "features": list(features), "context": {}}
-    on_block = enrich_block(ws, claim, copy.deepcopy(block))
-    off_block = _enrich_with("KUNGLAO_META_ATTRIBUTION", "0", ws, claim,
-                             block)
-    on_att = (on_block.get("commit") or {}).get("attribution") or {}
-    off_att = (off_block.get("commit") or {}).get("attribution") or {}
-    rows["attribution"] = {
-        "component": "attribution",
-        "on": {"available": on_att.get("available"),
-               "method": on_att.get("method")},
-        "off": {"available": off_att.get("available"),
-                "method": off_att.get("method")},
-        "price": ("the switch loses its learned reason — a manual "
-                  "attribution_ref is owed")}
-    return rows
-
-
-def _playbook_price(ws: Path, features: list[str], *, on: bool) -> dict:
-    if not on:
-        return {"groups": 0}
-    feats = {str(f) for f in features}
-    groups = [g for g in pb.compressed_view(ws)
-              if feats & {str(f) for f in g.get("context_features") or []}]
-    return {"groups": len(groups)}
-
-
-def _retrieval_price(ws: Path, features: list[str], phase: str,
-                     *, on: bool) -> dict:
-    """Read-only mirror of the retrieval face's filter (the pool's own
-    retrieve call bumps its counters — a pricing report must not)."""
-    if not on:
-        return {"cases": []}
-    k = mp.knobs()
-    from rlvr import meta_retrieval  # noqa: PLC0415 — lazy (cycle-free)
-    want = {str(f) for f in features}
-    matched = [doc for _p, doc in pool.load_all(ws)
-               if want & {str(f) for f in doc.get("context_features") or []}]
-    ranked = sorted(
-        matched,
-        key=lambda doc: (-meta_retrieval.utility_score(doc, k),
-                         str(doc.get("claim"))))
-    cases: list[str] = []
-    for doc in ranked:
-        if float(doc.get("utility", {}).get("utility") or 0.0) \
-                < float(k["min_utility"]):
-            continue
-        if len(cases) >= int(k["retrieve_max"]):
-            break
-        cases.append(str(doc.get("claim")))
-    return {"cases": cases}
-
-
-# --------------------------------------------------- env-toggle helpers
-
-def _selection_with(env: str, value: str, ws: Path, features: list[str]):
-    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
-    old = runtime_switches.raw(env)
-    os.environ[env] = value
-    try:
-        return mp.select_commit(ws, features)
-    finally:
-        if old is None:
-            os.environ.pop(env, None)
-        else:
-            os.environ[env] = old
-
-
-def _enrich_with(env: str, value: str, ws: Path, claim, block: dict):
-    import runtime_switches  # noqa: PLC0415 — leaf face, import-light
-    old = runtime_switches.raw(env)
-    os.environ[env] = value
-    try:
-        return enrich_block(ws, claim, block)
-    finally:
-        if old is None:
-            os.environ.pop(env, None)
-        else:
-            os.environ[env] = old

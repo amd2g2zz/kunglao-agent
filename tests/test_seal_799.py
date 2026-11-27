@@ -275,14 +275,13 @@ def test_propensity_mismatch_dropped(armed, ws):
 
 def test_posterior_store_row_sealed_and_forged_dropped(
         armed, tmp_path, monkeypatch, capsys):
-    """The shared posterior store seals at write; forged rows drop."""
-    store = tmp_path / "store"
-    store.mkdir()
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(store))
-    out = ss.append_store_row(method_family="graph", status="ok",
+    """The workspace store seals at write; forged rows drop."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    out = ss.append_store_row(ws, method_family="graph", status="ok",
                               credit=1.0)
     assert out["appended"] is True
-    spath = ss.store_path()
+    spath = ws / "runs" / "posterior" / "knowledge-store.jsonl"
     rows = [json.loads(l) for l in
             spath.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert rows and "seal" in rows[0]
@@ -297,7 +296,7 @@ def test_posterior_store_row_sealed_and_forged_dropped(
         fh.write(json.dumps(forged) + "\n")
     with_forged = spath.read_bytes()
 
-    kept = ss.load_rows()
+    kept = ss.load_rows(ws)
     assert len(kept) == 1 and kept[0]["workspace_id"] != "evil"
     assert spath.read_bytes() == with_forged   # byte-unchanged on refusal
     assert "seal" in capsys.readouterr().err

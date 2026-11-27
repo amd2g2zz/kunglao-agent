@@ -666,7 +666,7 @@ class TestSettlementFeed462:
     @staticmethod
     def _cited(aid: str, creator: str) -> dict:
         return {"id": aid, "creator": creator, "status": "PROVEN",
-                "verify_status": "passes", "cited_by_deliverable": True}
+                "verify_status": "passes", "cited_by_deliverable": True, "verified_deliverable_use": True}
 
     def test_settle_banks_the_matching_q_cell_credit(self, tmp_path):
         """The acceptance integration: settle -> observe -> cell credit
@@ -797,7 +797,7 @@ class TestSettlementFeed462:
         ss.settle_round_credit(
             ws, [{"dispatch_id": "tr-m1-d1", "round": 1}],
             [dict(self._cited("F1", "tr-m1-d1"),
-                  cited_by_deliverable=False)], waste,
+                  cited_by_deliverable=False, verified_deliverable_use=False)], waste,
             now="2026-09-30T00:00:00Z")
         banked = [r for r in q_cells.JSONLQStore(ws).observations()
                   if r["source"] == "settlement"]
@@ -824,7 +824,7 @@ class TestSettlementFeed462:
         ss.settle_round_credit(ws, dispatches,
                                [self._cited("F1", "tr-m1-d1")], [],
                                now="2026-09-30T00:00:00Z")
-        rows = [r for r in strategy_store.load_rows(ws=None)
+        rows = [r for r in strategy_store.load_rows(ws)
                 if str((r.get("provenance") or {}).get("dispatch_id"))
                 == "tr-m1-d1"]
         assert len(rows) == 1
@@ -832,12 +832,12 @@ class TestSettlementFeed462:
         assert rows[0]["method_family"] == "static-symbolic"
         assert rows[0]["credit"] == pytest.approx(1.0)
         assert rows[0]["facts_citing"] == 1  # the settlement's own F1
-        assert rows[0]["workspace_id"] == ws.name
+        assert rows[0]["workspace_id"] == strategy_store.workspace_id_of(ws)
         # the replay (duplicate) settles nothing, so it keys nothing new
         ss.settle_round_credit(ws, dispatches,
                                [self._cited("F1", "tr-m1-d1")], [],
                                now="2026-09-30T06:00:00Z")
-        rows = [r for r in strategy_store.load_rows(ws=None)
+        rows = [r for r in strategy_store.load_rows(ws)
                 if str((r.get("provenance") or {}).get("dispatch_id"))
                 == "tr-m1-d1"]
         assert len(rows) == 1

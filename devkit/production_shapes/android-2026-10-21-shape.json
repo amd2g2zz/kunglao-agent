@@ -76,7 +76,7 @@
   }
  ],
  "artifacts": {
-  "runs/posterior-store.jsonl": [
+  "knowledge-store.jsonl": [
    {
     "schema": "posterior-store/1",
     "arm_key": "",

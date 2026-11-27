@@ -3,26 +3,25 @@
 """rlvr/step_ledger.py — the shadow experience substrate (the online
 off-policy controller's recording face, issue-667 design).
 
-Three append-only, hash-only ledgers (#721: two of the three rode the
+Three append-only, hash-only ledgers (#721: all three rode the
 consolidation — the row schemas are unchanged, only the home file):
 
-  runs/step-ledger.jsonl       step-record/1       one row per tool call
-                              step-record/2       one row per subagent
-                                                  completion (#690 — the
-                                                  settlement grain, carries
-                                                  claim_ref + step_id)
-  runs/evidence-credit.jsonl   evidence-item/1     evidence citing its
-                              credit-amendment/1   producing step + the
-                                                   escrow lifecycle
-  runs/interventions.jsonl     intervention/1      operator/controller
-                                                   interventions
+  runs/telemetry.jsonl        intervention/1     operator/controller
+                                                 interventions
+  runs/experience.jsonl       step-record/1      one row per tool call
+                            step-record/2       one row per subagent
+                                                completion (#690 — the
+                                                settlement grain, carries
+                                                claim_ref + step_id)
+  runs/experience.jsonl       evidence-item/1    evidence citing its
+                            credit-amendment/1   producing step + the
+                                                 escrow lifecycle
 
-Since #721 the step-record/1+2 and evidence-item/1+credit-amendment/1
-rows live in the consolidated ``runs/experience.jsonl`` (WHAT HAPPENED);
-the legacy rels above stay readable during the compat window and are
-bytes-archived by the one-time migration. interventions.jsonl is the
-telemetry family's — it switches whole in its own card, so it keeps its
-legacy path here.
+Since #721 the step-record/1+2 rows live in the consolidated
+``runs/experience.jsonl`` (WHAT HAPPENED), and since issue-1004 R2b the
+intervention/1 rows live in the consolidated ``runs/telemetry.jsonl``
+(WHAT WAS OBSERVED) — the only faces since the issue-1004 R3 schema
+cutover (the pre-consolidation files retire with the R4 CLI).
 
 The trust boundary is HASH-ONLY: content-bearing fields (tool input,
 tool output, artifact bytes, subject text, notes) never land — the row
@@ -55,7 +54,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 
 from _common import utc_now_z
 from kunglao_log import warn  # canonical warn: ONE implementation
@@ -68,9 +66,14 @@ EVIDENCE_SCHEMA = "evidence-item/1"
 AMENDMENT_SCHEMA = "credit-amendment/1"
 INTERVENTION_SCHEMA = "intervention/1"
 
-STEP_LEDGER_REL = "runs/step-ledger.jsonl"        # legacy rel (pre-#721)
-CREDIT_LEDGER_REL = "runs/evidence-credit.jsonl"  # legacy rel (pre-#721)
-INTERVENTIONS_REL = "runs/interventions.jsonl"    # telemetry card's rel
+#: logical stream keys — the module's routing names for its three row
+#: streams (each maps to a family + read prefixes below; the files
+#: themselves are the consolidated family files since the issue-1004
+#: family moves, and the pre-consolidation rel names retired with the
+#: issue-1004 R3 schema cutover)
+STEP_STREAM = "steps"
+CREDIT_STREAM = "credits"
+INTERVENTIONS_STREAM = "interventions"
 
 # the escrow lifecycle: escrow opens, the three closures resolve it
 ACTIONS = ("escrow", "confirm", "revoke", "expire")
@@ -92,60 +95,45 @@ def sha_of(obj) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-#: #721 family routing: the step + credit rows ride the consolidated
-#: WHAT-HAPPENED file; interventions stay on the legacy path until the
-#: telemetry card switches its family whole.
-_FAMILY_OF_REL = {
-    STEP_LEDGER_REL: "experience",
-    CREDIT_LEDGER_REL: "experience",
+#: issue-721 + issue-1004 family routing: the step + credit rows ride
+#: the consolidated WHAT-HAPPENED file; the intervention rows ride the
+#: consolidated WHAT-WAS-OBSERVED file (issue-1004 R2b). The per-module
+#: raw-IO silo retired with the moves — the consolidated append is the
+#: single writer face.
+_FAMILY_OF_STREAM = {
+    STEP_STREAM: "experience",
+    CREDIT_STREAM: "experience",
+    INTERVENTIONS_STREAM: "telemetry",
 }
 
 
-def _append(rel: str, row: dict, ws) -> dict | None:
-    family = _FAMILY_OF_REL.get(rel)
-    if family is not None:
-        # the consolidated face enforces the stamp contract + warns on
-        # refusal; a refused row is None (fail-open, never a raise)
-        return row if _cl.append(ws, family, row) else None
-    try:
-        p = Path(ws) / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        return row
-    except OSError as exc:
-        warn("rlvr.step_ledger", f"{rel}: {type(exc).__name__}: {exc}")
+def _append(stream: str, row: dict, ws) -> dict | None:
+    family = _FAMILY_OF_STREAM.get(stream)
+    if family is None:
+        warn("rlvr.step_ledger",
+             f"unrouted stream {stream!r} — row not appended")
         return None
+    # the consolidated face enforces the stamp contract + warns on
+    # refusal; a refused row is None (fail-open, never a raise)
+    return row if _cl.append(ws, family, row) else None
 
 
-#: #721 read prefixes per rel: the consolidated file is multi-schema, so
-#: every read goes through its stamps ("step-record" catches /1 and /2).
-_READ_PREFIXES = {
-    STEP_LEDGER_REL: ("step-record",),
-    CREDIT_LEDGER_REL: ("evidence-item", "credit-amendment"),
+#: issue-721 + issue-1004 read prefixes per stream: the consolidated files
+#: are multi-schema, so every read goes through its stamps ("step-record"
+#: catches /1 and /2).
+_READ_PREFIX_BY_STREAM = {
+    STEP_STREAM: ("step-record",),
+    CREDIT_STREAM: ("evidence-item", "credit-amendment"),
+    INTERVENTIONS_STREAM: ("intervention",),
 }
 
 
-def _read(rel: str, ws) -> list[dict]:
-    prefixes = _READ_PREFIXES.get(rel)
-    if prefixes is not None:
-        return _cl.read(ws, "experience", schema_prefix=prefixes)
-    p = Path(ws) / rel
-    if not p.is_file():
+def _read(stream: str, ws) -> list[dict]:
+    family = _FAMILY_OF_STREAM.get(stream)
+    if family is None:
+        warn("rlvr.step_ledger", f"unrouted stream {stream!r} — read as empty")
         return []
-    rows: list[dict] = []
-    for line in p.read_text(encoding="utf-8",
-                            errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(row, dict):
-            rows.append(row)
-    return rows
+    return _cl.read(ws, family, schema_prefix=_READ_PREFIX_BY_STREAM[stream])
 
 
 # ---------------------------------------------------------- step ledger
@@ -199,11 +187,11 @@ def record_step(ws, row: dict) -> dict | None:
     """Append one step-record/1 row. The whitelist is re-enforced here —
     a caller cannot smuggle a raw-content key into the ledger."""
     clean = {k: row[k] for k in _STEP_KEYS if k in row}
-    return _append(STEP_LEDGER_REL, clean, ws)
+    return _append(STEP_STREAM, clean, ws)
 
 
 def read_steps(ws) -> list[dict]:
-    return _read(STEP_LEDGER_REL, ws)
+    return _read(STEP_STREAM, ws)
 
 
 # ------------------------------------ the completion grain (#690, step-record/2)
@@ -246,7 +234,7 @@ def record_step_grain(ws, row: dict) -> dict | None:
     """Append one step-record/2 row. The v2 whitelist is re-enforced here —
     a caller cannot smuggle a raw-content key into the ledger."""
     clean = {k: row[k] for k in _STEP_V2_KEYS if k in row}
-    return _append(STEP_LEDGER_REL, clean, ws)
+    return _append(STEP_STREAM, clean, ws)
 
 
 def read_step_grains(ws, session_id: str | None = None,
@@ -255,7 +243,7 @@ def read_step_grains(ws, session_id: str | None = None,
     first), optionally scoped to one session and/or one Task-subagent
     identity (#779 face one: agent scoping keeps a worker's grains from
     mixing with the parent session's)."""
-    rows = [r for r in _read(STEP_LEDGER_REL, ws)
+    rows = [r for r in _read(STEP_STREAM, ws)
             if r.get("schema") == STEP_SCHEMA_V2]
     if session_id is not None:
         rows = [r for r in rows
@@ -289,7 +277,7 @@ def record_evidence(ws, *, step_ref: str, claim_ref: str, kind: str,
         "artifact_sha": sha_of(artifact or {}),
         "certified": bool(certified),
     }
-    return _append(CREDIT_LEDGER_REL, row, ws)
+    return _append(CREDIT_STREAM, row, ws)
 
 
 def _item(items: list[dict], evidence_id: str) -> dict | None:
@@ -310,14 +298,14 @@ def amend(ws, *, evidence_id: str, verb: str, amount=None,
         warn("rlvr.step_ledger.amend",
              f"refused verb {verb!r} — not one of {ACTIONS}")
         return None
-    items = [r for r in _read(CREDIT_LEDGER_REL, ws)
+    items = [r for r in _read(CREDIT_STREAM, ws)
              if r.get("schema") == EVIDENCE_SCHEMA]
     item = _item(items, str(evidence_id))
     if item is None:
         warn("rlvr.step_ledger.amend",
              f"refused {verb} of {evidence_id!r}: no such evidence item")
         return None
-    prior_all = [r for r in _read(CREDIT_LEDGER_REL, ws)
+    prior_all = [r for r in _read(CREDIT_STREAM, ws)
                  if r.get("schema") == AMENDMENT_SCHEMA
                  and r.get("evidence_id") == str(evidence_id)]
     if verb == "escrow":
@@ -349,14 +337,14 @@ def amend(ws, *, evidence_id: str, verb: str, amount=None,
                    and not isinstance(amount, bool) else None),
         "reason": str(reason or ""),
     }
-    return _append(CREDIT_LEDGER_REL, row, ws)
+    return _append(CREDIT_STREAM, row, ws)
 
 
 def expire_pending(ws, *, now=None) -> list[str]:
     """Age pending items out at the TTL: every evidence item with no
     resolution older than PENDING_TTL_HOURS gets its expire amendment.
     Returns the expired ids."""
-    items = [r for r in _read(CREDIT_LEDGER_REL, ws)
+    items = [r for r in _read(CREDIT_STREAM, ws)
              if r.get("schema") == EVIDENCE_SCHEMA]
     from datetime import datetime, timedelta, timezone
     now_dt = now or datetime.now(timezone.utc)
@@ -382,7 +370,7 @@ def replay_credit_ledger(ws) -> str:
     evidence items — escrow per item, confirm iff certified — and
     return the exact bytes. For a session whose operator actions are
     none, this equals the recorded file byte for byte."""
-    items = [r for r in _read(CREDIT_LEDGER_REL, ws)
+    items = [r for r in _read(CREDIT_STREAM, ws)
              if r.get("schema") == EVIDENCE_SCHEMA]
     lines = []
     for item in items:
@@ -402,7 +390,7 @@ def replay_credit_ledger(ws) -> str:
 
 
 def read_amendments(ws) -> list[dict]:
-    return [r for r in _read(CREDIT_LEDGER_REL, ws)
+    return [r for r in _read(CREDIT_STREAM, ws)
             if r.get("schema") == AMENDMENT_SCHEMA]
 
 
@@ -425,4 +413,4 @@ def record_intervention(ws, *, trigger: str, actor: str, subject,
         "note_sha": sha_of(note or ""),
     }
     assert set(row) <= _INTERVENTION_KEYS
-    return _append(INTERVENTIONS_REL, row, ws)
+    return _append(INTERVENTIONS_STREAM, row, ws)

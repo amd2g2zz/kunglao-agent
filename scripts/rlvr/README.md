@@ -33,7 +33,8 @@ scripts/rlvr/
 ├── consolidated_ledger.py  # #721 the 4-file consolidation core —
 │                        #   experience/settlement/telemetry under runs/ +
 │                        #   knowledge under the guarded root; append()
-│                        #   (flock, stamp-refusing) / read() (legacy-first,
+│                        #   (flock, stamp-refusing) / read() (family-only
+│                        #   since the issue-1004 R3 schema cutover,
 │                        #   stamp filter) / liveness() / migrate()
 │                        #   (append-only, bytes-archived, idempotent)
 ├── reward.py            # reward_settlement (U2/U3) — band/reward engine
@@ -45,22 +46,23 @@ scripts/rlvr/
 │                        #   probe.py shim (checker.py's trust boundary,
 │                        #   mirrored) + probe_delta (the #954 ΔV seam);
 │                        #   fail-closed, deterministic, oracle-locked
-├── direction.py         # #954 the direction face (Type-3) — Beta
-│                        #   posterior (α, β) per direction over the shared
-│                        #   runs/direction-state.jsonl (sibling rows to the
-│                        #   #958 censor rows), per-step credit =
-│                        #   probe_face.probe_delta (the ΔV seam), racing
-│                        #   elimination gated on posterior collapse (no
-│                        #   failure evidence -> never eliminated);
-│                        #   KUNGLAO_DIRECTION=1, default OFF
 ├── triples.py           # experience_triples — (s, a, r) CSV view + Q report
 ├── winrate.py           # winrate_curve — read-side aggregation face
 ├── state.py             # state_signature — canonical state + V(s) anchor
 ├── posteriors.py        # DTS posterior store, Discounted Thompson
-#                        #   Sampling (issue 428) —
-│                        #   append-only runs/posterior-store.jsonl + fold/read
-│                        #   γ decay + pseudo-count priors + γ schedules
+#                        #   Sampling (issue 428) — append-only store
+#                        #   in the knowledge family file (issue-1004
+#                        #   R2c — the only face since the R3 schema
+#                        #   cutover)
+│                        #   + fold/read γ decay + pseudo-count priors
+│                        #   + γ schedules
 ├── liveness.py          # heartbeat continuity — evaluate_tick_continuity core
+├── orphan_resolver.py   # issue-1005 S7 the orphan launch-sweep resolver —
+│                        #   consumes sweep_orphan_launches' return at the
+│                        #   close path: one orphan-resolution/1 telemetry row
+│                        #   (stash path + sha256 cited) + a quarantine move to
+│                        #   runs/orphan-archive/; refused rows (open claim /
+│                        #   foreign envelope) leave the stash in place
 ├── obstacles.py         # obstacle/1 attribution registry (issue 461
 │                        #   Phase 1) — intervention-born failure-cause
 │                        #   objects as runs/obstacles/OBS-<n>.json,
@@ -106,7 +108,7 @@ failure, not folklore.
 
 | face | home |
 |---|---|
-| `SCHEMA`, `STORE_REL`, `LOCK_REL`, `row_schema_lint()` | `rlvr.posteriors` (append-only store, ledger-isomorphic with rollout_ledger) |
+| `SCHEMA`, `row_schema_lint()` | `rlvr.posteriors` (append-only store, ledger-isomorphic with rollout_ledger) |
 | `record()`, `read()` | `rlvr.posteriors` (loud-result writes; schema-enforced fail-open reads) |
 | `fold()`, `PosteriorView` | `rlvr.posteriors` (THE γ decay face — replay `(α,β) ← γ·(α,β)+obs` in input order; raw counts never rewritten) |
 | `gamma_constant()`, `OutcomeAdaptiveGamma`, `default_schedule()` | `rlvr.posteriors` (declared schedules; defaults = EX-2-calibrated constants) |
@@ -127,7 +129,7 @@ reverse). `kunglao_log` stays never-raises and outside the package.
 
 | current face | final home |
 |---|---|
-| `SCHEMA`, `LEDGER_REL`, `LOCK_REL` | `rlvr.ledger` (re-exported) |
+| `SCHEMA` | `rlvr.ledger` (re-exported) |
 | `KIND_TASK`, `KIND_SELF_DISTILL`, `KIND_HYBRID_DISTILL`, `ROLLOUT_KINDS` | `rlvr.ledger` |
 | `REWARD_RAIL_BOUNDED`, `REWARD_RAIL_PROVENANCE`, `REWARD_RANGE_BOUNDED`, `KIND_REWARD_RAILS`, `reward_rail_of()`, `reward_range_of()` | `rlvr.ledger` (the issue-1007 per-kind reward-unit declaration) |
 | `register_kind()`, `kinds()` | `rlvr.ledger` (the open-enum API; `register_kind(kind, note, rail)` records the unit) |
@@ -348,15 +350,6 @@ the one-line pointer (name — the docstring's opening line):
   terminal / censored_env / agent_death, mechanical over session returncode +
   timed_out + active env-class blocker files + liveness at exit; agent-death
   prose stays owned by the #447/#497 Type E gate.
-- `censoring` — rlvr/censoring.py — censored posterior semantics (#955 links 4/5):
-  censored rows update NOTHING, per-direction trailing censor streaks, the
-  freeze-at-K predicate, and the #954 integration seam
-  (posterior_observations filter over runs/direction-state.jsonl).
-- `direction` — rlvr/direction.py — the oracle-probe density direction face (#954,
-  Type-3): Beta posterior per direction over the shared direction-state rows,
-  step credit = probe_face.probe_delta (the ΔV seam), racing elimination gated
-  on posterior collapse (zero failure evidence never eliminates), flag-gated
-  KUNGLAO_DIRECTION=1 loop faces (default OFF).
 - `disposition` — rlvr/disposition.py — the episode disposition algebra (#988):
   one evidence-gated disposition per episode (SOLVED / OUT_OF_SCOPE /
   CENSORED_ENV / ATTEMPTED_EXHAUSTED / INFRA / FAILED / SURRENDER) under a
@@ -423,6 +416,11 @@ the one-line pointer (name — the docstring's opening line):
   `rollout-budget/1` row. One global coefficient; the bucket key is recorded
   but a split waits for n>=5. A deadline stop carries `stop_reason: deadline`
   and is excluded from strategic learning without adding a disposition.
+  The host faces (rlvr/rollout_timer_host.py: arm-for-dispatch / round-close /
+  deadline-wake) additionally publish one `deadline-fired` row into the
+  scheduler events stream on the FIRST fire of a deadline (an idempotent
+  wake replay never re-lands the event; the stream is the wake channel —
+  the ledger rows stay the truth).
 - `route_ledger` — rlvr/route_ledger.py — the route-attempt ledger (#988):
   `runs/rt-tests/<claim>/routes.json` with the per-claim-kind `routes:`
   declaration from `references/schemas/machine_check_map.yaml`, per-attempt
@@ -434,6 +432,7 @@ the one-line pointer (name — the docstring's opening line):
 - `recipe_arms` — recipe_arms.py — issue #695: tool-chain recipe arms (the learned
 - `refutation_fold` — rlvr/refutation_fold.py — the refutation fold (deterministic).
 - `settlement_scorer` — rlvr/settlement_scorer.py — the BLIND settlement entry (issue-687).
+- `signal_arrival` — rlvr/signal_arrival.py — the READ-ONLY signal-arrival report (issue-1005, slice N0): seven counts of how far a learning signal travelled, each a number or `no data` with the reason; standard library only, writes nothing.
 - `source_reliability` — rlvr/source_reliability.py — the learned source-reliability Betas.
 - `step_credit` — rlvr/step_credit.py — step-level ladder credit (#712): dense reward
 - `step_grain` — rlvr/step_grain.py — the settlement grain (#690): step := one
@@ -450,6 +449,13 @@ the one-line pointer (name — the docstring's opening line):
   derived from the action_space STRATEGIC registry) carrying its propensity,
   written through the unified experience ledger + the
   `strategic_action_recorded` event; an absent action reads as SURRENDER.
+  The same module owns the dispatch-DECLARATION face (issue-1005 S5): the
+  dispatch gate's ALLOW tail appends one declaration row per dispatch —
+  `{claim, route, propensity, declared, trace_id, ts}`, a declared route
+  or the explicit gap (`declared: false`, `route: null`) — APPEND history,
+  last row is the live face; `absence_disposition` maps the gap toward
+  SURRENDER through the disposition algebra's own vocabulary, and
+  `disposition_fields` speaks both faces of the stamp.
 - `strategy_store` — strategy_store.py — the REAL compose store adapter (kernel W2-T4 seam,
 - `verification_debt` — rlvr/verification_debt.py — the verification-debt face (deterministic).
 
@@ -556,3 +562,40 @@ on `sys.path` by the harness instead.
   means — each landing green against `tests/test_rlvr_bitexact.py`.
 - The D1 TF-IDF/k-means clustering named in issue #420 has no home in
   v0.1.6's surface; it joins the package only if/when its face lands.
+
+`production_terminal` is called by the final eligible production completion
+Stop. It validates anchored checker evidence and distinct maker identity,
+serializes mission/credit settlement with actual POSIX or Windows process locks,
+and replays durable intent on the next eligible Stop. The read-only operator face
+is `PYTHONPATH=scripts python -m rlvr.production_terminal <workspace>`; it reports
+the checkpoint, episodes, pending ledger rows and terminal-only spans separately.
+Windows runtime locking and durability have not been exercised in this change.
+Dispatch/worker/checker spans and the paired development evaluator remain pending.
+
+Deliverable-use credit (#1068): fact IDs found in `notes/`, `analyses/`,
+`runs/deliverables/`, or passed through the legacy `cited_ids` argument
+remain textual references for audit; by themselves they do not establish
+use. No qualifying record means use is unknown, including for old references.
+The existing question-link and independently verified rule-out paths retain
+their separate semantics.
+
+The delivery skill dispatches a fresh checker for a specific fact and deliverable.
+On an armed learning channel, the Agent completion hook records its result in
+`runs/deliverable-use/`. The hook takes the checker ID from the host event and
+seals the record with its workspace and call identity. Settlement requires
+that seal alongside the full file hashes and the exact shared excerpt.
+
+A successful checker returns a `deliverable-use/1` JSON object with the
+assigned `fact_id` and workspace-relative `deliverable`, the full file
+hashes (`fact_sha256` and `deliverable_sha256`), an exact shared
+`excerpt` of at least 32 characters, `verdict: "used"`, and a `reason`
+explaining how the excerpt contributes to the answer. The checker inspects
+the deliverable in context, distinguishing affirmative use from quoted
+material, rejection, and incidental mentions.
+
+Missing, malformed, stale, self-signed, or unverifiable records leave use
+unknown. Armed workspaces need a new checker receipt for prior unsigned
+records. Unarmed fixture and legacy reads still recognize the existing
+record format. Duplicate receipts do not add credit. Host attribution
+uses the existing learning-seal trust boundary for processes under the
+workspace user's account.

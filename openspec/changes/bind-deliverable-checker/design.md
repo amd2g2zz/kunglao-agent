@@ -1,0 +1,3 @@
+A top-level orchestrator dispatches a fresh synchronous checker with an explicit deliverable review request. The Agent completion hook takes the checker identity from host metadata and accepts a structured result that matches the requested fact and deliverable. It seals the record with the existing workspace learning key and publishes it atomically.
+
+The reader checks the seal and workspace association before awarding deliverable use credit when the channel is armed. It then applies the existing exact fact and deliverable byte checks. The existing learning seal trusts the same host user account and hooks. Stronger isolation from arbitrary processes under that account and other verification writers are outside the scope of this change.

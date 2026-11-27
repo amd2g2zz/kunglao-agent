@@ -13,10 +13,9 @@ own seam (monkeypatch) — the production path is never touched.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
+import kunglao_log
 from kunglao_log import _WARN_LAST
 from rlvr import learning_seal as seal  # noqa: E402
 
@@ -25,6 +24,7 @@ from rlvr import learning_seal as seal  # noqa: E402
 def armed(tmp_path, monkeypatch):
     key = tmp_path / "learning.key"
     key.write_bytes(b"k" * 48)
+    monkeypatch.setattr(kunglao_log, "_WARN_WS_OVERRIDE", [])
     monkeypatch.setattr(seal, "KEY_PATH", key)
     monkeypatch.setattr(seal, "_ANCHOR", {"build": None})
     monkeypatch.setattr(seal, "_NOTICE", {"shown": False})
@@ -34,6 +34,7 @@ def armed(tmp_path, monkeypatch):
 
 @pytest.fixture
 def unarmed(tmp_path, monkeypatch):
+    monkeypatch.setattr(kunglao_log, "_WARN_WS_OVERRIDE", [])
     monkeypatch.setattr(seal, "KEY_PATH", tmp_path / "missing.key")
     monkeypatch.setattr(seal, "_ANCHOR", {"build": None})
     monkeypatch.setattr(seal, "_NOTICE", {"shown": False})
@@ -41,6 +42,18 @@ def unarmed(tmp_path, monkeypatch):
 
 
 # ---------- posture ----------
+
+@pytest.mark.parametrize("fixture_func", [armed, unarmed])
+def test_key_fixture_isolates_and_restores_warning_workspace(
+        tmp_path, monkeypatch, fixture_func) -> None:
+    original = [tmp_path / "previous-workspace"]
+    monkeypatch.setattr(kunglao_log, "_WARN_WS_OVERRIDE", original)
+    with pytest.MonkeyPatch.context() as inner:
+        fixture_func.__wrapped__(tmp_path, inner)
+        assert kunglao_log._WARN_WS_OVERRIDE == []
+        assert kunglao_log._WARN_WS_OVERRIDE is not original
+    assert kunglao_log._WARN_WS_OVERRIDE is original
+
 
 def test_armed_iff_key_provisioned_and_long_enough(
         armed, tmp_path, monkeypatch) -> None:

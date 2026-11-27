@@ -31,6 +31,7 @@ for p in (str(ROOT), str(SCRIPTS)):
         sys.path.insert(0, p)
 
 import eval_split_lint  # noqa: E402
+import rlvr.consolidated_ledger as consolidated_ledger  # noqa: E402
 from rlvr import strategy_store  # noqa: E402
 
 
@@ -58,23 +59,27 @@ def _row(**over):
 # ------------------------------------------------------------------ write face
 
 def test_write_face_refuses_holdout_workspace_rows(tmp_path, monkeypatch):
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(tmp_path / "store"))
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
+    ws = tmp_path / "ws"
+    ws.mkdir()
     out = strategy_store.append_row(
-        _row(workspace_id="web-token-v1-holdout-ws"))
+        ws, _row(workspace_id="web-token-v1-holdout-ws"))
     assert out["appended"] is False
     assert "holdout" in str(out.get("reason")), \
         "a holdout unit-id must never reach the store (filter BEFORE append)"
-    path = strategy_store.store_path()
+    path = consolidated_ledger.family_path(ws, "knowledge")
     assert not path.exists() or \
         path.read_text(encoding="utf-8").strip() == "", \
         "the refused row must not be on disk"
 
 
 def test_write_face_allows_clean_rows(tmp_path, monkeypatch):
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(tmp_path / "store"))
-    out = strategy_store.append_row(_row())
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    out = strategy_store.append_row(ws, _row())
     assert out["appended"] is True
-    rows = strategy_store.load_rows(ws=None)
+    rows = strategy_store.load_rows(ws)
     assert len(rows) == 1 and rows[0]["provenance"]["dispatch_id"] == "C-004"
     # the full schema rides every row
     for field in ("schema", "ts", "workspace_id", "arm_key",
@@ -93,7 +98,7 @@ def _lint(patterns_root: Path) -> int:
 def test_lint_hard_fails_poisoned_store_row(tmp_path, capsys):
     root = tmp_path / "patterns"
     root.mkdir()
-    (root / strategy_store.STORE_REL).write_text(
+    (root / "knowledge-store.jsonl").write_text(
         json.dumps(_row(workspace_id="web-token-v1-holdout-ws")) + "\n",
         encoding="utf-8")
     rc = _lint(root)
@@ -106,7 +111,7 @@ def test_lint_hard_fails_poisoned_store_row(tmp_path, capsys):
 def test_lint_green_on_clean_store(tmp_path, capsys):
     root = tmp_path / "patterns"
     root.mkdir()
-    (root / strategy_store.STORE_REL).write_text(
+    (root / "knowledge-store.jsonl").write_text(
         json.dumps(_row()) + "\n", encoding="utf-8")
     assert _lint(root) == 0
     assert "clean" in capsys.readouterr().out

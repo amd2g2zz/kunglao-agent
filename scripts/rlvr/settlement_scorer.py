@@ -14,17 +14,16 @@ ruling through THIS module (the blind gate -> the validator stack ->
 the ledger), mints the claim through ``claims_store.apply`` (the
 issues-800/809 contract: a PROVEN mint resolves to a PASSED verification
 record), and stamps the ``settlement-wire/1`` liveness rows. The
-unblinded ``settle_step`` judgment is eval-only behind
-``KUNGLAO_EVAL_SETTLE`` (the production stop face defaults to blind
-mode; the mechanical hash-only bookkeeping stays at the boundary in
-every mode).
+unblinded ``settle_step`` judgment has no production reader — the
+production stop face is blind-only; the mechanical hash-only
+bookkeeping stays at the boundary in every mode.
 
 1. THE BLIND INPUT CONTRACT. ``settler_input`` builds from a WHITELIST
    (raw step artifacts as path + sha256, the claim/question, the rules
    table as path + sha256). Producer narrative (notes/, worker-status,
    verification/verify-note records, fact conclusions, the verdict
    conclusion) and the policy learning faces
-   (runs/method-family-log.jsonl, runs/q-cell-log.jsonl, and since #721
+   (the method-family and q-cell learning faces, and since #721
    the consolidated runs/experience.jsonl carrying the q-cell arm
    values) are excluded BY CONSTRUCTION: a refused path raises BEFORE
    any read; a legal build opens exactly the listed artifacts (never
@@ -74,16 +73,26 @@ EXCLUDED_PREFIXES = ("runs/worker-status-", "runs/verification-")
 EXCLUDED_SUFFIXES = ("-verify-note.md",)
 EXCLUDED_FILES = {
     "runs/method-family-log.jsonl": "the method-family learning face",
-    "runs/q-cell-log.jsonl": "the q-cell learning face (arm values)",
-    # #721: the q-cell arm values now ride the consolidated learning
-    # feed — the whole file joins the wall (its transition rows are
-    # reward-bearing policy feedback too)
+    # issue-1004 R3: the q-cell arm values ride the consolidated
+    # learning feed — the whole file joins the wall (its transition
+    # rows are reward-bearing policy feedback too)
     "runs/experience.jsonl": "the consolidated learning feed (#721)",
     "evidence/verdict.json": "the verdict conclusion",
 }
-#: basename view — the rules table may live outside the ws
+#: the pre-consolidation learning faces — denied by BASENAME (the
+#: rt_read_barrier hook's posture): the files still exist on disk until
+#: the R4 retire CLI deletes them, and a citation of either path is
+#: still a learning-face leak. Basename-keyed so ANY location with the
+#: basename refuses, matching the hook's deny list exactly.
+EXCLUDED_LEGACY_BASES = {
+    "q-cell-log.jsonl": "the q-cell learning face (arm values)",
+}
+#: basename view — the rules table may live outside the ws (the derived
+#: view plus the pre-consolidation learning faces, so BOTH faces refuse
+#: the same basename set)
 EXCLUDED_FILE_BASES = {k.rsplit("/", 1)[-1]: v
                        for k, v in EXCLUDED_FILES.items()}
+EXCLUDED_FILE_BASES.update(EXCLUDED_LEGACY_BASES)
 
 
 def _norm_rel(path) -> str:
@@ -128,6 +137,9 @@ def excluded_face(rel) -> str | None:
             return f"{rel} (worker verify note)"
     if low in EXCLUDED_FILES:
         return f"{rel} ({EXCLUDED_FILES[low]})"
+    base = low.rsplit("/", 1)[-1]
+    if base in EXCLUDED_LEGACY_BASES:
+        return f"{rel} ({EXCLUDED_LEGACY_BASES[base]})"
     return None
 
 

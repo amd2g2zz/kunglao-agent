@@ -130,11 +130,11 @@ def _prior_claim_ids(ws: Path) -> set:
     the same audit's 1-F6 shows it is machine-global, not a
     workspace-sanctioned claim set.
 
-    #721: rides the consolidated read face (runs/experience.jsonl plus
-    the legacy runs/transitions.jsonl archive during the compat window)
-    — the wipe guard must never silently empty because the ledger moved.
-    A partial deploy without the rlvr core degrades to the legacy path."""
-    # #804 de-compat: the legacy runs/transitions.jsonl path-read
+    #721: rides the consolidated read face — the only face since the
+    issue-1004 R3 schema cutover (the wipe guard must never silently
+    empty because the ledger moved; a partial deploy without the rlvr
+    core is an ImportError LOUD)."""
+    # #804 de-compat + issue-1004 R3: the pre-consolidation path-read
     # fallback is retired — the consolidated read face is the ONE face
     # (the wipe guard must never silently empty because the ledger moved,
     # and a missing rlvr core is an ImportError LOUD).

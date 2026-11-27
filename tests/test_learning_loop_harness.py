@@ -18,7 +18,7 @@ inflow_from_failure / order_task_dirs) — across three laps:
     lap 3  mastery consolidation (in-family repeat: info bonus 0, cost
            discounted, retirement candidates) + new-family inflow
 
-The eight assertions (each one test) plus the owner's learning-argument
+The seven assertions (each one test) plus the owner's learning-argument
 summary: the lap-over-lap delta table proves the learning is
 attributable to the pool's memory face — the ablation arm (same
 history, memory faces absent at the scheduler boundary) is flat.
@@ -258,43 +258,7 @@ def test_timeout_three_verdicts_no_misfire(tmp_path):
                 fail["memory_landing"]}) == 3
 
 
-# ------------------------------------ assertion 7: recall pollution (P4)
-
-def test_recall_pollution_gate_rises(tmp_path):
-    """RECALL POLLUTION (P4 live): a key recalled-and-ignored repeatedly
-    pays the attention tax — its consecutive-ignored count rises, the
-    recall_gate threshold rises ABOVE the cold-start bar, and its
-    admission flips: the polluted key stops being admitted and stops
-    surfacing in the ranking (the attention-tax hard exit)."""
-    from rlvr import memory_bridge as mb
-    ws = tmp_path / "recall-ws"
-    ws.mkdir()
-    episode = {"claim": "C-T1",
-               "context_features": ["family:fam-t"],
-               "reusable_fragments": ["the movz chain derives the schedule"],
-               "outcome": {"status": "completed"},
-               "reward": {"r": 0.5}}
-    stamped = mb.stamp_family_memory(ws, episode)
-    assert stamped["written"], stamped
-    key = stamped["written"][0]
-    cold = mb.recall_gate(mb.load_rows(ws)[0])
-    assert cold["threshold"] == mb.GATE_BASE
-    assert cold["admit"] is True
-    for _ in range(3):
-        mb.record_usage(ws, key, "retrieved")
-        closed = mb.close_recall_window(ws, cited_keys=[])
-    assert closed["ignored"] == [key], closed
-    row = next(r for r in mb.load_rows(ws) if r["key"] == key)
-    assert int(row["consec_ignored"]) == 3, row
-    gate = mb.recall_gate(row)
-    assert gate["threshold"] == pytest.approx(3 * mb.GATE_IGNORED_STEP)
-    assert gate["threshold"] > cold["threshold"]
-    assert cold["admit"] is True and gate["admit"] is False
-    # the polluted key stops surfacing even for its own family's query
-    assert mb.rank_rows(mb.load_rows(ws), ["family:fam-t"]) == []
-
-
-# ------------------------------------------ assertion 8: election+hysteresis
+# ------------------------------------------ assertion 7: election+hysteresis
 
 def test_info_bonus_election_and_hysteresis(tmp_path):
     """INFO-BONUS ELECTION + HYSTERESIS: the new family's FIRST task

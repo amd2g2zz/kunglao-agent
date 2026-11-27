@@ -49,32 +49,33 @@ ASM = {"source": "raw-asm", "reference_class": "raw", "eid": "E-2"}
 
 @pytest.fixture()
 def store(tmp_path, monkeypatch):
-    """Isolated shared-store root — the reliability store is
-    cross-engagement by design, so each test pins its own root."""
-    root = tmp_path / "store"
-    monkeypatch.setenv("KUNGLAO_POSTERIOR_STORE", str(root))
-    return root
+    """A workspace owning its own reliability store (cross-project
+    off: the store is workspace data, each test pins its own)."""
+    monkeypatch.delenv("KUNGLAO_POSTERIOR_STORE", raising=False)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    return ws
 
 
 # 1. the invalidation events are the only teacher ---------------------------
 
 def test_refuted_evidence_updates_source_beta(store):
-    before = sr.fold().posterior(PSEUDO)
-    out = sr.record_refutation(PSEUDO, refuted_by="E-9")
+    before = sr.fold(ws=store).posterior(PSEUDO)
+    out = sr.record_refutation(store, PSEUDO, refuted_by="E-9")
     assert out["recorded"] is True
-    after = sr.fold().posterior(PSEUDO)
+    after = sr.fold(ws=store).posterior(PSEUDO)
     assert after["beta"] == before["beta"] + 1.0
     assert after["alpha"] == before["alpha"]          # alpha untouched
     assert after["mean"] < before["mean"]             # refuted -> worse
     # no cross-talk: an unrelated source is still at its prior
-    assert sr.fold().posterior(ASM)["basis"] == "prior"
+    assert sr.fold(ws=store).posterior(ASM)["basis"] == "prior"
 
 
 def test_confirmed_evidence_updates_source_beta(store):
-    before = sr.fold().posterior(ASM)
-    out = sr.record_confirmation(ASM, confirmed_by="E-9")
+    before = sr.fold(ws=store).posterior(ASM)
+    out = sr.record_confirmation(store, ASM, confirmed_by="E-9")
     assert out["recorded"] is True
-    after = sr.fold().posterior(ASM)
+    after = sr.fold(ws=store).posterior(ASM)
     assert after["alpha"] == before["alpha"] + 1.0
     assert after["beta"] == before["beta"]            # beta untouched
     assert after["mean"] > before["mean"]
@@ -84,9 +85,9 @@ def test_confirmed_evidence_updates_source_beta(store):
 
 def test_low_reliability_source_discounts_credit(store):
     for _ in range(10):
-        sr.record_refutation(PSEUDO)
+        sr.record_refutation(store, PSEUDO)
     for _ in range(10):
-        sr.record_confirmation(ASM)
+        sr.record_confirmation(store, ASM)
 
     # the step-credit module's own verification-class scale is untouched
     assert sc.CREDIT_BY_CLASS[sc.CROSS_VALIDATED] == 1.0
@@ -96,23 +97,28 @@ def test_low_reliability_source_discounts_credit(store):
 
     bad = {"status": "PROVEN", "verify_status": "passes", **PSEUDO}
     good = {"status": "PROVEN", "verify_status": "passes", **ASM}
-    credit_bad = sc.weighted_step_credit([bad], rng=random.Random(7))
-    credit_good = sc.weighted_step_credit([good], rng=random.Random(7))
+    credit_bad = sc.weighted_step_credit([bad], rng=random.Random(7),
+                                         ws=store)
+    credit_good = sc.weighted_step_credit([good], rng=random.Random(7),
+                                          ws=store)
 
     # step_credit = item_credit(meta) * source_reliability_theta
     # (the module's 6-decimal rounding is its scoring convention)
-    theta_bad = sr.reliability_weight(bad, rng=random.Random(7))
+    theta_bad = sr.reliability_weight(bad, rng=random.Random(7),
+                                      ws=store)
     assert credit_bad == round(sc.item_credit(bad) * theta_bad, 6)
     # Beta(1, 11) vs Beta(11, 1): the discount is not marginal
     assert credit_bad < 0.35
     assert credit_good > 0.65
     assert credit_bad < credit_good
     # the production entry (step_credit) carries the same discount
-    assert sc.step_credit([bad]) == sc.weighted_step_credit([bad])
-    assert sc.step_credit([bad]) < 0.35
+    assert sc.step_credit([bad], ws=store) == \
+        sc.weighted_step_credit([bad], ws=store)
+    assert sc.step_credit([bad], ws=store) < 0.35
     # unlabeled evidence rides the neutral weight — byte-identical score
     plain = {"status": "PROVEN", "verify_status": "passes"}
-    assert sc.weighted_step_credit([plain]) == sc.step_credit([plain]) == 1.0
+    assert sc.weighted_step_credit([plain]) == \
+        sc.step_credit([plain]) == 1.0
     assert sr.reliability_weight({"eid": "E-x"}) == 1.0
 
 
@@ -123,13 +129,13 @@ def test_high_variance_source_triggers_exploration(store):
     uncertain = {"source": "hook-frida", "reference_class": "derived"}
     settled_bad = {"source": "pseudo-guess", "reference_class": "inferred"}
     for _ in range(15):
-        sr.record_confirmation(settled)
-        sr.record_refutation(settled)                 # Beta(16, 16)
-    sr.record_confirmation(settled_bad)
+        sr.record_confirmation(store, settled)
+        sr.record_refutation(store, settled)          # Beta(16, 16)
+    sr.record_confirmation(store, settled_bad)
     for _ in range(17):
-        sr.record_refutation(settled_bad)             # Beta(2, 18)
+        sr.record_refutation(store, settled_bad)      # Beta(2, 18)
 
-    view = sr.fold()
+    view = sr.fold(ws=store)
     # uncertainty is measured, not declared
     assert view.posterior(uncertain)["width"] > \
         3.0 * view.posterior(settled)["width"]
@@ -154,8 +160,8 @@ def test_high_variance_source_triggers_exploration(store):
 
 def test_reliability_generalizes_to_new_contexts(store):
     for _ in range(8):
-        sr.record_refutation(PSEUDO, context_class="ctx-a")
-    view = sr.fold()
+        sr.record_refutation(store, PSEUDO, context_class="ctx-a")
+    view = sr.fold(ws=store)
     # the observed context reads its own cell
     cell = view.posterior(PSEUDO, context_class="ctx-a")
     assert cell["basis"] == "cell"
@@ -171,7 +177,7 @@ def test_no_rule_table_prior_is_uniform(store):
     """Every labeled class starts Beta(1, 1): the reference-class
     taxonomy orders labels, never trust, and no rule table ranks
     sources."""
-    view = sr.fold()
+    view = sr.fold(ws=store)
     for source, ref in (("ghidra-pseudo", "derived"), ("raw-asm", "raw"),
                         ("mitm-capture", "raw"),
                         ("llm-inferred", "inferred")):
@@ -185,7 +191,8 @@ def test_no_rule_table_prior_is_uniform(store):
 
 
 def test_invalid_labels_are_refused_not_recorded(store):
-    out = sr.record_refutation({"source": "x", "reference_class": "rumor"})
+    out = sr.record_refutation(store,
+                               {"source": "x", "reference_class": "rumor"})
     assert out["recorded"] is False
     assert "reference_class" in (out["reason"] or "")
-    assert sr.fold().posterior("x", "raw")["basis"] == "prior"
+    assert sr.fold(ws=store).posterior("x", "raw")["basis"] == "prior"

@@ -175,11 +175,8 @@ def test_cited_ids_producer_marks_deliverable_refs(tmp_path):
 
 # ---------- 3. D-678.4b: the verification citation leg ----------------------
 
-def test_redteam_facts_cited_by_deliverable_earn_full_credit(tmp_path):
-    """Verification facts (answers_question=None — red-team confirmations
-    answer no primary question) settle FULL when a deliverable cites
-    them, not the TRACE 0.01 that fed 0.99 failure mass against
-    successes."""
+def test_redteam_fact_mention_without_use_remains_trace(tmp_path):
+    """An incidental mention of a verification fact remains trace-only."""
     ws = _ws(tmp_path)
     _grammar_fact(ws, "F400", "PROVEN", creator="tr-rt-1")
     (ws / "notes").mkdir(exist_ok=True)
@@ -190,9 +187,9 @@ def test_redteam_facts_cited_by_deliverable_earn_full_credit(tmp_path):
         [{"dispatch_id": "tr-rt-1", "round": 1}],
         ss.fact_artifacts(ws), [])
     row = doc["rows"][0]
-    assert row["credited"] == ["F400-fact"]
-    assert row["demoted"] == []
-    assert row["r"] == ss.ROUND_CREDIT_FULL
+    assert row["credited"] == []
+    assert row["demoted"] == [{"id": "F400-fact", "reason": "uncited_verified"}]
+    assert row["r"] == ss.TRACE_CANONICAL
 
 
 # ---------- 4. the live settlement banks nonzero ----------------------------

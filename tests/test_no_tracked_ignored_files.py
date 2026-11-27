@@ -43,6 +43,14 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "rl-v2 battery simulator: loop_sim tracked-home precedent (#887)",
     "experiments/learning-loop/sim/battery_v3_experiments.py":
         "rl-v2 battery experiments: loop_sim tracked-home precedent (#887)",
+    # the event-driven wake path's EXP-C1 quiet-day replay harness (the
+    # scheduler-events slice's committed experiment): drives the REAL
+    # watcher face over synthetic quiet/material/noise days and emits
+    # the quiet_tokens metric rows — the acceptance's measurable face.
+    # Same declared experiment tier, same tracked home (the loop_sim
+    # precedent); outside the deploy surface, deliberately.
+    "experiments/scheduler/quiet_day_replay.py":
+        "EXP-C1 quiet-day replay harness: loop_sim tracked-home precedent",
     # the #951 dual-objective sim world: the rl-v3 direction layer's
     # in-silico evidence gate (same declared sim tier, same tracked
     # home — the #887 battery precedent).
@@ -191,6 +199,12 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # measurement artifacts only.
     "coverage-floor.json":
         "#807 coverage-floor ratchet policy anchor: committed floor, not process output (#951)",
+    # the rollout-budget host's offline coefficient-trajectory gate:
+    # synthetic-data sim code driving the REAL host faces (the
+    # loop_sim tracked-home precedent; no corpus, no measurement
+    # output — the evidence lives in the openspec change).
+    "experiments/scheduler/coeff_sim.py":
+        "scheduler sim harness: offline coefficient-trajectory gate for the rollout-budget host (loop_sim tracked-home precedent)",
 }
 
 

@@ -28,7 +28,8 @@ no mocked telemetry. The runner's ONLY jobs:
                          runs/mission_ledger.yaml), oracle case green rate
                          (runs/oracle-status.json), PROVEN claims
                          (claim-register.yaml), token spend
-                         (runs/cost_events.jsonl + the session's own cost
+                         (the settlement family's cost-event rows + the
+                         session's own cost
                          report), the #136 task_terminal_settlement row
                          (runs/logs/kunglao-*.jsonl);
     4. FINAL CHECK       the task's mechanical checker (the #299 face) on
@@ -364,7 +365,8 @@ def launch_session(workspace: Path, prompt: str, *, budget_usd: float,
         "timed_out": timed_out,
         "stdout_tail": (out or "")[-4000:],
         "stderr_tail": (err or "")[-2000:],
-        "session_cost": _session_cost(out or ""),
+        "session_cost": _merge_session_cost(_session_cost(out or ""),
+                                            workspace, started),
         "sandbox_wrap_failed": sandbox_wrap_failed,
     }
 
@@ -402,6 +404,257 @@ def _session_cost(stdout_text: str) -> dict | None:
                 "output_tokens": usage.get("output_tokens"),
             }
     return None
+
+
+# ------------------------------------------------- transcript cost fallback
+# The session's own cost report only exists if the session got to print
+# it. The wall-cap kill SIGKILLs the process group, so stdout carries
+# nothing at all, and the harvested row reads as zero spend: over the real
+# eval artifacts, 25 of 30 session rows land with an empty cost face, and
+# every cost-per-solution account then drops exactly the sessions that
+# spent the most wall.
+#
+# The durable face is the transcript: every usage row of the session (and
+# of each worker it dispatched) is written as it happens, beside the
+# session's own cumulative cost row — which the CLI only appends when it
+# exits on its own (measured: a killed session has none, and SIGTERM makes
+# it exit without writing one either). So the dollars are harvested when
+# they were written and the tokens always; when no dollar row exists, the
+# face says WHY instead of leaving the reader to infer zero.
+#
+# What is deliberately NOT here: a priced estimate from token counts. The
+# CLI's own per-model dollar face does not join onto the transcript's
+# usage rows — different model-name spaces (a tier suffix on one side, a
+# model that appears in no usage row at all) and a population that diverges
+# per model (measured on one session: input 6.8x, cache-read 19x; the mixed
+# grand totals are 2.8x), while the CLI's own row says
+# hasUnknownModelCost=True. So a rate table would have put
+# killed sessions on a different money scale than the completed ones they
+# are compared against. That is the distorted denominator, not the missing
+# one.
+CLAUDE_PROJECTS_SUBPATH = (".claude", "projects")
+SUBAGENT_DIRNAME = "subagents"
+SUBAGENT_GLOB = "agent-*.jsonl"
+COST_STATE_ROW = "cost-state"
+COST_SOURCE_CLI = "cli-result"
+COST_SOURCE_TRANSCRIPT = "transcript-cost-state"
+COST_SOURCE_USAGE_ONLY = "transcript-usage-tokens"
+TRANSCRIPT_MTIME_SLACK_S = 2.0
+TRANSCRIPT_CWD_SCAN_ROWS = 40
+
+_USAGE_TOKEN_KEYS = (
+    ("input_tokens", "input_tokens"),
+    ("output_tokens", "output_tokens"),
+    ("cache_read_input_tokens", "cache_read_input_tokens"),
+    ("cache_creation_input_tokens", "cache_creation_input_tokens"),
+)
+
+
+def claude_projects_dir(workspace: Path | str,
+                        projects_root: Path | None = None) -> Path:
+    """Claude Code's transcript directory for a cwd: the RESOLVED path
+    with every '/' and '.' mapped to '-' (measured: a symlinked /tmp cwd
+    lands under the resolved -private-tmp-... name, and dotted path
+    components fold to '-' there too)."""
+    root = (Path(projects_root) if projects_root is not None
+            else Path.home().joinpath(*CLAUDE_PROJECTS_SUBPATH))
+    return root / str(Path(workspace).resolve()).replace("/", "-").replace(
+        ".", "-")
+
+
+def _transcript_rows(path: Path):
+    """Yield every parsable JSON object row of a transcript; unreadable
+    file or unparsable line yields nothing (the harvest degrades, the run
+    never dies on its own telemetry)."""
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict):
+                    yield row
+    except OSError as exc:
+        _warn_fail_open("transcript_rows_read", exc)
+
+
+def _transcript_usage_rows(path: Path):
+    """(sidechain_flag, usage_dict) for every row that carries usage."""
+    for row in _transcript_rows(path):
+        msg = row.get("message")
+        if not isinstance(msg, dict):
+            continue
+        usage = msg.get("usage")
+        if isinstance(usage, dict):
+            yield bool(row.get("isSidechain")), usage, msg
+
+
+def _sidechain_transcripts(transcript: Path) -> list[Path]:
+    """The worker transcripts of one session: <dir>/<stem>/subagents/
+    agent-*.jsonl. The main transcript carries no sidechain row at all —
+    every worker row lives in these files (measured across the real
+    session corpus)."""
+    side = transcript.parent / transcript.stem / SUBAGENT_DIRNAME
+    if not side.is_dir():
+        return []
+    return sorted(side.glob(SUBAGENT_GLOB))
+
+
+def _transcript_names_workspace(tx: Path, targets: set[str]) -> bool:
+    """True when one of the transcript's own rows says it was written in
+    this workspace (a resumed or moved session names another cwd)."""
+    for i, row in enumerate(_transcript_rows(tx)):
+        if i >= TRANSCRIPT_CWD_SCAN_ROWS:
+            return False
+        cwd = row.get("cwd")
+        if cwd is not None:
+            return str(cwd) in targets
+    return False
+
+
+def session_transcript(workspace: Path | str, started_s: float, *,
+                       projects_root: Path | None = None) -> Path | None:
+    """The transcript of THE session this runner launched: newest by mtime
+    among the files in the workspace's transcript directory that were
+    written at or after the launch and whose own rows name that workspace
+    as cwd. None when no file qualifies (deleted corpus, no directory, a
+    session that never wrote a row) — the caller then keeps the empty face
+    rather than borrowing another run's numbers."""
+    d = claude_projects_dir(workspace, projects_root)
+    if not d.is_dir():
+        return None
+    targets = {str(Path(workspace)), str(Path(workspace).resolve())}
+    floor = started_s - TRANSCRIPT_MTIME_SLACK_S
+    best: Path | None = None
+    best_mtime = floor
+    try:
+        candidates = sorted(d.glob("*.jsonl"))
+    except OSError as exc:
+        _warn_fail_open("session_transcript_scan", exc)
+        return None
+    for tx in candidates:
+        try:
+            mtime = tx.stat().st_mtime
+        except OSError:
+            continue
+        if mtime < best_mtime or not _transcript_names_workspace(tx,
+                                                                  targets):
+            continue
+        best, best_mtime = tx, mtime
+    return best
+
+
+def transcript_usage(transcript: Path) -> dict:
+    """Reduce one session's transcripts to its consumption face: the
+    orchestrator rows of the main file, the worker rows of the sidechain
+    files beside it (kept as SEPARATE fields — the two populations are
+    what the cockpit ratio and the cost accounts both need apart), and the
+    CLI's own cumulative cost row when the session wrote one."""
+    face = {"input_tokens": 0, "output_tokens": 0,
+            "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0,
+            "worker_input_tokens": 0, "worker_output_tokens": 0,
+            "worker_cache_read_input_tokens": 0,
+            "worker_cache_creation_input_tokens": 0,
+            "usage_rows": 0, "worker_usage_rows": 0,
+            "cost_state_rows": 0, "total_cost_usd": None,
+            "worker_transcripts": 0, "worker_unread": 0}
+    main = Path(transcript)
+    for sidechain, usage, _msg in _transcript_usage_rows(main):
+        if sidechain:
+            face["worker_usage_rows"] += 1
+        else:
+            face["usage_rows"] += 1
+        for field, key in _USAGE_TOKEN_KEYS:
+            if sidechain:
+                face["worker_" + field] += int(usage.get(key) or 0)
+            else:
+                face[field] += int(usage.get(key) or 0)
+    for row in _transcript_rows(main):
+        if row.get("type") != COST_STATE_ROW:
+            continue
+        face["cost_state_rows"] += 1
+        usd = row.get("totalCostUSD")
+        if isinstance(usd, (int, float)):
+            face["total_cost_usd"] = float(usd)  # last written wins
+    for sub in _sidechain_transcripts(main):
+        face["worker_transcripts"] += 1
+        if not sub.is_file():
+            # a transcript that cannot be read is counted, never folded
+            # into the silent zero the face used to report
+            face["worker_unread"] += 1
+            continue
+        for _sidechain, usage, _msg in _transcript_usage_rows(sub):
+            face["worker_usage_rows"] += 1
+            for field, key in _USAGE_TOKEN_KEYS:
+                face["worker_" + field] += int(usage.get(key) or 0)
+    return face
+
+
+def session_cost_fallback(workspace: Path | str, started_s: float, *,
+                          projects_root: Path | None = None) -> dict | None:
+    """The cost face for a session that never reported itself. Returns
+    None when no transcript qualifies (the harvest stays silent rather
+    than claiming another run's spend); otherwise the token sums, plus the
+    session's own dollar figure when it flushed one, plus an explicit
+    reason when it did not.
+
+    Provenance is recorded on every face: `cli-result` means the CLI's own
+    stdout report, `transcript-cost-state` means the CLI's own cumulative
+    row read off disk, `transcript-usage-tokens` means the dollars never
+    existed and only the token account is real. A cost-per-solution number
+    that mixes them must say so."""
+    tx = session_transcript(workspace, started_s,
+                            projects_root=projects_root)
+    if tx is None:
+        return None
+    usage = transcript_usage(tx)
+    usd = usage.pop("total_cost_usd")
+    face = {"total_cost_usd": usd,
+            "transcript_usage": usage,
+            "transcript": str(tx)}
+    if usd is not None:
+        face["cost_source"] = COST_SOURCE_TRANSCRIPT
+    else:
+        face["cost_source"] = COST_SOURCE_USAGE_ONLY
+        face["cost_unavailable_reason"] = (
+            "the session's CLI wrote no cost-state row into its transcript "
+            "(it was killed before it could flush one, and the kill path "
+            "has no flush): the token account stands, the dollar account "
+            "is absent by measurement, never zero")
+    return face
+
+
+def _merge_session_cost(stdout_cost: dict | None, workspace: Path | str,
+                        started_s: float,
+                        projects_root: Path | None = None) -> dict | None:
+    """One cost face per session, stdout first: the CLI's own report wins
+    whenever it carries a dollar figure, the transcript is read ONLY when
+    it does not, and a transcript with no dollar row tops up the token
+    account without inventing a dollar account."""
+    if isinstance(stdout_cost, dict) and (
+            stdout_cost.get("total_cost_usd") is not None):
+        merged = dict(stdout_cost)
+        merged["cost_source"] = COST_SOURCE_CLI
+        return merged
+    fallback = session_cost_fallback(workspace, started_s,
+                                     projects_root=projects_root)
+    if fallback is None:
+        return stdout_cost
+    merged = dict(fallback)
+    if isinstance(stdout_cost, dict):
+        # the CLI's own token report is the better token face when it got
+        # out; what it never got to report is the dollars
+        for key in ("input_tokens", "output_tokens"):
+            if stdout_cost.get(key) is not None:
+                merged[key] = stdout_cost[key]
+        merged["cost_source"] = (
+            COST_SOURCE_CLI if merged.get("total_cost_usd") is not None
+            else fallback["cost_source"])
+    return merged
 
 
 # ------------------------------------------------------ harness escape gate
@@ -601,8 +854,12 @@ def _tick_gate_skip_row(ws: Path, task: dict, tdir: Path, out: Path, *,
         "action": TICK_GATE_REFUSED_ACTION,
         "arm": arm,
         "detail": why[-800:],
-        "remedy": "arm the loop first: heartbeat_loop_prompt.py <ws> -> "
-                  "CronCreate (or /loop 5m); the loop's first action marks "
+        "remedy": "arm the loop first: heartbeat_wake_gate.py <ws> "
+                  "--print-registration -> install the emitted OS-cron line "
+                  "(--wake-gate: QUIET injects nothing, WAKE injects the /loop "
+                  "prompt); then heartbeat_loop_prompt.py <ws> -> "
+                  "CronCreate (or /loop 5m) as the durable watchdog — the "
+                  "loop's first action marks "
                   "loop_registered=true — then re-run",
     }
     with (out / "harness-events.jsonl").open("a", encoding="utf-8") as fh:
@@ -955,7 +1212,60 @@ def init_workspace(task_dir: Path, work_root: Path,
         raise RuntimeError(
             f"kunglao-init failed rc={proc.returncode} for {task_dir.name}: "
             f"{(proc.stderr or proc.stdout or '')[-1500:]}")
+    _seed_ws_store(ws)
     return ws
+
+
+#: eval arm isolation faces (learning stores are workspace-local, so an
+#: eval matrix seeds/exports the workspace's OWN store instead of
+#: pointing an env override at an external dir — the env override
+#: outside the workspace would be refused by the store resolver):
+#: KUNGLAO_EVAL_SEED_STORE names a dir whose
+#: knowledge-store.jsonl is COPIED INTO the fresh workspace's store at
+#: init (the warm arm's starting state); KUNGLAO_EVAL_STORE_EXPORT
+#: names a dir the workspace's store file is copied back to at run end
+#: (the per-arm accumulating scope). Both are eval-only staging faces:
+#: the run reads/writes only its workspace's store.
+SEED_STORE_ENV = "KUNGLAO_EVAL_SEED_STORE"
+EXPORT_STORE_ENV = "KUNGLAO_EVAL_STORE_EXPORT"
+WS_STORE_FILE = Path("runs") / "posterior" / "knowledge-store.jsonl"
+
+
+def _seed_ws_store(ws: Path) -> None:
+    """Copy the declared seed store INTO the fresh workspace's own store
+    (the warm arm). Fail-open with a loud stderr note: a broken seed
+    must never kill a staged run — the arm then simply starts cold."""
+    import runtime_switches  # noqa: PLC0415 — declared-switch read face
+    src_root = runtime_switches.get_str(SEED_STORE_ENV).strip()
+    if not src_root:
+        return
+    src = Path(src_root) / "knowledge-store.jsonl"
+    dst = ws / WS_STORE_FILE
+    try:
+        if src.is_file():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+    except OSError as exc:
+        print(f"[eval_loop_runner] store seed failed: {exc}", flush=True)
+
+
+def export_ws_store(ws: Path) -> None:
+    """Copy the workspace's store file OUT to the declared export dir
+    (the per-arm accumulating scope — the next cell seeds from it).
+    Fail-open with a loud stderr note: an export failure loses only the
+    accumulation, never the run's own learning."""
+    import runtime_switches  # noqa: PLC0415 — declared-switch read face
+    dst_root = runtime_switches.get_str(EXPORT_STORE_ENV).strip()
+    if not dst_root:
+        return
+    src = Path(ws) / WS_STORE_FILE
+    dst = Path(dst_root) / "knowledge-store.jsonl"
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if src.is_file():
+            shutil.copy2(src, dst)
+    except OSError as exc:
+        print(f"[eval_loop_runner] store export failed: {exc}", flush=True)
 
 
 def init_cc_default_workspace(task_dir: Path,
@@ -2348,6 +2658,7 @@ def run_loop_task(task_ref: str, out: Path, *, budget_usd: float
     print(f"VERDICT {tdir.name} {res['verdict']} "
           f"(loop: {status}, decision={metrics['decision']}"
           f"{', gap_redo' if gap_redo['ran'] else ''})")
+    export_ws_store(ws)
     return row
 
 
