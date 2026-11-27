@@ -479,12 +479,13 @@ def test_resolution_persists_evidence_and_attribution(tmp_path):
     assert h.posterior == pytest.approx(phi_tree.MACHINE_MASS)
 
 
-# ---- reward-rules v4 + registration trio ------------------------------------
+# ---- reward-rules v4 hypothesis classes + registration trio -----------------
+# (file version is 5 since issue 1103; the v4 hypothesis classes fold unchanged)
 
 def test_reward_rules_v4_hypothesis_classes_are_registered_and_classify(
         ):
     doc = rs.load_rules()  # unregistered kind would raise ValueError
-    assert doc["version"] == 4
+    assert doc["version"] == 5
     decisive = rs.classify("hypothesis", [
         {"type": "resolution_decisive", "value": True, "source": "phi"},
         {"type": "machine_witness", "value": True, "source": "phi"},
