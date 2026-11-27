@@ -1835,7 +1835,7 @@ files:
   - src: references/contracts/reward-rules.yaml
     dest: .claude/references/contracts/reward-rules.yaml
     kind: asset
-    sha256: 89ec31b08f3483ddbebe006d549b8fd1909ed9dff5838329f9e325fbcc4a75f1
+    sha256: 690335e223706bc557d730b7dc4acb74dbaf95b68daab2a4472c9fce2165c165
   - src: references/contracts/rubrics/llm-eval-grading-rubric.md
     dest: .claude/references/contracts/rubrics/llm-eval-grading-rubric.md
     kind: asset
