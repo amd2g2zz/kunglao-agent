@@ -24,6 +24,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from rlvr import ledger as rl  # noqa: E402
+from rlvr import reward as rs  # noqa: E402 — issue 1103 classify face
 
 
 def _sig(type_: str, source: str, value, ts="2026-09-24T00:00:00Z",
@@ -316,3 +317,40 @@ class TestPersistence:
                   "subprocess", "socket", "urllib", "http")
         bad = [m for m in imported for b in banned if b in m.lower()]
         assert not bad, f"rollout_ledger must stay machine-only, saw {bad}"
+
+
+# ---------- task/oracle-red settles the real failure path (issue 1103) ----------
+
+class TestOracleRedDeferred:
+    """issue 1103: a real failure task rollout records
+    claim_terminal=DEFERRED (the convergence gate defers the claim) +
+    oracle_verdict=fail — NEGATIVE/REFUTED never occur in recorded data.
+    The red rule must match that signal pair via the pure classify face
+    (rules v5 adds DEFERRED to task/oracle-red's claim_terminal.in)."""
+
+    RULES_PATH = ROOT / "references" / "contracts" / "reward-rules.yaml"
+
+    def test_deferred_with_oracle_fail_settles_red(self):
+        doc = rs.load_rules(self.RULES_PATH)
+        res = rs.classify("task", [
+            _sig("claim_terminal", "convergence_check", "DEFERRED"),
+            _sig("oracle_verdict", "oracle_runner", "fail"),
+        ], doc)
+        assert res["band"] == "SETTLED_RED"
+        assert res["rule_id"] == "task/oracle-red"
+        assert res["reward"] == 0.0
+        refs = res["evidence_refs"]
+        assert any(r.startswith("claim_terminal:") for r in refs)
+        assert any(r.startswith("oracle_verdict:") for r in refs)
+
+    def test_red_rule_keeps_dual_signal_shape(self):
+        """The v5 change keeps the two-signal anti-pollution floor (the
+        rule still requires BOTH claim_terminal and oracle_verdict)."""
+        doc = rs.load_rules(self.RULES_PATH)
+        red = next(r for r in doc["rules"]
+                   if r["rule_id"] == "task/oracle-red")
+        types = {str(p.get("type")) for p in red["requires"]}
+        assert types == {"claim_terminal", "oracle_verdict"}
+        terminal = next(p for p in red["requires"]
+                        if p.get("type") == "claim_terminal")
+        assert "DEFERRED" in terminal["in"]

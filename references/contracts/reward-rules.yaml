@@ -1,5 +1,5 @@
 schema: reward-rules/1
-version: 4
+version: 5
 description: >
   Deterministic settlement rules for the unified rollout ledger (#366).
   THE reward currency contract: rlvr/reward.py reads ONLY this table
@@ -46,6 +46,12 @@ description: >
   block below. Settlement scalars are [0,1]; the round_credit
   provenance sum is in credit units and is deliberately unclamped.
   This declaration changes NO value and settles no row differently.
+
+  version 5 (issue 1103): the real failure path settles a task row with
+  claim_terminal DEFERRED (the convergence gate defers the claim;
+  NEGATIVE/REFUTED never occur in recorded data) — DEFERRED joins
+  task/oracle-red's claim_terminal.in. Reward values and polarities
+  are unchanged.
 
 bands:
   SETTLED_GREEN: {reward: 1.0, polarity: positive}
@@ -124,7 +130,7 @@ rules:
     order: 2
     requires:
       - {type: oracle_verdict, equals: fail}
-      - {type: claim_terminal, in: [NEGATIVE, REFUTED]}
+      - {type: claim_terminal, in: [NEGATIVE, REFUTED, DEFERRED]}
     band: SETTLED_RED
     reward: 0.0
     evidence: [runs/oracle-status.json, claim-register.yaml]
